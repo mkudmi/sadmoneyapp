@@ -407,7 +407,14 @@ export default function App() {
         <div><b>Выбранная дата:</b> {selectedDate}</div>
         {budget && (
           <>
-            <div><b>До следующей зарплаты:</b> {budget.next_salary_date ?? "не задана"}</div>
+            <div><b>До следующей зарплаты:</b> {budget.next_salary_date ? (() => {
+            const nd = new Date(budget.next_salary_date);
+            const td = new Date();
+            const nd0 = new Date(nd.getFullYear(), nd.getMonth(), nd.getDate());
+            const td0 = new Date(td.getFullYear(), td.getMonth(), td.getDate());
+            const diff = Math.round((nd0.getTime() - td0.getTime()) / (1000 * 60 * 60 * 24));
+            return diff >= 0 ? `${diff} дн.` : `0 дн.`;
+          })() : "не задана"}</div>
             <div><b>Дней:</b> {budget.days}</div>
             <div><b>Доступно:</b> {rub(budget.available)}</div>
             <div><b>Можно тратить в день:</b> {rub(budget.per_day)}</div>
