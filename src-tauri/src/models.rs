@@ -18,6 +18,8 @@ pub struct OffDay {
     pub id: String,
     pub date: String, // YYYY-MM-DD
     pub note: String,
+    #[serde(default)]
+    pub is_working: bool,
 } 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

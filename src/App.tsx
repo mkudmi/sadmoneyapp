@@ -75,9 +75,8 @@ export default function App() {
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const y = ymd(d);
       const day = d.getDay(); // 0 = Sun, 6 = Sat
-      if (day === 0 || day === 6) continue; // исключаем выходные
 
-      // исключаем отпуска
+      // исключаем отпуска в любом случае
       let inVacation = false;
       for (const v of vacations) {
         if (v.start_date <= y && y <= v.end_date) {
@@ -87,10 +86,20 @@ export default function App() {
       }
       if (inVacation) continue;
 
-      // исключаем дополнительные нерабочие дни
-      if (offDays.some(o => o.date === y)) continue;
+      const off = offDays.find(o => o.date === y) ?? null;
 
-      workedDays++;
+      if (day === 0 || day === 6) {
+        // Выходной по календарю: учитываем только если явно помечен как рабочий
+        if (off && off.is_working) {
+          workedDays++;
+        } else {
+          continue;
+        }
+      } else {
+        // Рабочий день по календарю: исключаем только если явно помечен как нерабочий
+        if (off && !off.is_working) continue;
+        workedDays++;
+      }
     }
 
     if (workedDays === 0) return 0;
@@ -156,6 +165,7 @@ export default function App() {
   const [popupDate, setPopupDate] = useState<string | null>(null);
   const [popupNote, setPopupNote] = useState("");
   const [popupExistingId, setPopupExistingId] = useState<string | null>(null);
+  const [popupIsWorking, setPopupIsWorking] = useState(false);
   const popupRef = useRef<HTMLDivElement | null>(null);
 
   function openOffDayPopup(date: string, e: React.MouseEvent) {
@@ -163,6 +173,7 @@ export default function App() {
     const existing = (data?.offDays ?? []).find(o => o.date === date) ?? null;
     setPopupExistingId(existing?.id ?? null);
     setPopupNote(existing?.note ?? "");
+    setPopupIsWorking(existing?.is_working ?? false);
     // offset a little so popup doesn't sit exactly under cursor
     setPopupPos({ x: e.clientX + 8, y: e.clientY + 8 });
     setPopupDate(date);
@@ -174,11 +185,12 @@ export default function App() {
     setPopupDate(null);
     setPopupNote("");
     setPopupExistingId(null);
+    setPopupIsWorking(false);
   }
 
   async function savePopupOffDay() {
     if (!popupDate) return;
-    const updated = await api.upsertOffDay({ id: popupExistingId ?? "", date: popupDate, note: popupNote });
+    const updated = await api.upsertOffDay({ id: popupExistingId ?? "", date: popupDate, note: popupNote, is_working: popupIsWorking });
     setData(updated);
     closePopup();
   }
@@ -598,7 +610,11 @@ export default function App() {
               >
                 <div>
                   <div style={{ fontSize: 13 }}>
-                    <b>🚫 Нерабочий день</b> {offForSelectedDate.note ? `— ${offForSelectedDate.note}` : null}
+                    {offForSelectedDate.is_working ? (
+                      <><b>💼 Рабочий день</b> {offForSelectedDate.note ? `— ${offForSelectedDate.note}` : null}</>
+                    ) : (
+                      <><b>🚫 Нерабочий день</b> {offForSelectedDate.note ? `— ${offForSelectedDate.note}` : null}</>
+                    )}
                   </div>
                 </div>
 
@@ -606,7 +622,8 @@ export default function App() {
                   <button
                     onClick={async () => {
                       const newNote = prompt("Комментарий:", offForSelectedDate.note) ?? offForSelectedDate.note;
-                      const updated = await api.upsertOffDay({ ...offForSelectedDate, note: newNote });
+                      const makeWorking = confirm("Сделать рабочим (перевести в рабочий день)?");
+                      const updated = await api.upsertOffDay({ ...offForSelectedDate, note: newNote, is_working: makeWorking });
                       setData(updated);
                     }}
                   >
@@ -769,9 +786,11 @@ export default function App() {
 
           const dayOfWeek = new Date(d).getDay(); // 0 = Sunday, 6 = Saturday
           const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-          const weekendHighlight = workSchedule === '5/2' && isWeekend;
+          const workingOverride = offForDay?.is_working ?? false;
+          const effectiveWeekend = isWeekend && !workingOverride;
+          const weekendHighlight = workSchedule === '5/2' && effectiveWeekend;
           const vacationHighlight = vacForDay !== null;
-          const offDayHighlight = offForDay !== null;
+          const offDayHighlight = offForDay !== null && !(offForDay?.is_working);
           const tileBackground = isToday
             ? "rgba(0, 200, 120, 0.08)"
             : vacationHighlight
@@ -787,6 +806,7 @@ export default function App() {
               key={d}
               onClick={(e) => { setSelectedDate(d); openOffDayPopup(d, e); }}
               style={{
+                position: 'relative',
                 cursor: "pointer",
                 border: isSel ? "2px solid #333" : isToday ? "2px solid #1b7" : "1px solid #ddd",
                 background: tileBackground,
@@ -796,6 +816,32 @@ export default function App() {
               }}
 
             >
+              {/* Quick toggle button (add/delete off-day) - works on any day including Sat/Sun */}
+              <div style={{ position: 'absolute', top: 6, right: 8 }}>
+                <button
+                  title={offForDay ? 'Удалить выходной' : (isWeekend ? 'Отметить рабочим' : 'Отметить выходным')}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      if (offForDay) {
+                        if (!confirm('Удалить нерабочий день?')) return;
+                        const updated = await api.deleteOffDay(offForDay.id);
+                        setData(updated);
+                      } else {
+                        // If this is a weekend, adding an override should mark it as working day
+                        const updated = await api.upsertOffDay({ id: '', date: d, note: '', is_working: isWeekend ? true : false });
+                        setData(updated);
+                      }
+                    } catch (err) {
+                      console.error('quick toggle off-day failed', err);
+                      alert(String(err));
+                    }
+                  }}
+                >
+                  {offForDay ? '✖' : (isWeekend ? '💼' : '🚫')}
+                </button>
+              </div>
+
               {vacForDay ? (
                 <div style={{ fontSize: 12, marginTop: 4, opacity: 0.95 }}>
                   🏖️ {vacForDay.title}
@@ -810,8 +856,15 @@ export default function App() {
                 <div style={{ fontSize: 12, opacity: 0.7, color: vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#0b5' : undefined)) }}>{d.slice(8, 10)}</div>
                 <div style={{ fontSize: 11, opacity: 0.7, color: vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#0b5' : undefined)) }}>{new Date(d).toLocaleDateString("ru-RU", { weekday: "short" })}</div>
               </div>
-              <div style={{ fontSize: 12 }}>{offForDay ? '🚫 Выходной' : `+ ${rub(s.inc)}`}</div>
+              <div style={{ fontSize: 12 }}>+ {rub(s.inc)}</div>
               <div style={{ fontSize: 12 }}>- {rub(s.exp)}</div>
+              {offForDay ? (
+                offForDay.is_working ? (
+                  <div style={{ fontSize: 12, color: '#0a66ff' }}>💼 Рабочий день{offForDay.note ? ` — ${offForDay.note}` : ''}</div>
+                ) : (
+                  <div style={{ fontSize: 12, color: '#0b5' }}>🚫 Выходной{offForDay.note ? ` — ${offForDay.note}` : ''}</div>
+                )
+              ) : null}
             </div>
           );
         })}

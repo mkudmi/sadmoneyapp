@@ -29,6 +29,7 @@ export type OffDay = {
   id: string;
   date: string; // YYYY-MM-DD
   note: string;
+  is_working?: boolean;
 };
 
 export type AppData = {
