@@ -1,0 +1,58 @@
+import { invoke } from "@tauri-apps/api/core";
+
+export type TxType = "income" | "expense";
+
+export type Transaction = {
+  id: string;
+  date: string; // YYYY-MM-DD
+  type: TxType;
+  amount: number; // копейки
+  category: string;
+  note: string;
+};
+
+export type SalaryEvent = {
+  id: string;
+  date: string;
+  amount: number; // копейки
+  title: string;
+};
+
+export type Vacation = {
+  id: string;
+  start_date: string; // YYYY-MM-DD
+  end_date: string;   // YYYY-MM-DD
+  title: string;
+};
+
+export type AppData = {
+  version: number;
+  settings: {
+    currency: string;
+    minBalance: number;
+    dailyCalcMode: "exclude_payday" | "include_payday";
+  };
+  salaryEvents: SalaryEvent[];
+  vacations: Vacation[];
+  transactions: Transaction[];
+};
+
+export type DailyBudgetResult = {
+  next_salary_date: string | null;
+  days: number;
+  available: number;
+  per_day: number;
+};
+
+export const api = {
+  getData: () => invoke<AppData>("get_data"),
+  addTransaction: (tx: Transaction) => invoke<AppData>("add_transaction", { tx }),
+  updateTransaction: (tx: Transaction) => invoke<AppData>("update_transaction", { tx }),
+  deleteTransaction: (id: string) => invoke<AppData>("delete_transaction", { id }),
+  upsertSalaryEvent: (ev: SalaryEvent) => invoke<AppData>("upsert_salary_event", { ev }),
+  deleteSalaryEvent: (id: string) => invoke<AppData>("delete_salary_event", { id }),
+  upsertVacation: (vac: Vacation) => invoke<AppData>("upsert_vacation", { ev: vac }),
+  deleteVacation: (id: string) => invoke<AppData>("delete_vacation", { id }),
+  calcDailyBudget: (fromDate: string) =>
+    invoke<DailyBudgetResult>("calc_daily_budget", { fromDate }),
+};

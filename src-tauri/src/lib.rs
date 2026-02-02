@@ -1,0 +1,22 @@
+mod commands;
+mod models;
+mod storage;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            commands::get_data,
+            commands::add_transaction,
+            commands::update_transaction,
+            commands::delete_transaction,
+            commands::upsert_salary_event,
+            commands::upsert_vacation,
+            commands::calc_daily_budget,
+            commands::delete_salary_event,
+            commands::delete_vacation,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+
