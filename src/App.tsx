@@ -252,12 +252,7 @@ export default function App() {
       </div>
 
       <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12, marginBottom: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <b>Зарплаты в этом месяце</b>
-          <button onClick={addSalaryEvent}>Добавить</button>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <b>Отпуска в этом месяце</b>
           <button onClick={async () => {
             if (!data) return;
@@ -276,71 +271,12 @@ export default function App() {
           }}>Добавить</button>
         </div>
 
-        {salaryThisMonth.length === 0 ? (
-          <div style={{ marginTop: 8, opacity: 0.7 }}>Пока нет зарплатных дат в этом месяце.</div>
-        ) : (
-          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-            {salaryThisMonth.map((s) => (
-              <div
-                key={s.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                  border: "1px solid #eee",
-                  borderRadius: 10,
-                  padding: "8px 10px",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 13 }}>
-                    <b>{s.date}</b> — {s.title} — {rub(s.amount)}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    onClick={async () => {
-                      const newDate = prompt("Дата (YYYY-MM-DD):", s.date) ?? s.date;
-                      const newAmountStr = prompt("Сумма (руб):", String(s.amount / 100)) ?? String(s.amount / 100);
-                      const newTitle = prompt("Название:", s.title) ?? s.title;
-
-                      const updated = await api.upsertSalaryEvent({
-                        ...s,
-                        date: newDate,
-                        amount: toKop(newAmountStr),
-                        title: newTitle,
-                      });
-                      setData(updated);
-                    }}
-                  >
-                    Редактировать
-                  </button>
-
-                  <button
-                    onClick={async () => {
-                      if (!confirm("Удалить зарплатную дату?")) return;
-                      const updated = await api.deleteSalaryEvent(s.id);
-                      setData(updated);
-                    }}
-                  >
-                    Удалить
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
         <div style={{ marginTop: 10 }}>
           {((data?.vacations ?? []).filter(v => {
             const monthStart = `${monthKey}-01`;
             const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
             return v.start_date <= monthEnd && v.end_date >= monthStart;
-          })).length === 0 ? (
-            <div style={{ marginTop: 8, opacity: 0.7 }}>Пока нет отпусков в этом месяце.</div>
-          ) : (
+          })).length > 0 && (
             <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
               {((data?.vacations ?? []).filter(v => {
                 const monthStart = `${monthKey}-01`;
@@ -399,6 +335,66 @@ export default function App() {
             </div>
           )}
         </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <b>Зарплаты в этом месяце</b>
+          <button onClick={addSalaryEvent}>Добавить</button>
+        </div>
+
+        {salaryThisMonth.length > 0 && (
+          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+            {salaryThisMonth.map((s) => (
+              <div
+                key={s.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 10,
+                  border: "1px solid #eee",
+                  borderRadius: 10,
+                  padding: "8px 10px",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 13 }}>
+                    <b>{s.date}</b> — {s.title} — {rub(s.amount)}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={async () => {
+                      const newDate = prompt("Дата (YYYY-MM-DD):", s.date) ?? s.date;
+                      const newAmountStr = prompt("Сумма (руб):", String(s.amount / 100)) ?? String(s.amount / 100);
+                      const newTitle = prompt("Название:", s.title) ?? s.title;
+
+                      const updated = await api.upsertSalaryEvent({
+                        ...s,
+                        date: newDate,
+                        amount: toKop(newAmountStr),
+                        title: newTitle,
+                      });
+                      setData(updated);
+                    }}
+                  >
+                    Редактировать
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      if (!confirm("Удалить зарплатную дату?")) return;
+                      const updated = await api.deleteSalaryEvent(s.id);
+                      setData(updated);
+                    }}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
 
@@ -415,7 +411,6 @@ export default function App() {
             const diff = Math.round((nd0.getTime() - td0.getTime()) / (1000 * 60 * 60 * 24));
             return diff >= 0 ? `${diff} дн.` : `0 дн.`;
           })() : "не задана"}</div>
-            <div><b>Дней:</b> {budget.days}</div>
             <div><b>Доступно:</b> {rub(budget.available)}</div>
             <div><b>Можно тратить в день:</b> {rub(budget.per_day)}</div>
           </>
