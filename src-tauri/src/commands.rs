@@ -1,4 +1,4 @@
-use crate::models::{AppData, SalaryEvent, Vacation, Transaction, TxType};
+use crate::models::{AppData, SalaryEvent, Vacation, OffDay, Transaction, TxType};
 use crate::storage;
 use anyhow::Result;
 use chrono::NaiveDate;
@@ -122,6 +122,32 @@ pub fn upsert_vacation(app: AppHandle, mut ev: Vacation) -> Result<AppData, Stri
 pub fn delete_vacation(app: AppHandle, id: String) -> Result<AppData, String> {
     let mut data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
     data.vacations.retain(|s| s.id != id);
+    storage::save(&app, &data).map_err(|e| e.to_string())?;
+    Ok(data)
+}
+
+#[tauri::command]
+pub fn upsert_off_day(app: AppHandle, mut ev: OffDay) -> Result<AppData, String> {
+    let mut data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
+
+    if ev.id.trim().is_empty() {
+        ev.id = format!("off_{}", Uuid::new_v4());
+    }
+
+    let idx = data.off_days.iter().position(|x| x.id == ev.id);
+    match idx {
+        Some(i) => data.off_days[i] = ev,
+        None => data.off_days.push(ev),
+    }
+
+    storage::save(&app, &data).map_err(|e| e.to_string())?;
+    Ok(data)
+}
+
+#[tauri::command]
+pub fn delete_off_day(app: AppHandle, id: String) -> Result<AppData, String> {
+    let mut data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
+    data.off_days.retain(|s| s.id != id);
     storage::save(&app, &data).map_err(|e| e.to_string())?;
     Ok(data)
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useLayoutEffect } from "react";
 import { api, AppData, Transaction } from "./lib/api";
 import { rub, toKop } from "./lib/money";
 
@@ -120,6 +120,82 @@ export default function App() {
   }, [data]);
 
   const salaryForSelectedDate = (data?.salaryEvents ?? []).find(s => s.date === selectedDate) ?? null;
+  const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
+
+  // Popup state for adding/editing off-days near cursor
+  const [popupVisible, setPopupVisible] = useState(false);
+  const [popupPos, setPopupPos] = useState({ x: 0, y: 0 });
+  const [popupDate, setPopupDate] = useState<string | null>(null);
+  const [popupNote, setPopupNote] = useState("");
+  const [popupExistingId, setPopupExistingId] = useState<string | null>(null);
+  const popupRef = useRef<HTMLDivElement | null>(null);
+
+  function openOffDayPopup(date: string, e: React.MouseEvent) {
+    setSelectedDate(date);
+    const existing = (data?.offDays ?? []).find(o => o.date === date) ?? null;
+    setPopupExistingId(existing?.id ?? null);
+    setPopupNote(existing?.note ?? "");
+    // offset a little so popup doesn't sit exactly under cursor
+    setPopupPos({ x: e.clientX + 8, y: e.clientY + 8 });
+    setPopupDate(date);
+    setPopupVisible(true);
+  }
+
+  function closePopup() {
+    setPopupVisible(false);
+    setPopupDate(null);
+    setPopupNote("");
+    setPopupExistingId(null);
+  }
+
+  async function savePopupOffDay() {
+    if (!popupDate) return;
+    const updated = await api.upsertOffDay({ id: popupExistingId ?? "", date: popupDate, note: popupNote });
+    setData(updated);
+    closePopup();
+  }
+
+  async function deletePopupOffDay() {
+    if (!popupExistingId) return;
+    if (!confirm("Удалить нерабочий день?")) return;
+    const updated = await api.deleteOffDay(popupExistingId);
+    setData(updated);
+    closePopup();
+  }
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!popupVisible) return;
+      const tgt = e.target as Node | null;
+      if (popupRef.current && tgt && popupRef.current.contains(tgt)) return;
+      closePopup();
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") closePopup();
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [popupVisible]);
+
+  // Ensure popup stays within viewport bounds after rendering
+  useLayoutEffect(() => {
+    if (!popupVisible) return;
+    const el = popupRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const margin = 8;
+    const maxX = window.innerWidth - rect.width - margin;
+    const maxY = window.innerHeight - rect.height - margin;
+    setPopupPos((p) => ({
+      x: Math.min(Math.max(margin, p.x), Math.max(margin, maxX)),
+      y: Math.min(Math.max(margin, p.y), Math.max(margin, maxY)),
+    }));
+  }, [popupVisible, popupPos.x, popupPos.y]);
+
 
   async function addQuickExpense() {
     console.log('addQuickExpense clicked', { selectedDate });
@@ -478,6 +554,50 @@ export default function App() {
               </div>
             ) : null}
 
+            {offForSelectedDate ? (
+              <div
+                key={"off"}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  border: "1px solid #eee",
+                  borderRadius: 10,
+                  padding: "8px 10px",
+                  background: "#eef8ff",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 13 }}>
+                    <b>🚫 Нерабочий день</b> {offForSelectedDate.note ? `— ${offForSelectedDate.note}` : null}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={async () => {
+                      const newNote = prompt("Комментарий:", offForSelectedDate.note) ?? offForSelectedDate.note;
+                      const updated = await api.upsertOffDay({ ...offForSelectedDate, note: newNote });
+                      setData(updated);
+                    }}
+                  >
+                    Редактировать
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      if (!confirm("Удалить нерабочий день?")) return;
+                      const updated = await api.deleteOffDay(offForSelectedDate.id);
+                      setData(updated);
+                    }}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             {((data?.vacations ?? []).filter(v => v.start_date <= selectedDate && v.end_date >= selectedDate)).map((v) => (
               <div
                 key={v.id}
@@ -617,23 +737,27 @@ export default function App() {
           const isSel = d === selectedDate;
           const salaryForDay = (data?.salaryEvents ?? []).find(s => s.date === d);
           const vacForDay = (data?.vacations ?? []).find(v => v.start_date <= d && d <= v.end_date) ?? null;
+          const offForDay = (data?.offDays ?? []).find(o => o.date === d) ?? null;
 
           const dayOfWeek = new Date(d).getDay(); // 0 = Sunday, 6 = Saturday
           const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
           const weekendHighlight = workSchedule === '5/2' && isWeekend;
           const vacationHighlight = vacForDay !== null;
+          const offDayHighlight = offForDay !== null;
           const tileBackground = isToday
             ? "rgba(0, 200, 120, 0.08)"
             : vacationHighlight
               ? "rgba(255, 223, 99, 0.25)"
-              : weekendHighlight
-                ? "rgba(255, 0, 0, 0.06)"
-                : "transparent";
+              : offDayHighlight
+                ? "rgba(0, 120, 255, 0.06)"
+                : weekendHighlight
+                  ? "rgba(255, 0, 0, 0.06)"
+                  : "transparent";
 
           return (
             <div
               key={d}
-              onClick={() => setSelectedDate(d)}
+              onClick={(e) => { setSelectedDate(d); openOffDayPopup(d, e); }}
               style={{
                 cursor: "pointer",
                 border: isSel ? "2px solid #333" : isToday ? "2px solid #1b7" : "1px solid #ddd",
@@ -654,16 +778,52 @@ export default function App() {
                 </div>
               ) : null}
 
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <div style={{ fontSize: 12, opacity: 0.7, color: vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : undefined) }}>{d.slice(8, 10)}</div>
-                <div style={{ fontSize: 11, opacity: 0.7, color: vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : undefined) }}>{new Date(d).toLocaleDateString("ru-RU", { weekday: "short" })}</div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ fontSize: 12, opacity: 0.7, color: vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#0b5' : undefined)) }}>{d.slice(8, 10)}</div>
+                <div style={{ fontSize: 11, opacity: 0.7, color: vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#0b5' : undefined)) }}>{new Date(d).toLocaleDateString("ru-RU", { weekday: "short" })}</div>
               </div>
-              <div style={{ fontSize: 12 }}>+ {rub(s.inc)}</div>
+              <div style={{ fontSize: 12 }}>{offForDay ? '🚫 Выходной' : `+ ${rub(s.inc)}`}</div>
               <div style={{ fontSize: 12 }}>- {rub(s.exp)}</div>
             </div>
           );
         })}
       </div>
+
+      {popupVisible && popupDate ? (
+        <div
+          ref={popupRef}
+          style={{
+            position: "fixed",
+            left: popupPos.x + 8,
+            top: popupPos.y + 8,
+            zIndex: 2000,
+            border: "1px solid #ddd",
+            background: "#fff",
+            padding: 10,
+            borderRadius: 8,
+            boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+            minWidth: 260,
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Нерабочий день — {popupDate}</div>
+          <input
+            value={popupNote}
+            onChange={(e) => setPopupNote(e.target.value)}
+            placeholder="Комментарий (необязательно)"
+            style={{ width: "100%", padding: 6, borderRadius: 6, border: "1px solid #eee" }}
+          />
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+            {popupExistingId ? (
+              <button onClick={deletePopupOffDay} style={{ background: "#fff" }}>Удалить</button>
+            ) : null}
+
+            <button onClick={savePopupOffDay}>Сохранить</button>
+            <button onClick={closePopup}>Отмена</button>
+          </div>
+        </div>
+      ) : null}
+
     </div>
   );
 }

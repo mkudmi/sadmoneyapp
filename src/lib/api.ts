@@ -25,6 +25,12 @@ export type Vacation = {
   title: string;
 };
 
+export type OffDay = {
+  id: string;
+  date: string; // YYYY-MM-DD
+  note: string;
+};
+
 export type AppData = {
   version: number;
   settings: {
@@ -34,6 +40,7 @@ export type AppData = {
   };
   salaryEvents: SalaryEvent[];
   vacations: Vacation[];
+  offDays: OffDay[];
   transactions: Transaction[];
 };
 
@@ -53,6 +60,8 @@ export const api = {
   deleteSalaryEvent: (id: string) => invoke<AppData>("delete_salary_event", { id }),
   upsertVacation: (vac: Vacation) => invoke<AppData>("upsert_vacation", { ev: vac }),
   deleteVacation: (id: string) => invoke<AppData>("delete_vacation", { id }),
+  upsertOffDay: (od: OffDay) => invoke<AppData>("upsert_off_day", { ev: od }),
+  deleteOffDay: (id: string) => invoke<AppData>("delete_off_day", { id }),
   calcDailyBudget: (fromDate: string) =>
     invoke<DailyBudgetResult>("calc_daily_budget", { fromDate }),
 };

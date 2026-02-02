@@ -8,8 +8,17 @@ pub struct AppData {
     #[serde(rename = "salaryEvents")]
     pub salary_events: Vec<SalaryEvent>,
     pub vacations: Vec<Vacation>,
+    #[serde(rename = "offDays")]
+    pub off_days: Vec<OffDay>,
     pub transactions: Vec<Transaction>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OffDay {
+    pub id: String,
+    pub date: String, // YYYY-MM-DD
+    pub note: String,
+} 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vacation {
@@ -73,6 +82,7 @@ impl Default for AppData {
             },
             salary_events: vec![],
             vacations: vec![],
+            off_days: vec![],
             transactions: vec![],
         }
     }
