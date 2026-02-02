@@ -53,21 +53,49 @@ export default function App() {
   }, [data, monthKey]);
 
   const avgDailyEarnings = useMemo(() => {
-    // Берём зарплаты за последние 12 месяцев (от today назад ровно на год)
+    // Сумма зарплат/авансов за последние 12 месяцев, делённая на число отработанных дней
+    // (исключаем выходные, отпуска и пользовательские нерабочие дни)
     if (!data) return 0;
     const end = new Date(today);
     const start = new Date(end);
     start.setFullYear(start.getFullYear() - 1);
 
+    // Суммируем все зарплатные события в диапазоне
     let total = 0;
     for (const s of data.salaryEvents ?? []) {
       const sd = new Date(s.date);
       if (sd >= start && sd <= end) total += s.amount;
     }
 
-    const avgMonthly = total / 12; // в копейках
-    const avgDaily = Math.round(avgMonthly / 29.3);
-    return avgDaily; // в копейках
+    // Считаем количество рабочих дней в диапазоне
+    const vacations = data.vacations ?? [];
+    const offDays = data.offDays ?? [];
+    let workedDays = 0;
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const y = ymd(d);
+      const day = d.getDay(); // 0 = Sun, 6 = Sat
+      if (day === 0 || day === 6) continue; // исключаем выходные
+
+      // исключаем отпуска
+      let inVacation = false;
+      for (const v of vacations) {
+        if (v.start_date <= y && y <= v.end_date) {
+          inVacation = true;
+          break;
+        }
+      }
+      if (inVacation) continue;
+
+      // исключаем дополнительные нерабочие дни
+      if (offDays.some(o => o.date === y)) continue;
+
+      workedDays++;
+    }
+
+    if (workedDays === 0) return 0;
+    // Возвращаем средний в копейках
+    return Math.round(total / workedDays);
   }, [data, today]);
 
   useEffect(() => {
