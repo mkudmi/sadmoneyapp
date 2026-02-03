@@ -309,40 +309,112 @@ export default function App() {
         </button>
       </div>
 
-      <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12, marginBottom: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <b>Отпуска в этом месяце</b>
-          <button onClick={async () => {
-            if (!data) return;
-            const start = prompt("Дата начала (YYYY-MM-DD):", `${monthKey}-10`);
-            if (!start) return;
-            const end = prompt("Дата окончания (YYYY-MM-DD):", `${monthKey}-14`);
-            if (!end) return;
-            const title = prompt("Название (например: Отпуск):", "Отпуск") ?? "Отпуск";
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gap: 12,
+          marginBottom: 12,
+          alignItems: "start",
+        }}
+      >
+        <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <b>Отпуска в этом месяце</b>
+            <button onClick={async () => {
+              if (!data) return;
+              const start = prompt("Дата начала (YYYY-MM-DD):", `${monthKey}-10`);
+              if (!start) return;
+              const end = prompt("Дата окончания (YYYY-MM-DD):", `${monthKey}-14`);
+              if (!end) return;
+              const title = prompt("Название (например: Отпуск):", "Отпуск") ?? "Отпуск";
 
-            try {
-              const updated = await api.upsertVacation({ id: "", start_date: start, end_date: end, title });
-              setData(updated);
-            } catch (e) {
-              alert(String(e));
-            }
-          }}>Добавить</button>
+              try {
+                const updated = await api.upsertVacation({ id: "", start_date: start, end_date: end, title });
+                setData(updated);
+              } catch (e) {
+                alert(String(e));
+              }
+            }}>Добавить</button>
+          </div>
+
+          <div style={{ marginTop: 10 }}>
+            {((data?.vacations ?? []).filter(v => {
+              const monthStart = `${monthKey}-01`;
+              const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
+              return v.start_date <= monthEnd && v.end_date >= monthStart;
+            })).length > 0 && (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                {((data?.vacations ?? []).filter(v => {
+                  const monthStart = `${monthKey}-01`;
+                  const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
+                  return v.start_date <= monthEnd && v.end_date >= monthStart;
+                })).map((v) => (
+                  <div
+                    key={v.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 10,
+                      border: "1px solid #eee",
+                      borderRadius: 10,
+                      padding: "8px 10px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 13 }}>
+                        <b>{v.start_date}</b> — <b>{v.end_date}</b> — {v.title}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={async () => {
+                          const newStart = prompt("Дата начала (YYYY-MM-DD):", v.start_date) ?? v.start_date;
+                          const newEnd = prompt("Дата окончания (YYYY-MM-DD):", v.end_date) ?? v.end_date;
+                          const newTitle = prompt("Название:", v.title) ?? v.title;
+
+                          const updated = await api.upsertVacation({
+                            ...v,
+                            start_date: newStart,
+                            end_date: newEnd,
+                            title: newTitle,
+                          });
+                          setData(updated);
+                        }}
+                      >
+                        Редактировать
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          if (!confirm("Удалить отпуск?")) return;
+                          const updated = await api.deleteVacation(v.id);
+                          setData(updated);
+                        }}
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
+        <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <b>Зарплаты в этом месяце</b>
+            <button onClick={addSalaryEvent}>Добавить</button>
+          </div>
 
-        <div style={{ marginTop: 10 }}>
-          {((data?.vacations ?? []).filter(v => {
-            const monthStart = `${monthKey}-01`;
-            const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
-            return v.start_date <= monthEnd && v.end_date >= monthStart;
-          })).length > 0 && (
+          {salaryThisMonth.length > 0 && (
             <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-              {((data?.vacations ?? []).filter(v => {
-                const monthStart = `${monthKey}-01`;
-                const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
-                return v.start_date <= monthEnd && v.end_date >= monthStart;
-              })).map((v) => (
+              {salaryThisMonth.map((s) => (
                 <div
-                  key={v.id}
+                  key={s.id}
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
@@ -355,21 +427,21 @@ export default function App() {
                 >
                   <div>
                     <div style={{ fontSize: 13 }}>
-                      <b>{v.start_date}</b> — <b>{v.end_date}</b> — {v.title}
+                      <b>{s.date}</b> — {s.title} — {rub(s.amount)}
                     </div>
                   </div>
 
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
                       onClick={async () => {
-                        const newStart = prompt("Дата начала (YYYY-MM-DD):", v.start_date) ?? v.start_date;
-                        const newEnd = prompt("Дата окончания (YYYY-MM-DD):", v.end_date) ?? v.end_date;
-                        const newTitle = prompt("Название:", v.title) ?? v.title;
+                        const newDate = prompt("Дата (YYYY-MM-DD):", s.date) ?? s.date;
+                        const newAmountStr = prompt("Сумма (руб):", String(s.amount / 100)) ?? String(s.amount / 100);
+                        const newTitle = prompt("Название:", s.title) ?? s.title;
 
-                        const updated = await api.upsertVacation({
-                          ...v,
-                          start_date: newStart,
-                          end_date: newEnd,
+                        const updated = await api.upsertSalaryEvent({
+                          ...s,
+                          date: newDate,
+                          amount: toKop(newAmountStr),
                           title: newTitle,
                         });
                         setData(updated);
@@ -380,8 +452,8 @@ export default function App() {
 
                     <button
                       onClick={async () => {
-                        if (!confirm("Удалить отпуск?")) return;
-                        const updated = await api.deleteVacation(v.id);
+                        if (!confirm("Удалить зарплатную дату?")) return;
+                        const updated = await api.deleteSalaryEvent(s.id);
                         setData(updated);
                       }}
                     >
@@ -393,69 +465,7 @@ export default function App() {
             </div>
           )}
         </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <b>Зарплаты в этом месяце</b>
-          <button onClick={addSalaryEvent}>Добавить</button>
-        </div>
-
-        {salaryThisMonth.length > 0 && (
-          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-            {salaryThisMonth.map((s) => (
-              <div
-                key={s.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                  border: "1px solid #eee",
-                  borderRadius: 10,
-                  padding: "8px 10px",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 13 }}>
-                    <b>{s.date}</b> — {s.title} — {rub(s.amount)}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    onClick={async () => {
-                      const newDate = prompt("Дата (YYYY-MM-DD):", s.date) ?? s.date;
-                      const newAmountStr = prompt("Сумма (руб):", String(s.amount / 100)) ?? String(s.amount / 100);
-                      const newTitle = prompt("Название:", s.title) ?? s.title;
-
-                      const updated = await api.upsertSalaryEvent({
-                        ...s,
-                        date: newDate,
-                        amount: toKop(newAmountStr),
-                        title: newTitle,
-                      });
-                      setData(updated);
-                    }}
-                  >
-                    Редактировать
-                  </button>
-
-                  <button
-                    onClick={async () => {
-                      if (!confirm("Удалить зарплатную дату?")) return;
-                      const updated = await api.deleteSalaryEvent(s.id);
-                      setData(updated);
-                    }}
-                  >
-                    Удалить
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
-
-
 
       <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12, marginBottom: 12 }}>
         <div><b>Выбранная дата:</b> {selectedDate}</div>
