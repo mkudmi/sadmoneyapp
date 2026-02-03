@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, useLayoutEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, AppData, Transaction } from "./lib/api";
 import { rub, toKop } from "./lib/money";
 
@@ -159,59 +159,17 @@ export default function App() {
   const salaryForSelectedDate = (data?.salaryEvents ?? []).find(s => s.date === selectedDate) ?? null;
   const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
 
-  // Popup state for adding/editing off-days near cursor
-  const [popupVisible, setPopupVisible] = useState(false);
-  const [popupPos, setPopupPos] = useState({ x: 0, y: 0 });
-  const [popupDate, setPopupDate] = useState<string | null>(null);
-  const [popupNote, setPopupNote] = useState("");
-  const [popupExistingId, setPopupExistingId] = useState<string | null>(null);
-  const [popupIsWorking, setPopupIsWorking] = useState(false);
-  const popupRef = useRef<HTMLDivElement | null>(null);
-
-  function openOffDayPopup(date: string, e: React.MouseEvent) {
-    setSelectedDate(date);
-    const existing = (data?.offDays ?? []).find(o => o.date === date) ?? null;
-    setPopupExistingId(existing?.id ?? null);
-    setPopupNote(existing?.note ?? "");
-    setPopupIsWorking(existing?.is_working ?? false);
-    // offset a little so popup doesn't sit exactly under cursor
-    setPopupPos({ x: e.clientX + 8, y: e.clientY + 8 });
-    setPopupDate(date);
-    setPopupVisible(true);
-  }
-
-  function closePopup() {
-    setPopupVisible(false);
-    setPopupDate(null);
-    setPopupNote("");
-    setPopupExistingId(null);
-    setPopupIsWorking(false);
-  }
-
-  async function savePopupOffDay() {
-    if (!popupDate) return;
-    const updated = await api.upsertOffDay({ id: popupExistingId ?? "", date: popupDate, note: popupNote, is_working: popupIsWorking });
-    setData(updated);
-    closePopup();
-  }
-
-  async function deletePopupOffDay() {
-    if (!popupExistingId) return;
-    if (!confirm("Удалить нерабочий день?")) return;
-    const updated = await api.deleteOffDay(popupExistingId);
-    setData(updated);
-    closePopup();
-  }
+  const [dayMenuOpen, setDayMenuOpen] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!dayMenuOpen) return;
     function onDocClick(e: MouseEvent) {
-      if (!popupVisible) return;
-      const tgt = e.target as Node | null;
-      if (popupRef.current && tgt && popupRef.current.contains(tgt)) return;
-      closePopup();
+      const tgt = e.target as HTMLElement | null;
+      if (tgt && tgt.closest("[data-day-menu]")) return;
+      setDayMenuOpen(null);
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") closePopup();
+      if (e.key === "Escape") setDayMenuOpen(null);
     }
     document.addEventListener("mousedown", onDocClick);
     document.addEventListener("keydown", onKey);
@@ -219,33 +177,17 @@ export default function App() {
       document.removeEventListener("mousedown", onDocClick);
       document.removeEventListener("keydown", onKey);
     };
-  }, [popupVisible]);
+  }, [dayMenuOpen]);
 
-  // Ensure popup stays within viewport bounds after rendering
-  useLayoutEffect(() => {
-    if (!popupVisible) return;
-    const el = popupRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const margin = 8;
-    const maxX = window.innerWidth - rect.width - margin;
-    const maxY = window.innerHeight - rect.height - margin;
-    setPopupPos((p) => ({
-      x: Math.min(Math.max(margin, p.x), Math.max(margin, maxX)),
-      y: Math.min(Math.max(margin, p.y), Math.max(margin, maxY)),
-    }));
-  }, [popupVisible, popupPos.x, popupPos.y]);
-
-
-  async function addQuickExpense() {
-    console.log('addQuickExpense clicked', { selectedDate });
+  async function addQuickExpense(dateOverride?: string) {
+    const date = dateOverride ?? selectedDate;
     try {
       const amountStr = prompt("Расход (руб):", "100");
       if (!amountStr) return;
 
       const tx: Transaction = {
         id: "",
-        date: selectedDate,
+        date,
         type: "expense",
         amount: toKop(amountStr),
         category: "Прочее",
@@ -260,15 +202,15 @@ export default function App() {
     }
   }
 
-  async function addQuickIncome() {
-    console.log('addQuickIncome clicked', { selectedDate });
+  async function addQuickIncome(dateOverride?: string) {
+    const date = dateOverride ?? selectedDate;
     try {
       const amountStr = prompt("Доход (руб):", "1000");
       if (!amountStr) return;
 
       const tx: Transaction = {
         id: "",
-        date: selectedDate,
+        date,
         type: "income",
         amount: toKop(amountStr),
         category: "Доход",
@@ -531,10 +473,6 @@ export default function App() {
             <div><b>Можно тратить в день:</b> {rub(budget.per_day)}</div>
           </>
         )}
-        <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-          <button type="button" onClick={addQuickIncome}>+ Доход</button>
-          <button type="button" onClick={addQuickExpense}>− Расход</button>
-        </div>
         <div style={{ marginTop: 12 }}>
           <b>Операции за {selectedDate}:</b>
 
@@ -791,6 +729,7 @@ export default function App() {
           const weekendHighlight = workSchedule === '5/2' && effectiveWeekend;
           const vacationHighlight = vacForDay !== null;
           const offDayHighlight = offForDay !== null && !(offForDay?.is_working);
+          const effectiveWorking = isWeekend ? workingOverride : !(offForDay && !offForDay.is_working);
           const tileBackground = isToday
             ? "rgba(0, 200, 120, 0.08)"
             : vacationHighlight
@@ -804,7 +743,7 @@ export default function App() {
           return (
             <div
               key={d}
-              onClick={(e) => { setSelectedDate(d); openOffDayPopup(d, e); }}
+              onClick={() => { setSelectedDate(d); setDayMenuOpen(null); }}
               style={{
                 position: 'relative',
                 cursor: "pointer",
@@ -816,30 +755,89 @@ export default function App() {
               }}
 
             >
-              {/* Quick toggle button (add/delete off-day) - works on any day including Sat/Sun */}
-              <div style={{ position: 'absolute', top: 6, right: 8 }}>
+              <div style={{ position: 'absolute', top: 6, right: 6 }} data-day-menu="true">
                 <button
-                  title={offForDay ? 'Удалить выходной' : (isWeekend ? 'Отметить рабочим' : 'Отметить выходным')}
-                  onClick={async (e) => {
+                  aria-label="Меню"
+                  onClick={(e) => {
                     e.stopPropagation();
-                    try {
-                      if (offForDay) {
-                        if (!confirm('Удалить нерабочий день?')) return;
-                        const updated = await api.deleteOffDay(offForDay.id);
-                        setData(updated);
-                      } else {
-                        // If this is a weekend, adding an override should mark it as working day
-                        const updated = await api.upsertOffDay({ id: '', date: d, note: '', is_working: isWeekend ? true : false });
-                        setData(updated);
-                      }
-                    } catch (err) {
-                      console.error('quick toggle off-day failed', err);
-                      alert(String(err));
-                    }
+                    setSelectedDate(d);
+                    setDayMenuOpen((cur) => (cur === d ? null : d));
                   }}
                 >
-                  {offForDay ? '✖' : (isWeekend ? '💼' : '🚫')}
+                  ⋯
                 </button>
+
+                {dayMenuOpen === d ? (
+                  <div
+                    data-day-menu="true"
+                    style={{
+                      position: "absolute",
+                      top: 26,
+                      right: 0,
+                      zIndex: 5,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4,
+                      minWidth: 180,
+                      padding: 8,
+                      borderRadius: 8,
+                      border: "1px solid #ddd",
+                      background: "#fff",
+                      boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={async () => {
+                        setSelectedDate(d);
+                        await addQuickIncome(d);
+                        setDayMenuOpen(null);
+                      }}
+                    >
+                      Добавить доход
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setSelectedDate(d);
+                        await addQuickExpense(d);
+                        setDayMenuOpen(null);
+                      }}
+                    >
+                      Добавить расход
+                    </button>
+                    <div style={{ height: 1, background: "#eee", margin: "4px 0" }} />
+                    <button
+                      onClick={async () => {
+                        try {
+                          const makeWorking = !effectiveWorking;
+                          if (isWeekend) {
+                            if (makeWorking) {
+                              const updated = await api.upsertOffDay({ id: offForDay?.id ?? "", date: d, note: offForDay?.note ?? "", is_working: true });
+                              setData(updated);
+                            } else if (offForDay) {
+                              const updated = await api.deleteOffDay(offForDay.id);
+                              setData(updated);
+                            }
+                          } else {
+                            if (!makeWorking) {
+                              const updated = await api.upsertOffDay({ id: offForDay?.id ?? "", date: d, note: offForDay?.note ?? "", is_working: false });
+                              setData(updated);
+                            } else if (offForDay) {
+                              const updated = await api.deleteOffDay(offForDay.id);
+                              setData(updated);
+                            }
+                          }
+                        } catch (err) {
+                          console.error('day menu update failed', err);
+                          alert(String(err));
+                        }
+                        setDayMenuOpen(null);
+                      }}
+                    >
+                      {effectiveWorking ? "Установить как выходной" : "Установить как рабочий"}
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               {vacForDay ? (
@@ -852,7 +850,7 @@ export default function App() {
                 </div>
               ) : null}
 
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <div style={{ fontSize: 12, opacity: 0.7, color: vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#0b5' : undefined)) }}>{d.slice(8, 10)}</div>
                 <div style={{ fontSize: 11, opacity: 0.7, color: vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#0b5' : undefined)) }}>{new Date(d).toLocaleDateString("ru-RU", { weekday: "short" })}</div>
               </div>
@@ -870,40 +868,8 @@ export default function App() {
         })}
       </div>
 
-      {popupVisible && popupDate ? (
-        <div
-          ref={popupRef}
-          style={{
-            position: "fixed",
-            left: popupPos.x + 8,
-            top: popupPos.y + 8,
-            zIndex: 2000,
-            border: "1px solid #ddd",
-            background: "#fff",
-            padding: 10,
-            borderRadius: 8,
-            boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
-            minWidth: 260,
-          }}
-        >
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Нерабочий день — {popupDate}</div>
-          <input
-            value={popupNote}
-            onChange={(e) => setPopupNote(e.target.value)}
-            placeholder="Комментарий (необязательно)"
-            style={{ width: "100%", padding: 6, borderRadius: 6, border: "1px solid #eee" }}
-          />
 
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
-            {popupExistingId ? (
-              <button onClick={deletePopupOffDay} style={{ background: "#fff" }}>Удалить</button>
-            ) : null}
 
-            <button onClick={savePopupOffDay}>Сохранить</button>
-            <button onClick={closePopup}>Отмена</button>
-          </div>
-        </div>
-      ) : null}
 
     </div>
   );
