@@ -1,4 +1,4 @@
-use crate::models::{AppData, SalaryEvent, Vacation, OffDay, Transaction, TxType};
+use crate::models::{AppData, OffDay, SalaryEvent, Transaction, TxType, Vacation};
 use crate::storage;
 use anyhow::Result;
 use chrono::NaiveDate;
@@ -9,32 +9,38 @@ fn parse_date(s: &str) -> Result<NaiveDate> {
     Ok(NaiveDate::parse_from_str(s, "%Y-%m-%d")?)
 }
 
+fn load(app: &AppHandle) -> Result<AppData, String> {
+    storage::load_or_init(app).map_err(|e| e.to_string())
+}
+
+fn save(app: &AppHandle, data: &AppData) -> Result<(), String> {
+    storage::save(app, data).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn get_data(app: AppHandle) -> Result<AppData, String> {
-    storage::load_or_init(&app).map_err(|e| e.to_string())
+    load(&app)
 }
 
 #[tauri::command]
 pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, String> {
-    let mut data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
+    let mut data = load(&app)?;
 
     if tx.id.trim().is_empty() {
         tx.id = format!("tx_{}", Uuid::new_v4());
     }
 
     // простая нормализация: расход всегда положительный amount, тип решает знак
-    if tx.amount < 0 {
-        tx.amount = -tx.amount;
-    }
+    tx.amount = tx.amount.saturating_abs();
 
     data.transactions.push(tx);
-    storage::save(&app, &data).map_err(|e| e.to_string())?;
+    save(&app, &data)?;
     Ok(data)
 }
 
 #[tauri::command]
-pub fn update_transaction(app: AppHandle, tx: Transaction) -> Result<AppData, String> {
-    let mut data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
+pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, String> {
+    let mut data = load(&app)?;
 
     if tx.id.trim().is_empty() {
         return Err("transaction id is empty".to_string());
@@ -45,35 +51,29 @@ pub fn update_transaction(app: AppHandle, tx: Transaction) -> Result<AppData, St
         return Err("transaction not found".to_string());
     };
 
-    let mut tx2 = tx.clone();
-    if tx2.amount < 0 {
-        tx2.amount = -tx2.amount;
-    }
+    tx.amount = tx.amount.saturating_abs();
 
-    data.transactions[i] = tx2;
-    storage::save(&app, &data).map_err(|e| e.to_string())?;
+    data.transactions[i] = tx;
+    save(&app, &data)?;
     Ok(data)
 }
 
-
 #[tauri::command]
 pub fn delete_transaction(app: AppHandle, id: String) -> Result<AppData, String> {
-    let mut data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
+    let mut data = load(&app)?;
     data.transactions.retain(|t| t.id != id);
-    storage::save(&app, &data).map_err(|e| e.to_string())?;
+    save(&app, &data)?;
     Ok(data)
 }
 
 #[tauri::command]
 pub fn upsert_salary_event(app: AppHandle, mut ev: SalaryEvent) -> Result<AppData, String> {
-    let mut data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
+    let mut data = load(&app)?;
 
     if ev.id.trim().is_empty() {
         ev.id = format!("sal_{}", Uuid::new_v4());
     }
-    if ev.amount < 0 {
-        ev.amount = -ev.amount;
-    }
+    ev.amount = ev.amount.saturating_abs();
 
     let idx = data.salary_events.iter().position(|x| x.id == ev.id);
     match idx {
@@ -81,21 +81,21 @@ pub fn upsert_salary_event(app: AppHandle, mut ev: SalaryEvent) -> Result<AppDat
         None => data.salary_events.push(ev),
     }
 
-    storage::save(&app, &data).map_err(|e| e.to_string())?;
+    save(&app, &data)?;
     Ok(data)
 }
 
 #[tauri::command]
 pub fn delete_salary_event(app: AppHandle, id: String) -> Result<AppData, String> {
-    let mut data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
+    let mut data = load(&app)?;
     data.salary_events.retain(|s| s.id != id);
-    storage::save(&app, &data).map_err(|e| e.to_string())?;
+    save(&app, &data)?;
     Ok(data)
 }
 
 #[tauri::command]
 pub fn upsert_vacation(app: AppHandle, mut ev: Vacation) -> Result<AppData, String> {
-    let mut data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
+    let mut data = load(&app)?;
 
     if ev.id.trim().is_empty() {
         ev.id = format!("vac_{}", Uuid::new_v4());
@@ -114,21 +114,21 @@ pub fn upsert_vacation(app: AppHandle, mut ev: Vacation) -> Result<AppData, Stri
         None => data.vacations.push(ev),
     }
 
-    storage::save(&app, &data).map_err(|e| e.to_string())?;
+    save(&app, &data)?;
     Ok(data)
 }
 
 #[tauri::command]
 pub fn delete_vacation(app: AppHandle, id: String) -> Result<AppData, String> {
-    let mut data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
+    let mut data = load(&app)?;
     data.vacations.retain(|s| s.id != id);
-    storage::save(&app, &data).map_err(|e| e.to_string())?;
+    save(&app, &data)?;
     Ok(data)
 }
 
 #[tauri::command]
 pub fn upsert_off_day(app: AppHandle, mut ev: OffDay) -> Result<AppData, String> {
-    let mut data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
+    let mut data = load(&app)?;
 
     if ev.id.trim().is_empty() {
         ev.id = format!("off_{}", Uuid::new_v4());
@@ -140,18 +140,17 @@ pub fn upsert_off_day(app: AppHandle, mut ev: OffDay) -> Result<AppData, String>
         None => data.off_days.push(ev),
     }
 
-    storage::save(&app, &data).map_err(|e| e.to_string())?;
+    save(&app, &data)?;
     Ok(data)
 }
 
 #[tauri::command]
 pub fn delete_off_day(app: AppHandle, id: String) -> Result<AppData, String> {
-    let mut data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
+    let mut data = load(&app)?;
     data.off_days.retain(|s| s.id != id);
-    storage::save(&app, &data).map_err(|e| e.to_string())?;
+    save(&app, &data)?;
     Ok(data)
 }
-
 
 #[derive(serde::Serialize)]
 pub struct DailyBudgetResult {
@@ -164,31 +163,25 @@ pub struct DailyBudgetResult {
 /// Расчёт “сколько можно тратить в день” от указанной даты (YYYY-MM-DD)
 #[tauri::command]
 pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudgetResult, String> {
-    let data = storage::load_or_init(&app).map_err(|e| e.to_string())?;
+    let data = load(&app)?;
     let from = parse_date(&from_date).map_err(|e| e.to_string())?;
 
     // Найти ближайшую зарплату строго после from_date
-    let mut future_salaries: Vec<_> = data
+    let next_date = data
         .salary_events
         .iter()
-        .filter_map(|s| parse_date(&s.date).ok().map(|d| (d, s)))
-        .filter(|(d, _)| *d > from)
-        .collect();
+        .filter_map(|s| parse_date(&s.date).ok())
+        .filter(|d| *d > from)
+        .min();
 
-    future_salaries.sort_by_key(|x| x.0);
-
-    let next = future_salaries.first().map(|(d, s)| (*d, s.amount));
-
-    if next.is_none() {
+    let Some(next_date) = next_date else {
         return Ok(DailyBudgetResult {
             next_salary_date: None,
             days: 0,
             available: 0,
             per_day: 0,
         });
-    }
-
-    let (next_date, _next_amount) = next.unwrap();
+    };
 
     // Диапазон: с завтра по день перед зарплатой (чтобы в день зарплаты не “проедать” будущий приход)
     let start = from.succ_opt().unwrap_or(from);

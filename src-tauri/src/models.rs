@@ -20,7 +20,7 @@ pub struct OffDay {
     pub note: String,
     #[serde(default)]
     pub is_working: bool,
-} 
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vacation {
@@ -31,6 +31,7 @@ pub struct Vacation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Settings {
     pub currency: String,
     /// "подушка", копейки
@@ -38,21 +39,33 @@ pub struct Settings {
     pub min_balance: i64,
     /// exclude_payday | include_payday
     #[serde(rename = "dailyCalcMode")]
+    #[serde(default)]
     pub daily_calc_mode: DailyCalcMode,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum DailyCalcMode {
+    #[default]
     ExcludePayday,
     IncludePayday,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            currency: "RUB".to_string(),
+            min_balance: 0,
+            daily_calc_mode: DailyCalcMode::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SalaryEvent {
     pub id: String,
-    pub date: String,  // YYYY-MM-DD
-    pub amount: i64,   // копейки
+    pub date: String, // YYYY-MM-DD
+    pub amount: i64,  // копейки
     pub title: String,
 }
 
@@ -77,11 +90,7 @@ impl Default for AppData {
     fn default() -> Self {
         Self {
             version: 1,
-            settings: Settings {
-                currency: "RUB".to_string(),
-                min_balance: 0,
-                daily_calc_mode: DailyCalcMode::ExcludePayday,
-            },
+            settings: Settings::default(),
             salary_events: vec![],
             vacations: vec![],
             off_days: vec![],
