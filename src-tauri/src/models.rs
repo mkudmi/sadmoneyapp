@@ -41,6 +41,9 @@ pub struct Settings {
     #[serde(rename = "dailyCalcMode")]
     #[serde(default)]
     pub daily_calc_mode: DailyCalcMode,
+    #[serde(rename = "txCategories")]
+    #[serde(default = "default_tx_categories")]
+    pub tx_categories: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -51,12 +54,17 @@ pub enum DailyCalcMode {
     IncludePayday,
 }
 
+fn default_tx_categories() -> Vec<String> {
+    vec!["Продукты".to_string(), "Бензин".to_string()]
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
             currency: "RUB".to_string(),
             min_balance: 0,
             daily_calc_mode: DailyCalcMode::default(),
+            tx_categories: default_tx_categories(),
         }
     }
 }

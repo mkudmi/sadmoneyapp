@@ -38,6 +38,7 @@ export type AppData = {
     currency: string;
     minBalance: number;
     dailyCalcMode: "exclude_payday" | "include_payday";
+    txCategories: string[];
   };
   salaryEvents: SalaryEvent[];
   vacations: Vacation[];

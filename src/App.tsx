@@ -160,6 +160,11 @@ export default function App() {
   const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
 
   const [dayMenuOpen, setDayMenuOpen] = useState<string | null>(null);
+  const [txModalOpen, setTxModalOpen] = useState(false);
+  const [txModalType, setTxModalType] = useState<"income" | "expense">("expense");
+  const [txModalDate, setTxModalDate] = useState<string>(today);
+  const [txModalAmount, setTxModalAmount] = useState<string>("");
+  const [txModalCategory, setTxModalCategory] = useState<string>("");
 
   useEffect(() => {
     if (!dayMenuOpen) return;
@@ -179,49 +184,62 @@ export default function App() {
     };
   }, [dayMenuOpen]);
 
-  async function addQuickExpense(dateOverride?: string) {
-    const date = dateOverride ?? selectedDate;
-    try {
-      const amountStr = prompt("Расход (руб):", "100");
-      if (!amountStr) return;
+  const txCategories = useMemo(() => {
+    const fromData = data?.settings?.txCategories ?? [];
+    return fromData.length > 0 ? fromData : ["Продукты", "Бензин"];
+  }, [data]);
 
-      const tx: Transaction = {
-        id: "",
-        date,
-        type: "expense",
-        amount: toKop(amountStr),
-        category: "Прочее",
-        note: "",
-      };
+  function normalizeCategoryInput(raw: string) {
+    const s0 = raw.trim().replace(/\s+/g, " ");
+    if (!s0) return "";
 
-      const updated = await api.addTransaction(tx);
-      setData(updated);
-    } catch (err) {
-      console.error('addQuickExpense failed', err);
-      alert('Ошибка добавления расхода: ' + String(err));
-    }
+    const cap = (seg: string) => {
+      if (!seg) return "";
+      return seg.slice(0, 1).toUpperCase() + seg.slice(1).toLowerCase();
+    };
+
+    return s0
+      .split(" ")
+      .map((w) => w.split("-").map(cap).join("-"))
+      .join(" ");
   }
 
-  async function addQuickIncome(dateOverride?: string) {
-    const date = dateOverride ?? selectedDate;
-    try {
-      const amountStr = prompt("Доход (руб):", "1000");
-      if (!amountStr) return;
+  function openTxModal(type: "income" | "expense", date: string) {
+    setTxModalType(type);
+    setTxModalDate(date);
+    setTxModalAmount("");
+    setTxModalCategory(type === "income" ? "Доход" : (txCategories[0] ?? "Продукты"));
+    setTxModalOpen(true);
+  }
 
+  function closeTxModal() {
+    setTxModalOpen(false);
+    setTxModalAmount("");
+    setTxModalCategory("");
+  }
+
+  async function submitTxModal() {
+    const category = normalizeCategoryInput(txModalCategory);
+    if (!txModalAmount.trim()) return;
+    if (!category) return;
+
+    try {
       const tx: Transaction = {
         id: "",
-        date,
-        type: "income",
-        amount: toKop(amountStr),
-        category: "Доход",
+        date: txModalDate,
+        type: txModalType,
+        amount: toKop(txModalAmount),
+        category,
         note: "",
       };
 
+      if (tx.amount <= 0) return;
+
       const updated = await api.addTransaction(tx);
       setData(updated);
+      closeTxModal();
     } catch (err) {
-      console.error('addQuickIncome failed', err);
-      alert('Ошибка добавления дохода: ' + String(err));
+      alert(String(err));
     }
   }
 
@@ -798,18 +816,18 @@ export default function App() {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
-                      onClick={async () => {
+                      onClick={() => {
                         setSelectedDate(d);
-                        await addQuickIncome(d);
+                        openTxModal("income", d);
                         setDayMenuOpen(null);
                       }}
                     >
                       Добавить доход
                     </button>
                     <button
-                      onClick={async () => {
+                      onClick={() => {
                         setSelectedDate(d);
-                        await addQuickExpense(d);
+                        openTxModal("expense", d);
                         setDayMenuOpen(null);
                       }}
                     >
@@ -877,6 +895,77 @@ export default function App() {
           );
         })}
       </div>
+
+      {txModalOpen ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            zIndex: 5000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeTxModal();
+          }}
+        >
+          <div
+            style={{
+              width: "min(520px, 100%)",
+              background: "#fff",
+              borderRadius: 12,
+              border: "1px solid #ddd",
+              padding: 12,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <b style={{ fontSize: 14 }}>
+                {txModalType === "income" ? "Добавить доход" : "Добавить расход"} — {txModalDate}
+              </b>
+              <button onClick={closeTxModal} aria-label="Закрыть">✕</button>
+            </div>
+
+            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Сумма (руб)</div>
+                <input
+                  value={txModalAmount}
+                  onChange={(e) => setTxModalAmount(e.target.value)}
+                  placeholder={txModalType === "income" ? "1000" : "100"}
+                  inputMode="decimal"
+                  style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Категория</div>
+                <input
+                  list="tx-categories"
+                  value={txModalCategory}
+                  onChange={(e) => setTxModalCategory(e.target.value)}
+                  placeholder="Например: Продукты"
+                  style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                />
+                <datalist id="tx-categories">
+                  {txCategories.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <button onClick={closeTxModal}>Отмена</button>
+              <button onClick={submitTxModal}>{txModalType === "income" ? "Добавить доход" : "Добавить расход"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
 
 

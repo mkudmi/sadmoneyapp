@@ -9,6 +9,47 @@ fn parse_date(s: &str) -> Result<NaiveDate> {
     Ok(NaiveDate::parse_from_str(s, "%Y-%m-%d")?)
 }
 
+fn normalize_category(s: &str) -> String {
+    fn cap_segment(seg: &str) -> String {
+        let seg = seg.trim();
+        if seg.is_empty() {
+            return String::new();
+        }
+        let mut chars = seg.chars();
+        let first = chars.next().unwrap();
+        let rest: String = chars.collect();
+        let mut out = String::new();
+        out.extend(first.to_uppercase());
+        out.push_str(&rest.to_lowercase());
+        out
+    }
+
+    let s = s.trim();
+    if s.is_empty() {
+        return String::new();
+    }
+
+    s.split_whitespace()
+        .map(|w| {
+            w.split('-')
+                .map(cap_segment)
+                .collect::<Vec<_>>()
+                .join("-")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn remember_category(settings: &mut crate::models::Settings, category: &str) {
+    if category.trim().is_empty() {
+        return;
+    }
+    if settings.tx_categories.iter().any(|c| c == category) {
+        return;
+    }
+    settings.tx_categories.push(category.to_string());
+}
+
 fn load(app: &AppHandle) -> Result<AppData, String> {
     storage::load_or_init(app).map_err(|e| e.to_string())
 }
@@ -32,6 +73,10 @@ pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, S
 
     // простая нормализация: расход всегда положительный amount, тип решает знак
     tx.amount = tx.amount.saturating_abs();
+    tx.category = normalize_category(&tx.category);
+    remember_category(&mut data.settings, &tx.category);
+    tx.category = normalize_category(&tx.category);
+    remember_category(&mut data.settings, &tx.category);
 
     data.transactions.push(tx);
     save(&app, &data)?;
