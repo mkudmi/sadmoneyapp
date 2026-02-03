@@ -183,8 +183,8 @@ pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudge
         });
     };
 
-    // Диапазон: с завтра по день перед зарплатой (чтобы в день зарплаты не “проедать” будущий приход)
-    let start = from.succ_opt().unwrap_or(from);
+    // Диапазон: с сегодня по день перед зарплатой (чтобы в день зарплаты не “проедать” будущий приход)
+    let start = from;
     let end = next_date.pred_opt().unwrap_or(next_date);
 
     let days = if end >= start {
