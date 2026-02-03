@@ -290,7 +290,6 @@ export default function App() {
 
       <div style={{ marginBottom: 12 }}>
         <div style={{ opacity: 0.9 }}><b>Среднедневной заработок:</b> {rub(avgDailyEarnings)}</div>
-        <div style={{ fontSize: 12, opacity: 0.7 }}>(сумма зарплат за 12 мес / 12) / 29.3</div>
       </div>
 
       <div style={{ marginBottom: 12, opacity: 0.8 }}>
@@ -757,6 +756,7 @@ export default function App() {
               style={{
                 position: 'relative',
                 cursor: "pointer",
+                zIndex: dayMenuOpen === d ? 50 : 0,
                 border: isSel ? "2px solid #333" : isToday ? "2px solid #1b7" : "1px solid #ddd",
                 background: tileBackground,
                 borderRadius: 12,
@@ -765,7 +765,7 @@ export default function App() {
               }}
 
             >
-              <div style={{ position: 'absolute', top: 6, right: 6 }} data-day-menu="true">
+              <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 10 }} data-day-menu="true">
                 <button
                   aria-label="Меню"
                   onClick={(e) => {
@@ -784,7 +784,7 @@ export default function App() {
                       position: "absolute",
                       top: 26,
                       right: 0,
-                      zIndex: 5,
+                      zIndex: 2000,
                       display: "flex",
                       flexDirection: "column",
                       gap: 4,
