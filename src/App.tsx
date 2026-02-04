@@ -158,6 +158,7 @@ export default function App() {
 
   const salaryForSelectedDate = (data?.salaryEvents ?? []).find(s => s.date === selectedDate) ?? null;
   const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
+  const isSelectedToday = selectedDate === today;
 
   const [dayMenuOpen, setDayMenuOpen] = useState<string | null>(null);
   const [txModalOpen, setTxModalOpen] = useState(false);
@@ -284,7 +285,17 @@ export default function App() {
   return (
 
 
-    <div style={{ padding: 16, fontFamily: "system-ui, sans-serif" }}>
+    <div
+      style={{
+        height: "100%",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        padding: 12,
+        boxSizing: "border-box",
+        fontFamily: "system-ui, sans-serif",
+      }}
+    >
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
         <button onClick={prevMonth}>←</button>
         <h2 style={{ margin: 0 }}>
@@ -484,7 +495,33 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12, marginBottom: 12 }}>
+      <div style={{ flex: "1 1 auto", minHeight: 0, overflow: "hidden" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            alignItems: "stretch",
+            flexDirection: "row-reverse",
+            flexWrap: "wrap",
+            height: "100%",
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
+        <div
+          style={{
+            padding: 12,
+            border: "1px solid #ddd",
+            borderRadius: 12,
+            marginBottom: 12,
+            flex: "1 1 220px",
+            minWidth: 240,
+            height: "100%",
+            minHeight: 0,
+            overflowY: "auto",
+            boxSizing: "border-box",
+          }}
+        >
         <div><b>Выбранная дата:</b> {selectedDate}</div>
         {budget && (
           <>
@@ -503,7 +540,15 @@ export default function App() {
         <div style={{ marginTop: 12 }}>
           <b>Операции за {selectedDate}:</b>
 
-          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+          <div
+            style={{
+              marginTop: 8,
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              ...(isSelectedToday ? { maxHeight: 340, overflowY: "auto", paddingRight: 6 } : {}),
+            }}
+          >
             {salaryForSelectedDate ? (
               <div
                 key={"salary"}
@@ -725,7 +770,23 @@ export default function App() {
 
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(7, 1fr)",
+          gap: 8,
+          padding: 12,
+          border: "1px solid #ddd",
+          borderRadius: 12,
+          flex: "2 1 520px",
+          minWidth: 320,
+          height: "100%",
+          minHeight: 0,
+          overflowY: "auto",
+          boxSizing: "border-box",
+          alignContent: "start",
+        }}
+      >
         {gridCells.map((d, idx) => {
           if (!d) {
             return (
@@ -734,8 +795,8 @@ export default function App() {
                 style={{
                   border: "1px solid transparent",
                   borderRadius: 12,
-                  padding: 10,
-                  minHeight: 78,
+                  padding: 8,
+                  minHeight: 68,
                   background: "transparent",
                 }}
               />
@@ -748,6 +809,7 @@ export default function App() {
           const salaryForDay = (data?.salaryEvents ?? []).find(s => s.date === d);
           const vacForDay = (data?.vacations ?? []).find(v => v.start_date <= d && d <= v.end_date) ?? null;
           const offForDay = (data?.offDays ?? []).find(o => o.date === d) ?? null;
+          const txForDay = isToday ? (data?.transactions ?? []).filter((t) => t.date === d) : [];
 
           const dayOfWeek = new Date(d).getDay(); // 0 = Sunday, 6 = Saturday
           const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
@@ -778,8 +840,8 @@ export default function App() {
                 border: isSel ? "2px solid #333" : isToday ? "2px solid #1b7" : "1px solid #ddd",
                 background: tileBackground,
                 borderRadius: 12,
-                padding: 10,
-                minHeight: 78,
+                padding: 8,
+                minHeight: 68,
               }}
 
             >
@@ -884,6 +946,47 @@ export default function App() {
               </div>
               <div style={{ fontSize: 12 }}>+ {rub(s.inc)}</div>
               <div style={{ fontSize: 12 }}>- {rub(s.exp)}</div>
+              {isToday && txForDay.length > 0 ? (
+                <div
+                  style={{
+                    marginTop: 6,
+                    paddingTop: 6,
+                    borderTop: "1px dashed rgba(0,0,0,0.18)",
+                    maxHeight: 86,
+                    overflowY: "auto",
+                  }}
+                >
+                  {txForDay.map((t) => (
+                    <div
+                      key={t.id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 6,
+                        fontSize: 11,
+                        lineHeight: "14px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          opacity: 0.85,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          flex: "1 1 auto",
+                        }}
+                        title={t.category}
+                      >
+                        {t.type === "income" ? "+ " : "- "}
+                        {t.category}
+                      </div>
+                      <div style={{ flex: "0 0 auto", color: t.type === "income" ? "#167a3a" : "#b00020" }}>
+                        {rub(t.amount)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               {offForDay ? (
                 offForDay.is_working ? (
                   <div style={{ fontSize: 12, color: '#0a66ff' }}>💼 Рабочий день{offForDay.note ? ` — ${offForDay.note}` : ''}</div>
@@ -894,6 +997,8 @@ export default function App() {
             </div>
           );
         })}
+      </div>
+      </div>
       </div>
 
       {txModalOpen ? (
