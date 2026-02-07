@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, AppData, Transaction } from "./lib/api";
 import { rub, toKop } from "./lib/money";
@@ -43,7 +43,7 @@ export default function App() {
       // считаем только операции не позже сегодняшней даты
       if (t.date > today) continue;
       if (t.type === "income") inc += t.amount;
-      else exp += t.amount;
+      if (t.type === "expense") exp += t.amount;
     }
 
     for (const s of data.salaryEvents ?? []) {
@@ -143,7 +143,7 @@ export default function App() {
     for (const t of data.transactions) {
       const cur = map.get(t.date) ?? { inc: 0, exp: 0 };
       if (t.type === "income") cur.inc += t.amount;
-      else cur.exp += t.amount;
+      if (t.type === "expense" || t.type === "planned_expense") cur.exp += t.amount;
       map.set(t.date, cur);
     }
 
@@ -162,8 +162,11 @@ export default function App() {
   const isSelectedToday = selectedDate === today;
 
   const [dayMenuOpen, setDayMenuOpen] = useState<string | null>(null);
+  const [dayMenuPos, setDayMenuPos] = useState<{ left: number; top: number }>({ left: 8, top: 8 });
+  const [dayMenuAnchorRect, setDayMenuAnchorRect] = useState<{ top: number; bottom: number } | null>(null);
+  const dayMenuRef = useRef<HTMLDivElement | null>(null);
   const [txModalOpen, setTxModalOpen] = useState(false);
-  const [txModalType, setTxModalType] = useState<"income" | "expense">("expense");
+  const [txModalType, setTxModalType] = useState<"income" | "expense" | "planned_expense">("expense");
   const [txModalDate, setTxModalDate] = useState<string>(today);
   const [txModalAmount, setTxModalAmount] = useState<string>("");
   const [txModalCategory, setTxModalCategory] = useState<string>("");
@@ -175,15 +178,27 @@ export default function App() {
       const tgt = e.target as HTMLElement | null;
       if (tgt && tgt.closest("[data-day-menu]")) return;
       setDayMenuOpen(null);
+      setDayMenuAnchorRect(null);
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setDayMenuOpen(null);
+      if (e.key === "Escape") {
+        setDayMenuOpen(null);
+        setDayMenuAnchorRect(null);
+      }
+    }
+    function onViewportChange() {
+      setDayMenuOpen(null);
+      setDayMenuAnchorRect(null);
     }
     document.addEventListener("mousedown", onDocClick);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("scroll", onViewportChange, true);
     return () => {
       document.removeEventListener("mousedown", onDocClick);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("scroll", onViewportChange, true);
     };
   }, [dayMenuOpen]);
 
@@ -204,6 +219,50 @@ export default function App() {
       document.removeEventListener("keydown", onKey);
     };
   }, [txCategoryMenuOpen]);
+
+  function openDayMenu(date: string, anchor: HTMLElement) {
+    const menuWidth = 220;
+    const pad = 8;
+    const gap = 6;
+    const rect = anchor.getBoundingClientRect();
+    let left = rect.right - menuWidth;
+    const top = rect.bottom + gap;
+
+    if (left + menuWidth > window.innerWidth - pad) left = window.innerWidth - menuWidth - pad;
+    if (left < pad) left = pad;
+
+    setDayMenuPos({ left, top });
+    setDayMenuAnchorRect({ top: rect.top, bottom: rect.bottom });
+    setDayMenuOpen((cur) => (cur === date ? null : date));
+  }
+
+  useEffect(() => {
+    if (!dayMenuOpen) return;
+    const el = dayMenuRef.current;
+    if (!el) return;
+    if (!dayMenuAnchorRect) return;
+
+    const pad = 8;
+    const gap = 6;
+    const rect = el.getBoundingClientRect();
+    const menuHeight = rect.height;
+    const canPlaceBelow = dayMenuAnchorRect.bottom + gap + menuHeight <= window.innerHeight - pad;
+    const canPlaceAbove = dayMenuAnchorRect.top - gap - menuHeight >= pad;
+    let nextTop = dayMenuAnchorRect.bottom + gap;
+
+    if (canPlaceBelow) {
+      nextTop = dayMenuAnchorRect.bottom + gap;
+    } else if (canPlaceAbove) {
+      nextTop = dayMenuAnchorRect.top - gap - menuHeight;
+    } else {
+      // fallback if viewport too tight: keep in-bounds without jumping
+      nextTop = Math.max(pad, Math.min(dayMenuAnchorRect.bottom + gap, window.innerHeight - pad - menuHeight));
+    }
+
+    if (Math.abs(nextTop - dayMenuPos.top) > 0.5) {
+      setDayMenuPos((prev) => ({ ...prev, top: nextTop }));
+    }
+  }, [dayMenuOpen, dayMenuPos.top, dayMenuAnchorRect]);
 
   const expenseCategories = useMemo(() => {
     const fromData = data?.settings?.txCategories ?? [];
@@ -243,7 +302,13 @@ export default function App() {
       .join(" ");
   }
 
-  function openTxModal(type: "income" | "expense", date: string) {
+  function txModalTitle(type: "income" | "expense" | "planned_expense") {
+    if (type === "income") return "Добавить доход";
+    if (type === "planned_expense") return "Добавить запланированный расход";
+    return "Добавить расход";
+  }
+
+  function openTxModal(type: "income" | "expense" | "planned_expense", date: string) {
     setTxModalType(type);
     setTxModalDate(date);
     setTxModalAmount("");
@@ -800,13 +865,35 @@ export default function App() {
                 >
                   <div>
                     <div style={{ fontSize: 13 }}>
-                      <b>{t.type === "income" ? "+" : "-"}</b> {rub(t.amount)} — {t.category}
+                      <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "⏳" : "-"}</b> {rub(t.amount)} — {t.category}
+                      {t.type === "planned_expense" ? (
+                        <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>(запланировано)</span>
+                      ) : null}
                     </div>
                     {t.note ? <div style={{ fontSize: 12, opacity: 0.7 }}>{t.note}</div> : null}
                   </div>
 
                   <div style={{ display: "flex", gap: 8 }}>
+                    {t.type === "planned_expense" ? (
+                      <button
+                        title="Оплачено"
+                        aria-label="Оплачено"
+                        style={{ color: "#138a36", fontWeight: 700 }}
+                        onClick={async () => {
+                          const updated = await api.updateTransaction({
+                            ...t,
+                            type: "expense",
+                          });
+                          setData(updated);
+                        }}
+                      >
+                        ✓
+                      </button>
+                    ) : null}
                     <button
+                      title="Редактировать"
+                      aria-label="Редактировать"
+                      style={{ color: "#444", fontWeight: 700 }}
                       onClick={async () => {
                         if (!data) return;
 
@@ -825,17 +912,19 @@ export default function App() {
                         setData(updated);
                       }}
                     >
-                      Редактировать
+                      ✎
                     </button>
 
                     <button
+                      title="Удалить"
+                      aria-label="Удалить"
+                      style={{ color: "#c51616", fontWeight: 700 }}
                       onClick={async () => {
-                        if (!confirm("Удалить операцию?")) return;
                         const updated = await api.deleteTransaction(t.id);
                         setData(updated);
                       }}
                     >
-                      Удалить
+                      ✕
                     </button>
                   </div>
                 </div>
@@ -906,7 +995,7 @@ export default function App() {
           return (
             <div
               key={d}
-              onClick={() => { setSelectedDate(d); setDayMenuOpen(null); }}
+              onClick={() => { setSelectedDate(d); setDayMenuOpen(null); setDayMenuAnchorRect(null); }}
               style={{
                 position: 'relative',
                 cursor: "pointer",
@@ -925,7 +1014,7 @@ export default function App() {
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedDate(d);
-                    setDayMenuOpen((cur) => (cur === d ? null : d));
+                    openDayMenu(d, e.currentTarget);
                   }}
                 >
                   ⋯
@@ -933,16 +1022,17 @@ export default function App() {
 
                 {dayMenuOpen === d ? (
                   <div
+                    ref={dayMenuRef}
                     data-day-menu="true"
                     style={{
-                      position: "absolute",
-                      top: 26,
-                      right: 0,
+                      position: "fixed",
+                      top: dayMenuPos.top,
+                      left: dayMenuPos.left,
                       zIndex: 2000,
                       display: "flex",
                       flexDirection: "column",
                       gap: 4,
-                      minWidth: 180,
+                      width: 220,
                       padding: 8,
                       borderRadius: 8,
                       border: "1px solid #ddd",
@@ -968,6 +1058,15 @@ export default function App() {
                       }}
                     >
                       Добавить расход
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedDate(d);
+                        openTxModal("planned_expense", d);
+                        setDayMenuOpen(null);
+                      }}
+                    >
+                      Запланированный расход
                     </button>
                     <div style={{ height: 1, background: "#eee", margin: "4px 0" }} />
                     <button
@@ -1059,7 +1158,7 @@ export default function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>
-                {txModalType === "income" ? "Добавить доход" : "Добавить расход"} — {txModalDate}
+                {txModalTitle(txModalType)} — {txModalDate}
               </b>
               <button onClick={closeTxModal} aria-label="Закрыть">✕</button>
             </div>
@@ -1141,7 +1240,7 @@ export default function App() {
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
               <button onClick={closeTxModal}>Отмена</button>
-              <button onClick={submitTxModal}>{txModalType === "income" ? "Добавить доход" : "Добавить расход"}</button>
+              <button onClick={submitTxModal}>{txModalTitle(txModalType)}</button>
             </div>
           </div>
         </div>

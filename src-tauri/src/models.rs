@@ -82,6 +82,7 @@ pub struct SalaryEvent {
 pub enum TxType {
     Income,
     Expense,
+    PlannedExpense,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

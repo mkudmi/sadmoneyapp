@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type TxType = "income" | "expense";
+export type TxType = "income" | "expense" | "planned_expense";
 
 export type Transaction = {
   id: string;

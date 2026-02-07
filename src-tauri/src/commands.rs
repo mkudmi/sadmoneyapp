@@ -294,13 +294,26 @@ pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudge
                 match t.r#type {
                     TxType::Income => balance += t.amount,
                     TxType::Expense => balance -= t.amount,
+                    TxType::PlannedExpense => {}
                 }
             }
         }
     }
 
-    // Подушка
-    let mut available = balance - data.settings.min_balance;
+    // Резервируем запланированные расходы до ближайшей зарплаты.
+    let mut planned_reserve: i64 = 0;
+    for t in &data.transactions {
+        if let Ok(d) = parse_date(&t.date) {
+            if d >= start && d <= end {
+                if let TxType::PlannedExpense = t.r#type {
+                    planned_reserve += t.amount;
+                }
+            }
+        }
+    }
+
+    // Подушка и резерв по запланированным расходам.
+    let mut available = balance - data.settings.min_balance - planned_reserve;
     if available < 0 {
         available = 0;
     }
