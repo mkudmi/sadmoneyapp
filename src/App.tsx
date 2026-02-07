@@ -882,7 +882,6 @@ export default function App() {
           const s = sumsByDate.get(d) ?? { inc: 0, exp: 0 };
           const isToday = d === today;
           const isSel = d === selectedDate;
-          const salaryForDay = (data?.salaryEvents ?? []).find(s => s.date === d);
           const vacForDay = (data?.vacations ?? []).find(v => v.start_date <= d && d <= v.end_date) ?? null;
           const offForDay = (data?.offDays ?? []).find(o => o.date === d) ?? null;
 
@@ -1009,10 +1008,6 @@ export default function App() {
                 <div style={{ fontSize: 12, marginTop: 4, opacity: 0.95 }}>
                   🏖️ {vacForDay.title}
                 </div>
-              ) : salaryForDay ? (
-                <div style={{ fontSize: 12, marginTop: 4, opacity: 0.9 }}>
-                  💰 {salaryForDay.title}: {rub(salaryForDay.amount)}
-                </div>
               ) : null}
 
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -1096,9 +1091,7 @@ export default function App() {
                       type="button"
                       onClick={() => setTxCategoryMenuOpen((v) => !v)}
                       aria-label="Показать список категорий"
-                    >
-                      â–¾
-                    </button>
+                    >▾</button>
                   </div>
 
                   {txCategoryMenuOpen && txCategoryOptions.length > 0 ? (
@@ -1160,3 +1153,4 @@ export default function App() {
     </div>
   );
 }
+
