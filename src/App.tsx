@@ -204,16 +204,28 @@ export default function App() {
     };
   }, [txCategoryMenuOpen]);
 
-  const txCategories = useMemo(() => {
+  const expenseCategories = useMemo(() => {
     const fromData = data?.settings?.txCategories ?? [];
     return fromData.length > 0 ? fromData : ["Продукты", "Бензин"];
   }, [data]);
 
+  const incomeCategories = useMemo(() => {
+    const defaults = ["Зарплата", "Аванс", "Подработка", "Кэшбэк"];
+    const fromTx = (data?.transactions ?? [])
+      .filter((t) => t.type === "income")
+      .map((t) => normalizeCategoryInput(t.category))
+      .filter((c) => c.length > 0);
+
+    return Array.from(new Set([...defaults, ...fromTx]));
+  }, [data]);
+
+  const activeTxCategories = txModalType === "income" ? incomeCategories : expenseCategories;
+
   const txCategoryOptions = useMemo(() => {
     const q = txModalCategory.trim().toLowerCase();
-    if (!q) return txCategories;
-    return txCategories.filter((c) => c.toLowerCase().includes(q));
-  }, [txCategories, txModalCategory]);
+    if (!q) return activeTxCategories;
+    return activeTxCategories.filter((c) => c.toLowerCase().includes(q));
+  }, [activeTxCategories, txModalCategory]);
 
   function normalizeCategoryInput(raw: string) {
     const s0 = raw.trim().replace(/\s+/g, " ");
@@ -1040,7 +1052,7 @@ export default function App() {
                       value={txModalCategory}
                       onChange={(e) => setTxModalCategory(e.target.value)}
                       onFocus={() => setTxCategoryMenuOpen(true)}
-                      placeholder="Например: Продукты"
+                      placeholder={txModalType === "income" ? "Например: Зарплата" : "Например: Продукты"}
                       style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                     />
                     <button
