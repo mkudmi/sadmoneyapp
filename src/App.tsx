@@ -1078,6 +1078,7 @@ export default function App() {
 
           const s = sumsByDate.get(d) ?? { inc: 0, exp: 0 };
           const isToday = d === today;
+          const isFutureDate = d > today;
           const isSel = d === selectedDate;
           const vacForDay = (data?.vacations ?? []).find(v => v.start_date <= d && d <= v.end_date) ?? null;
           const offForDay = (data?.offDays ?? []).find(o => o.date === d) ?? null;
@@ -1201,15 +1202,17 @@ export default function App() {
                     >
                       Добавить доход
                     </button>
-                    <button
-                      onClick={() => {
-                        setSelectedDate(d);
-                        openTxModal("expense", d);
-                        setDayMenuOpen(null);
-                      }}
-                    >
-                      Добавить расход
-                    </button>
+                    {!isFutureDate ? (
+                      <button
+                        onClick={() => {
+                          setSelectedDate(d);
+                          openTxModal("expense", d);
+                          setDayMenuOpen(null);
+                        }}
+                      >
+                        Добавить расход
+                      </button>
+                    ) : null}
                     <button
                       onClick={() => {
                         setSelectedDate(d);
