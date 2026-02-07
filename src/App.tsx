@@ -19,6 +19,11 @@ function parseYmdLocal(s: string) {
   return new Date(y, m - 1, d);
 }
 
+function capitalizeFirst(s: string) {
+  if (!s) return s;
+  return s.slice(0, 1).toUpperCase() + s.slice(1);
+}
+
 function getRecurringSalaryDays(salaryDates: string[]) {
   return Array.from(
     new Set(
@@ -248,6 +253,8 @@ export default function App() {
   const [dayMenuPos, setDayMenuPos] = useState<{ left: number; top: number }>({ left: 8, top: 8 });
   const [dayMenuAnchorRect, setDayMenuAnchorRect] = useState<{ top: number; bottom: number } | null>(null);
   const dayMenuRef = useRef<HTMLDivElement | null>(null);
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [txModalType, setTxModalType] = useState<"income" | "expense" | "planned_expense">("expense");
   const [txModalDate, setTxModalDate] = useState<string>(today);
@@ -318,6 +325,24 @@ export default function App() {
       document.removeEventListener("keydown", onKey);
     };
   }, [txCategoryMenuOpen]);
+
+  useEffect(() => {
+    if (!settingsMenuOpen) return;
+    function onDocClick(e: MouseEvent) {
+      const tgt = e.target as HTMLElement | null;
+      if (tgt && tgt.closest("[data-settings-menu]")) return;
+      setSettingsMenuOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setSettingsMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [settingsMenuOpen]);
 
   function openDayMenu(date: string, anchor: HTMLElement) {
     const menuWidth = 220;
@@ -674,12 +699,55 @@ export default function App() {
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
         <button onClick={prevMonth}>←</button>
         <h2 style={{ margin: 0 }}>
-          {new Date(year, month0, 1).toLocaleString("ru-RU", { month: "long", year: "numeric" })}
+          {capitalizeFirst(new Date(year, month0, 1).toLocaleString("ru-RU", { month: "long", year: "numeric" }))}
         </h2>
         <button onClick={nextMonth}>→</button>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <button onClick={exportBackupFile}>Экспорт бекапа</button>
-          <button onClick={importBackupFile}>Импорт бекапа</button>
+        <div style={{ marginLeft: "auto", position: "relative" }} data-settings-menu="true">
+          <button
+            aria-label="Settings"
+            onClick={() => setSettingsMenuOpen((v) => !v)}
+            style={{ width: 36, height: 36, display: "grid", placeItems: "center" }}
+          >
+            {"\u2699"}
+          </button>
+          {settingsMenuOpen ? (
+            <div
+              ref={settingsMenuRef}
+              data-settings-menu="true"
+              style={{
+                position: "absolute",
+                right: 0,
+                top: "calc(100% + 6px)",
+                zIndex: 2200,
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                minWidth: 180,
+                padding: 8,
+                borderRadius: 8,
+                border: "1px solid #ddd",
+                background: "#fff",
+                boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+              }}
+            >
+              <button
+                onClick={async () => {
+                  await exportBackupFile();
+                  setSettingsMenuOpen(false);
+                }}
+              >
+                Export backup
+              </button>
+              <button
+                onClick={async () => {
+                  await importBackupFile();
+                  setSettingsMenuOpen(false);
+                }}
+              >
+                Import backup
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -1602,4 +1670,6 @@ export default function App() {
     </div>
   );
 }
+
+
 
