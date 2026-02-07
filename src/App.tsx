@@ -14,6 +14,50 @@ function ymFromYmd(s: string) {
   return s.slice(0, 7); // "YYYY-MM"
 }
 
+function parseYmdLocal(s: string) {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function getRecurringSalaryDays(salaryDates: string[]) {
+  return Array.from(
+    new Set(
+      salaryDates
+        .map((date) => Number(date.slice(8, 10)))
+        .filter((day) => Number.isInteger(day) && day >= 1 && day <= 31)
+    )
+  ).sort((a, b) => a - b);
+}
+
+function findFollowingSalaryDate(nextSalaryDate: string, salaryDates: string[]) {
+  const knownNext = salaryDates
+    .filter((date) => date > nextSalaryDate)
+    .sort((a, b) => a.localeCompare(b))[0] ?? null;
+  if (knownNext) return knownNext;
+
+  const recurringDays = getRecurringSalaryDays(salaryDates);
+  if (recurringDays.length === 0) return null;
+
+  const base = parseYmdLocal(nextSalaryDate);
+  const candidates: string[] = [];
+
+  for (let monthOffset = 0; monthOffset <= 2; monthOffset++) {
+    const y = base.getFullYear();
+    const m = base.getMonth() + monthOffset;
+    const expectedMonth0 = ((m % 12) + 12) % 12;
+
+    for (const day of recurringDays) {
+      const candidate = new Date(y, m, day);
+      if (candidate.getMonth() !== expectedMonth0) continue;
+
+      const candidateYmd = ymd(candidate);
+      if (candidateYmd > nextSalaryDate) candidates.push(candidateYmd);
+    }
+  }
+
+  return candidates.sort((a, b) => a.localeCompare(b))[0] ?? null;
+}
+
 
 function daysInMonth(year: number, monthIndex0: number) {
   return new Date(year, monthIndex0 + 1, 0).getDate();
@@ -160,6 +204,40 @@ export default function App() {
   const salaryForSelectedDate = (data?.salaryEvents ?? []).find(s => s.date === selectedDate) ?? null;
   const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
   const vacationForSelectedDate = (data?.vacations ?? []).find(v => v.start_date <= selectedDate && v.end_date >= selectedDate) ?? null;
+  const plannedAfterExpensesForSelectedDate = useMemo(() => {
+    if (!data || !budget?.next_salary_date) return null;
+
+    const nextSalaryDate = budget.next_salary_date;
+    const salaryEvents = data.salaryEvents ?? [];
+    const salaryDates = salaryEvents.map((s) => s.date);
+
+    // End of period = day before the following salary date after nextSalaryDate.
+    const followingSalaryDate = findFollowingSalaryDate(nextSalaryDate, salaryDates);
+
+    if (!followingSalaryDate) return null;
+    const periodEndDate = parseYmdLocal(followingSalaryDate);
+    periodEndDate.setDate(periodEndDate.getDate() - 1);
+    const periodEnd = ymd(periodEndDate);
+
+    if (selectedDate < nextSalaryDate || selectedDate > periodEnd) return null;
+
+    const nextSalaryAmount = salaryEvents
+      .filter((s) => s.date === nextSalaryDate)
+      .reduce((sum, s) => sum + s.amount, 0);
+
+    if (nextSalaryAmount <= 0) return null;
+
+    const plannedUntilSelected = (data.transactions ?? [])
+      .filter(
+        (t) =>
+          t.type === "planned_expense" &&
+          t.date >= nextSalaryDate &&
+          t.date <= selectedDate
+      )
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    return nextSalaryAmount - plannedUntilSelected;
+  }, [data, budget?.next_salary_date, selectedDate]);
   const selectedDateWeekDay = new Date(selectedDate).getDay(); // 0 = Sunday, 6 = Saturday
   const selectedDateIsWeekend = selectedDateWeekDay === 0 || selectedDateWeekDay === 6;
   const selectedDateIsWorking = workSchedule === "5/2"
@@ -917,6 +995,29 @@ export default function App() {
                   </div>
                 </div>
 
+              </div>
+            ) : null}
+
+            {plannedAfterExpensesForSelectedDate !== null ? (
+              <div
+                key={"planned-after-expenses"}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  border: "1px solid #eee",
+                  borderRadius: 10,
+                  padding: "8px 10px",
+                  background: "#f7f9ff",
+                }}
+              >
+                <div style={{ fontSize: 13 }}>
+                  <b>После запланированных расходов</b>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>
+                  {rub(plannedAfterExpensesForSelectedDate)}
+                </div>
               </div>
             ) : null}
 
