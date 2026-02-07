@@ -64,6 +64,12 @@ export const api = {
   deleteVacation: (id: string) => invoke<AppData>("delete_vacation", { id }),
   upsertOffDay: (od: OffDay) => invoke<AppData>("upsert_off_day", { ev: od }),
   deleteOffDay: (id: string) => invoke<AppData>("delete_off_day", { id }),
+  exportBackup: () => invoke<string>("export_backup"),
+  saveBackupToPath: (path: string) => invoke<void>("save_backup_to_path", { path }),
+  saveBackupToDir: (dirPath: string, fileName: string) =>
+    invoke<string>("save_backup_to_dir", { dirPath, fileName }),
+  importBackup: (backupJson: string) => invoke<AppData>("import_backup", { backupJson }),
+  importBackupFromPath: (path: string) => invoke<AppData>("import_backup_from_path", { path }),
   calcDailyBudget: (fromDate: string) =>
     invoke<DailyBudgetResult>("calc_daily_budget", { fromDate }),
 };

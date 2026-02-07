@@ -197,6 +197,45 @@ pub fn delete_off_day(app: AppHandle, id: String) -> Result<AppData, String> {
     Ok(data)
 }
 
+#[tauri::command]
+pub fn export_backup(app: AppHandle) -> Result<String, String> {
+    let data = load(&app)?;
+    serde_json::to_string_pretty(&data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_backup_to_path(app: AppHandle, path: String) -> Result<(), String> {
+    let backup = export_backup(app)?;
+    std::fs::write(&path, backup).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_backup_to_dir(app: AppHandle, dir_path: String, file_name: String) -> Result<String, String> {
+    let backup = export_backup(app)?;
+    let mut full_path = std::path::PathBuf::from(dir_path);
+    let file = if file_name.trim().is_empty() {
+        "sadmoney-backup.json".to_string()
+    } else {
+        file_name
+    };
+    full_path.push(file);
+    std::fs::write(&full_path, backup).map_err(|e| e.to_string())?;
+    Ok(full_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn import_backup(app: AppHandle, backup_json: String) -> Result<AppData, String> {
+    let data: AppData = serde_json::from_str(&backup_json).map_err(|e| e.to_string())?;
+    save(&app, &data)?;
+    Ok(data)
+}
+
+#[tauri::command]
+pub fn import_backup_from_path(app: AppHandle, path: String) -> Result<AppData, String> {
+    let backup_json = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    import_backup(app, backup_json)
+}
+
 #[derive(serde::Serialize)]
 pub struct DailyBudgetResult {
     pub next_salary_date: Option<String>,

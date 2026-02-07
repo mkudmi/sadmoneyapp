@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { api, AppData, Transaction } from "./lib/api";
 import { rub, toKop } from "./lib/money";
 
@@ -304,6 +305,38 @@ export default function App() {
     setData(updated);
   }
 
+  async function exportBackupFile() {
+    try {
+      const ts = ymd(new Date());
+      const dir = await open({
+        directory: true,
+        multiple: false,
+        title: "Select backup folder",
+      });
+      if (!dir || Array.isArray(dir)) return;
+      const savedPath = await api.saveBackupToDir(String(dir), `sadmoney-backup-${ts}.json`);
+      alert(`Backup saved: ${savedPath}`);
+    } catch (err) {
+      alert(String(err));
+    }
+  }
+
+  async function importBackupFile() {
+    try {
+      const path = await open({
+        directory: false,
+        multiple: false,
+        title: "Select backup file",
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!path || Array.isArray(path)) return;
+      const updated = await api.importBackupFromPath(String(path));
+      setData(updated);
+      alert("Backup imported");
+    } catch (err) {
+      alert(`Failed to import backup: ${String(err)}`);
+    }
+  }
 
   function prevMonth() {
     const d = new Date(year, month0, 1);
@@ -341,6 +374,10 @@ export default function App() {
           {new Date(year, month0, 1).toLocaleString("ru-RU", { month: "long", year: "numeric" })}
         </h2>
         <button onClick={nextMonth}>→</button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button onClick={exportBackupFile}>Экспорт бекапа</button>
+          <button onClick={importBackupFile}>Импорт бекапа</button>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
@@ -1060,7 +1097,7 @@ export default function App() {
                       onClick={() => setTxCategoryMenuOpen((v) => !v)}
                       aria-label="Показать список категорий"
                     >
-                      ▾
+                      â–¾
                     </button>
                   </div>
 
