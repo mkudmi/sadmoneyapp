@@ -159,7 +159,6 @@ export default function App() {
 
   const salaryForSelectedDate = (data?.salaryEvents ?? []).find(s => s.date === selectedDate) ?? null;
   const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
-  const isSelectedToday = selectedDate === today;
 
   const [dayMenuOpen, setDayMenuOpen] = useState<string | null>(null);
   const [dayMenuPos, setDayMenuPos] = useState<{ left: number; top: number }>({ left: 8, top: 8 });
@@ -659,7 +658,9 @@ export default function App() {
             minWidth: 240,
             height: "100%",
             minHeight: 0,
-            overflowY: "auto",
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
             boxSizing: "border-box",
           }}
         >
@@ -678,7 +679,7 @@ export default function App() {
             <div><b>Можно тратить в день:</b> {rub(budget.per_day)}</div>
           </>
         )}
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 12, flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
           <b>Операции за {selectedDate}:</b>
 
           <div
@@ -687,7 +688,10 @@ export default function App() {
               display: "flex",
               flexDirection: "column",
               gap: 6,
-              ...(isSelectedToday ? { maxHeight: 340, overflowY: "auto", paddingRight: 6 } : {}),
+              flex: "1 1 auto",
+              minHeight: 0,
+              overflowY: "auto",
+              paddingRight: 6,
             }}
           >
             {salaryForSelectedDate ? (
