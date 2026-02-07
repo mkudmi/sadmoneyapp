@@ -528,37 +528,37 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
-        <div style={{ opacity: 0.9 }}><b>Получено в этом месяце (на сегодня):</b> {rub(monthTotals.inc)}</div>
-        <div style={{ opacity: 0.9 }}><b>Потрачено в этом месяце (на сегодня):</b> {rub(monthTotals.exp)}</div>
-      </div>
+      <div style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 380px", minWidth: 320 }}>
+          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>Получено в этом месяце (на сегодня):</b> {rub(monthTotals.inc)}</div>
+          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>Потрачено в этом месяце (на сегодня):</b> {rub(monthTotals.exp)}</div>
+          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>Среднедневной заработок:</b> {rub(avgDailyEarnings)}</div>
+          <div style={{ opacity: 0.8 }}>
+            <b>Сегодня:</b>{" "}
+            {new Date().toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" })}
+            <button
+              style={{ marginLeft: 12 }}
+              onClick={() => {
+                const d = new Date();
+                setYear(d.getFullYear());
+                setMonth0(d.getMonth());
+                setSelectedDate(ymd(d));
+              }}
+            >
+              Перейти к сегодня
+            </button>
+          </div>
+        </div>
 
-      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ opacity: 0.85 }}><b>График работы:</b></div>
-        <select value={workSchedule} onChange={(e) => setWorkSchedule(e.target.value as any)}>
-          <option value="5/2">5/2</option>
-          <option value="custom">Кастомный (пока недоступен)</option>
-        </select>
-      </div>
-
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ opacity: 0.9 }}><b>Среднедневной заработок:</b> {rub(avgDailyEarnings)}</div>
-      </div>
-
-      <div style={{ marginBottom: 12, opacity: 0.8 }}>
-        <b>Сегодня:</b>{" "}
-        {new Date().toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" })}
-        <button
-          style={{ marginLeft: 12 }}
-          onClick={() => {
-            const d = new Date();
-            setYear(d.getFullYear());
-            setMonth0(d.getMonth());
-            setSelectedDate(ymd(d));
-          }}
-        >
-          Перейти к сегодня
-        </button>
+        <div style={{ flex: "0 0 auto", marginLeft: "auto", textAlign: "right" }}>
+          <label style={{ opacity: 0.85 }}>
+            <b>График работы:</b>{" "}
+            <select value={workSchedule} onChange={(e) => setWorkSchedule(e.target.value as any)}>
+              <option value="5/2">5/2</option>
+              <option value="custom">Кастомный (пока недоступен)</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div
