@@ -170,6 +170,11 @@ export default function App() {
   const [txModalAmount, setTxModalAmount] = useState<string>("");
   const [txModalCategory, setTxModalCategory] = useState<string>("");
   const [txCategoryMenuOpen, setTxCategoryMenuOpen] = useState(false);
+  const [isPickingSalaryDate, setIsPickingSalaryDate] = useState(false);
+  const [salaryModalOpen, setSalaryModalOpen] = useState(false);
+  const [salaryModalDate, setSalaryModalDate] = useState<string>(today);
+  const [salaryModalAmount, setSalaryModalAmount] = useState<string>("");
+  const [salaryModalTitle, setSalaryModalTitle] = useState<string>("Зарплата");
 
   useEffect(() => {
     if (!dayMenuOpen) return;
@@ -348,25 +353,44 @@ export default function App() {
     }
   }
 
-  async function addSalaryEvent() {
-    if (!data) return;
+  function beginAddSalary() {
+    setIsPickingSalaryDate(true);
+    setSalaryModalOpen(false);
+    setDayMenuOpen(null);
+    setDayMenuAnchorRect(null);
+  }
 
-    const date = prompt("Дата зарплаты (YYYY-MM-DD):", `${monthKey}-05`);
-    if (!date) return;
+  function openSalaryModal(date: string) {
+    setSalaryModalDate(date);
+    setSalaryModalAmount("");
+    setSalaryModalTitle("Зарплата");
+    setSalaryModalOpen(true);
+  }
 
-    const amountStr = prompt("Сумма (руб):", "80000");
-    if (!amountStr) return;
+  function closeSalaryModal() {
+    setSalaryModalOpen(false);
+    setSalaryModalAmount("");
+    setSalaryModalTitle("Зарплата");
+  }
 
-    const title = prompt("Название (например: Зарплата/Аванс):", "Зарплата") ?? "Зарплата";
+  async function submitSalaryModal() {
+    const amount = toKop(salaryModalAmount);
+    const title = salaryModalTitle.trim() || "Зарплата";
+    if (amount <= 0) return;
 
-    const updated = await api.upsertSalaryEvent({
-      id: "",
-      date,
-      amount: toKop(amountStr),
-      title,
-    });
+    try {
+      const updated = await api.upsertSalaryEvent({
+        id: "",
+        date: salaryModalDate,
+        amount,
+        title,
+      });
 
-    setData(updated);
+      setData(updated);
+      closeSalaryModal();
+    } catch (err) {
+      alert(String(err));
+    }
   }
 
   async function exportBackupFile() {
@@ -575,7 +599,15 @@ export default function App() {
         <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <b>Зарплаты в этом месяце</b>
-            <button onClick={addSalaryEvent}>Добавить</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {isPickingSalaryDate ? (
+                <span style={{ fontSize: 12, opacity: 0.8 }}>Выберите дату в календаре</span>
+              ) : null}
+              {isPickingSalaryDate ? (
+                <button onClick={() => setIsPickingSalaryDate(false)}>Отмена</button>
+              ) : null}
+              <button onClick={beginAddSalary}>Добавить</button>
+            </div>
           </div>
 
           {salaryThisMonth.length > 0 && (
@@ -954,6 +986,10 @@ export default function App() {
           overflowY: "auto",
           boxSizing: "border-box",
           alignContent: "start",
+          position: "relative",
+          zIndex: isPickingSalaryDate ? 4001 : 1,
+          background: "#fff",
+          boxShadow: isPickingSalaryDate ? "0 12px 34px rgba(0,0,0,0.3)" : "none",
         }}
       >
         {gridCells.map((d, idx) => {
@@ -999,7 +1035,15 @@ export default function App() {
           return (
             <div
               key={d}
-              onClick={() => { setSelectedDate(d); setDayMenuOpen(null); setDayMenuAnchorRect(null); }}
+              onClick={() => {
+                setSelectedDate(d);
+                setDayMenuOpen(null);
+                setDayMenuAnchorRect(null);
+                if (isPickingSalaryDate) {
+                  setIsPickingSalaryDate(false);
+                  openSalaryModal(d);
+                }
+              }}
               style={{
                 position: 'relative',
                 cursor: "pointer",
@@ -1012,6 +1056,7 @@ export default function App() {
               }}
 
             >
+              {!isPickingSalaryDate ? (
               <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 10 }} data-day-menu="true">
                 <button
                   aria-label="Меню"
@@ -1106,6 +1151,7 @@ export default function App() {
                   </div>
                 ) : null}
               </div>
+              ) : null}
 
               {vacForDay ? (
                 <div style={{ fontSize: 12, marginTop: 4, opacity: 0.95 }}>
@@ -1132,6 +1178,18 @@ export default function App() {
       </div>
       </div>
       </div>
+
+      {isPickingSalaryDate ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.56)",
+            zIndex: 4000,
+          }}
+          onClick={() => setIsPickingSalaryDate(false)}
+        />
+      ) : null}
 
       {txModalOpen ? (
         <div
@@ -1245,6 +1303,71 @@ export default function App() {
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
               <button onClick={closeTxModal}>Отмена</button>
               <button onClick={submitTxModal}>{txModalTitle(txModalType)}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {salaryModalOpen ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            zIndex: 5000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeSalaryModal();
+          }}
+        >
+          <div
+            style={{
+              width: "min(520px, 100%)",
+              background: "#fff",
+              borderRadius: 12,
+              border: "1px solid #ddd",
+              padding: 12,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <b style={{ fontSize: 14 }}>
+                Добавить зарплату - {salaryModalDate}
+              </b>
+              <button onClick={closeSalaryModal} aria-label="Закрыть">✕</button>
+            </div>
+
+            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Сумма (руб)</div>
+                <input
+                  value={salaryModalAmount}
+                  onChange={(e) => setSalaryModalAmount(e.target.value)}
+                  placeholder="80000"
+                  inputMode="decimal"
+                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                />
+              </div>
+
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Название</div>
+                <input
+                  value={salaryModalTitle}
+                  onChange={(e) => setSalaryModalTitle(e.target.value)}
+                  placeholder="Зарплата"
+                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <button onClick={closeSalaryModal}>Отмена</button>
+              <button onClick={submitSalaryModal}>Добавить зарплату</button>
             </div>
           </div>
         </div>
