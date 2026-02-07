@@ -917,121 +917,89 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    onClick={async () => {
-                      if (!data || !salaryForSelectedDate) return;
-
-                      const newDate = prompt("Дата (YYYY-MM-DD):", salaryForSelectedDate.date) ?? salaryForSelectedDate.date;
-                      const newAmountStr = prompt("Сумма (руб):", String(salaryForSelectedDate.amount / 100)) ?? String(salaryForSelectedDate.amount / 100);
-                      const newTitle = prompt("Название:", salaryForSelectedDate.title) ?? salaryForSelectedDate.title;
-
-                      const updated = await api.upsertSalaryEvent({
-                        ...salaryForSelectedDate,
-                        date: newDate,
-                        amount: toKop(newAmountStr),
-                        title: newTitle,
-                      });
-                      setData(updated);
-                    }}
-                  >
-                    Редактировать
-                  </button>
-
-                  <button
-                    onClick={async () => {
-                      if (!salaryForSelectedDate) return;
-                      if (!confirm("Удалить зарплатную дату?")) return;
-                      const updated = await api.deleteSalaryEvent(salaryForSelectedDate.id);
-                      setData(updated);
-                    }}
-                  >
-                    Удалить
-                  </button>
-                </div>
               </div>
             ) : null}
 
             {(data?.transactions ?? [])
               .filter((t) => t.date === selectedDate)
               .map((t) => (
-                <div
-                  key={t.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 10,
-                    border: "1px solid #eee",
-                    borderRadius: 10,
-                    padding: "8px 10px",
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 13 }}>
-                      <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "⏳" : "-"}</b> {rub(t.amount)} — {t.category}
-                      {t.type === "planned_expense" ? (
-                        <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>(запланировано)</span>
-                      ) : null}
+                  <div
+                    key={t.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      border: "1px solid #eee",
+                      borderRadius: 10,
+                      padding: "8px 10px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 13 }}>
+                        <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "⏳" : "-"}</b> {rub(t.amount)} — {t.category}
+                        {t.type === "planned_expense" ? (
+                          <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>(запланировано)</span>
+                        ) : null}
+                      </div>
+                      {t.note ? <div style={{ fontSize: 12, opacity: 0.7 }}>{t.note}</div> : null}
                     </div>
-                    {t.note ? <div style={{ fontSize: 12, opacity: 0.7 }}>{t.note}</div> : null}
-                  </div>
 
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {t.type === "planned_expense" ? (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {t.type === "planned_expense" ? (
+                        <button
+                          title="Оплачено"
+                          aria-label="Оплачено"
+                          style={{ color: "#138a36", fontWeight: 700 }}
+                          onClick={async () => {
+                            const updated = await api.updateTransaction({
+                              ...t,
+                              type: "expense",
+                            });
+                            setData(updated);
+                          }}
+                        >
+                          ✓
+                        </button>
+                      ) : null}
                       <button
-                        title="Оплачено"
-                        aria-label="Оплачено"
-                        style={{ color: "#138a36", fontWeight: 700 }}
+                        title="Редактировать"
+                        aria-label="Редактировать"
+                        style={{ color: "#444", fontWeight: 700 }}
                         onClick={async () => {
+                          if (!data) return;
+
+                          const newAmountStr = prompt("Новая сумма (руб):", String(t.amount / 100));
+                          if (!newAmountStr) return;
+
+                          const newCategory = prompt("Категория:", t.category) ?? t.category;
+                          const newNote = prompt("Комментарий:", t.note) ?? t.note;
+
                           const updated = await api.updateTransaction({
                             ...t,
-                            type: "expense",
+                            amount: toKop(newAmountStr),
+                            category: newCategory,
+                            note: newNote,
                           });
                           setData(updated);
                         }}
                       >
-                        ✓
+                        ✎
                       </button>
-                    ) : null}
-                    <button
-                      title="Редактировать"
-                      aria-label="Редактировать"
-                      style={{ color: "#444", fontWeight: 700 }}
-                      onClick={async () => {
-                        if (!data) return;
 
-                        const newAmountStr = prompt("Новая сумма (руб):", String(t.amount / 100));
-                        if (!newAmountStr) return;
-
-                        const newCategory = prompt("Категория:", t.category) ?? t.category;
-                        const newNote = prompt("Комментарий:", t.note) ?? t.note;
-
-                        const updated = await api.updateTransaction({
-                          ...t,
-                          amount: toKop(newAmountStr),
-                          category: newCategory,
-                          note: newNote,
-                        });
-                        setData(updated);
-                      }}
-                    >
-                      ✎
-                    </button>
-
-                    <button
-                      title="Удалить"
-                      aria-label="Удалить"
-                      style={{ color: "#c51616", fontWeight: 700 }}
-                      onClick={async () => {
-                        const updated = await api.deleteTransaction(t.id);
-                        setData(updated);
-                      }}
-                    >
-                      ✕
-                    </button>
+                      <button
+                        title="Удалить"
+                        aria-label="Удалить"
+                        style={{ color: "#c51616", fontWeight: 700 }}
+                        onClick={async () => {
+                          const updated = await api.deleteTransaction(t.id);
+                          setData(updated);
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                </div>
               ))}
           </div>
         </div>
