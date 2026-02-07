@@ -175,6 +175,14 @@ export default function App() {
   const [salaryModalDate, setSalaryModalDate] = useState<string>(today);
   const [salaryModalAmount, setSalaryModalAmount] = useState<string>("");
   const [salaryModalTitle, setSalaryModalTitle] = useState<string>("Зарплата");
+  const [isPickingVacationStart, setIsPickingVacationStart] = useState(false);
+  const [isPickingVacationEnd, setIsPickingVacationEnd] = useState(false);
+  const [vacationStartDate, setVacationStartDate] = useState<string | null>(null);
+  const [vacationModalOpen, setVacationModalOpen] = useState(false);
+  const [vacationModalStart, setVacationModalStart] = useState<string>(today);
+  const [vacationModalEnd, setVacationModalEnd] = useState<string>(today);
+  const [vacationModalTitle, setVacationModalTitle] = useState<string>("Отпуск");
+  const isCalendarPickerFocus = isPickingSalaryDate || isPickingVacationStart || isPickingVacationEnd;
 
   useEffect(() => {
     if (!dayMenuOpen) return;
@@ -355,6 +363,10 @@ export default function App() {
 
   function beginAddSalary() {
     setIsPickingSalaryDate(true);
+    setIsPickingVacationStart(false);
+    setIsPickingVacationEnd(false);
+    setVacationStartDate(null);
+    setVacationModalOpen(false);
     setSalaryModalOpen(false);
     setDayMenuOpen(null);
     setDayMenuAnchorRect(null);
@@ -390,6 +402,54 @@ export default function App() {
       closeSalaryModal();
     } catch (err) {
       alert(String(err));
+    }
+  }
+
+  function beginAddVacation() {
+    setIsPickingSalaryDate(false);
+    setIsPickingVacationStart(true);
+    setIsPickingVacationEnd(false);
+    setVacationStartDate(null);
+    setSalaryModalOpen(false);
+    setVacationModalOpen(false);
+    setDayMenuOpen(null);
+    setDayMenuAnchorRect(null);
+  }
+
+  function cancelVacationPicking() {
+    setIsPickingVacationStart(false);
+    setIsPickingVacationEnd(false);
+    setVacationStartDate(null);
+  }
+
+  function openVacationModal(startDate: string, endDate: string) {
+    const start = startDate <= endDate ? startDate : endDate;
+    const end = startDate <= endDate ? endDate : startDate;
+    setVacationModalStart(start);
+    setVacationModalEnd(end);
+    setVacationModalTitle("Отпуск");
+    setVacationModalOpen(true);
+  }
+
+  function closeVacationModal() {
+    setVacationModalOpen(false);
+    setVacationModalTitle("Отпуск");
+  }
+
+  async function submitVacationModal() {
+    const title = vacationModalTitle.trim() || "Отпуск";
+
+    try {
+      const updated = await api.upsertVacation({
+        id: "",
+        start_date: vacationModalStart,
+        end_date: vacationModalEnd,
+        title,
+      });
+      setData(updated);
+      closeVacationModal();
+    } catch (e) {
+      alert(String(e));
     }
   }
 
@@ -513,21 +573,18 @@ export default function App() {
         <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <b>Отпуска в этом месяце</b>
-            <button onClick={async () => {
-              if (!data) return;
-              const start = prompt("Дата начала (YYYY-MM-DD):", `${monthKey}-10`);
-              if (!start) return;
-              const end = prompt("Дата окончания (YYYY-MM-DD):", `${monthKey}-14`);
-              if (!end) return;
-              const title = prompt("Название (например: Отпуск):", "Отпуск") ?? "Отпуск";
-
-              try {
-                const updated = await api.upsertVacation({ id: "", start_date: start, end_date: end, title });
-                setData(updated);
-              } catch (e) {
-                alert(String(e));
-              }
-            }}>Добавить</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {isPickingVacationStart ? (
+                <span style={{ fontSize: 12, opacity: 0.8 }}>Выберите дату начала в календаре</span>
+              ) : null}
+              {isPickingVacationEnd ? (
+                <span style={{ fontSize: 12, opacity: 0.8 }}>Выберите дату окончания в календаре</span>
+              ) : null}
+              {(isPickingVacationStart || isPickingVacationEnd) ? (
+                <button onClick={cancelVacationPicking}>Отмена</button>
+              ) : null}
+              <button onClick={beginAddVacation}>Добавить</button>
+            </div>
           </div>
 
           <div style={{ marginTop: 10 }}>
@@ -577,16 +634,6 @@ export default function App() {
                         }}
                       >
                         Редактировать
-                      </button>
-
-                      <button
-                        onClick={async () => {
-                          if (!confirm("Удалить отпуск?")) return;
-                          const updated = await api.deleteVacation(v.id);
-                          setData(updated);
-                        }}
-                      >
-                        Удалить
                       </button>
                     </div>
                   </div>
@@ -868,16 +915,6 @@ export default function App() {
                   >
                     Редактировать
                   </button>
-
-                  <button
-                    onClick={async () => {
-                      if (!confirm("Удалить отпуск?")) return;
-                      const updated = await api.deleteVacation(v.id);
-                      setData(updated);
-                    }}
-                  >
-                    Удалить
-                  </button>
                 </div>
               </div>
             ))}
@@ -987,9 +1024,9 @@ export default function App() {
           boxSizing: "border-box",
           alignContent: "start",
           position: "relative",
-          zIndex: isPickingSalaryDate ? 4001 : 1,
+          zIndex: isCalendarPickerFocus ? 4001 : 1,
           background: "#fff",
-          boxShadow: isPickingSalaryDate ? "0 12px 34px rgba(0,0,0,0.3)" : "none",
+          boxShadow: isCalendarPickerFocus ? "0 12px 34px rgba(0,0,0,0.3)" : "none",
         }}
       >
         {gridCells.map((d, idx) => {
@@ -1039,6 +1076,22 @@ export default function App() {
                 setSelectedDate(d);
                 setDayMenuOpen(null);
                 setDayMenuAnchorRect(null);
+                if (isPickingVacationStart) {
+                  setIsPickingVacationStart(false);
+                  setIsPickingVacationEnd(true);
+                  setVacationStartDate(d);
+                  return;
+                }
+                if (isPickingVacationEnd) {
+                  if (!vacationStartDate) {
+                    setIsPickingVacationEnd(false);
+                    return;
+                  }
+                  setIsPickingVacationEnd(false);
+                  setVacationStartDate(null);
+                  openVacationModal(vacationStartDate, d);
+                  return;
+                }
                 if (isPickingSalaryDate) {
                   setIsPickingSalaryDate(false);
                   openSalaryModal(d);
@@ -1056,7 +1109,7 @@ export default function App() {
               }}
 
             >
-              {!isPickingSalaryDate ? (
+              {!isCalendarPickerFocus ? (
               <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 10 }} data-day-menu="true">
                 <button
                   aria-label="Меню"
@@ -1179,7 +1232,7 @@ export default function App() {
       </div>
       </div>
 
-      {isPickingSalaryDate ? (
+      {isCalendarPickerFocus ? (
         <div
           style={{
             position: "fixed",
@@ -1187,7 +1240,10 @@ export default function App() {
             background: "rgba(0,0,0,0.56)",
             zIndex: 4000,
           }}
-          onClick={() => setIsPickingSalaryDate(false)}
+          onClick={() => {
+            setIsPickingSalaryDate(false);
+            cancelVacationPicking();
+          }}
         />
       ) : null}
 
@@ -1303,6 +1359,60 @@ export default function App() {
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
               <button onClick={closeTxModal}>Отмена</button>
               <button onClick={submitTxModal}>{txModalTitle(txModalType)}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {vacationModalOpen ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            zIndex: 5000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeVacationModal();
+          }}
+        >
+          <div
+            style={{
+              width: "min(520px, 100%)",
+              background: "#fff",
+              borderRadius: 12,
+              border: "1px solid #ddd",
+              padding: 12,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <b style={{ fontSize: 14 }}>
+                Добавить отпуск - {vacationModalStart} {"->"} {vacationModalEnd}
+              </b>
+              <button onClick={closeVacationModal} aria-label="Закрыть">✕</button>
+            </div>
+
+            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Название</div>
+                <input
+                  value={vacationModalTitle}
+                  onChange={(e) => setVacationModalTitle(e.target.value)}
+                  placeholder="Отпуск"
+                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <button onClick={closeVacationModal}>Отмена</button>
+              <button onClick={submitVacationModal}>Добавить отпуск</button>
             </div>
           </div>
         </div>
