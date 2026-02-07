@@ -166,6 +166,7 @@ export default function App() {
   const [txModalDate, setTxModalDate] = useState<string>(today);
   const [txModalAmount, setTxModalAmount] = useState<string>("");
   const [txModalCategory, setTxModalCategory] = useState<string>("");
+  const [txCategoryMenuOpen, setTxCategoryMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!dayMenuOpen) return;
@@ -185,10 +186,34 @@ export default function App() {
     };
   }, [dayMenuOpen]);
 
+  useEffect(() => {
+    if (!txCategoryMenuOpen) return;
+    function onDocClick(e: MouseEvent) {
+      const tgt = e.target as HTMLElement | null;
+      if (tgt && tgt.closest("[data-tx-category]")) return;
+      setTxCategoryMenuOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setTxCategoryMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [txCategoryMenuOpen]);
+
   const txCategories = useMemo(() => {
     const fromData = data?.settings?.txCategories ?? [];
     return fromData.length > 0 ? fromData : ["Продукты", "Бензин"];
   }, [data]);
+
+  const txCategoryOptions = useMemo(() => {
+    const q = txModalCategory.trim().toLowerCase();
+    if (!q) return txCategories;
+    return txCategories.filter((c) => c.toLowerCase().includes(q));
+  }, [txCategories, txModalCategory]);
 
   function normalizeCategoryInput(raw: string) {
     const s0 = raw.trim().replace(/\s+/g, " ");
@@ -209,7 +234,8 @@ export default function App() {
     setTxModalType(type);
     setTxModalDate(date);
     setTxModalAmount("");
-    setTxModalCategory(type === "income" ? "Доход" : (txCategories[0] ?? "Продукты"));
+    setTxModalCategory("");
+    setTxCategoryMenuOpen(false);
     setTxModalOpen(true);
   }
 
@@ -217,6 +243,7 @@ export default function App() {
     setTxModalOpen(false);
     setTxModalAmount("");
     setTxModalCategory("");
+    setTxCategoryMenuOpen(false);
   }
 
   async function submitTxModal() {
@@ -809,7 +836,6 @@ export default function App() {
           const salaryForDay = (data?.salaryEvents ?? []).find(s => s.date === d);
           const vacForDay = (data?.vacations ?? []).find(v => v.start_date <= d && d <= v.end_date) ?? null;
           const offForDay = (data?.offDays ?? []).find(o => o.date === d) ?? null;
-          const txForDay = isToday ? (data?.transactions ?? []).filter((t) => t.date === d) : [];
 
           const dayOfWeek = new Date(d).getDay(); // 0 = Sunday, 6 = Saturday
           const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
@@ -946,47 +972,6 @@ export default function App() {
               </div>
               <div style={{ fontSize: 12 }}>+ {rub(s.inc)}</div>
               <div style={{ fontSize: 12 }}>- {rub(s.exp)}</div>
-              {isToday && txForDay.length > 0 ? (
-                <div
-                  style={{
-                    marginTop: 6,
-                    paddingTop: 6,
-                    borderTop: "1px dashed rgba(0,0,0,0.18)",
-                    maxHeight: 86,
-                    overflowY: "auto",
-                  }}
-                >
-                  {txForDay.map((t) => (
-                    <div
-                      key={t.id}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 6,
-                        fontSize: 11,
-                        lineHeight: "14px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          opacity: 0.85,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          flex: "1 1 auto",
-                        }}
-                        title={t.category}
-                      >
-                        {t.type === "income" ? "+ " : "- "}
-                        {t.category}
-                      </div>
-                      <div style={{ flex: "0 0 auto", color: t.type === "income" ? "#167a3a" : "#b00020" }}>
-                        {rub(t.amount)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
               {offForDay ? (
                 offForDay.is_working ? (
                   <div style={{ fontSize: 12, color: '#0a66ff' }}>💼 Рабочий день{offForDay.note ? ` — ${offForDay.note}` : ''}</div>
@@ -1035,32 +1020,80 @@ export default function App() {
               <button onClick={closeTxModal} aria-label="Закрыть">✕</button>
             </div>
 
-            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div>
+            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Сумма (руб)</div>
                 <input
                   value={txModalAmount}
                   onChange={(e) => setTxModalAmount(e.target.value)}
                   placeholder={txModalType === "income" ? "1000" : "100"}
                   inputMode="decimal"
-                  style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                 />
               </div>
 
-              <div>
+              <div style={{ minWidth: 0 }} data-tx-category="true">
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Категория</div>
-                <input
-                  list="tx-categories"
-                  value={txModalCategory}
-                  onChange={(e) => setTxModalCategory(e.target.value)}
-                  placeholder="Например: Продукты"
-                  style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
-                />
-                <datalist id="tx-categories">
-                  {txCategories.map((c) => (
-                    <option key={c} value={c} />
-                  ))}
-                </datalist>
+                <div style={{ position: "relative" }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      value={txModalCategory}
+                      onChange={(e) => setTxModalCategory(e.target.value)}
+                      onFocus={() => setTxCategoryMenuOpen(true)}
+                      placeholder="Например: Продукты"
+                      style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setTxCategoryMenuOpen((v) => !v)}
+                      aria-label="Показать список категорий"
+                    >
+                      ▾
+                    </button>
+                  </div>
+
+                  {txCategoryMenuOpen && txCategoryOptions.length > 0 ? (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "calc(100% + 4px)",
+                        left: 0,
+                        right: 0,
+                        zIndex: 20,
+                        maxHeight: 180,
+                        overflowY: "auto",
+                        border: "1px solid #ddd",
+                        borderRadius: 8,
+                        background: "#fff",
+                        boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                        padding: 4,
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      {txCategoryOptions.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => {
+                            setTxModalCategory(c);
+                            setTxCategoryMenuOpen(false);
+                          }}
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            padding: "6px 8px",
+                            border: "none",
+                            borderRadius: 6,
+                            background: "transparent",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
 
