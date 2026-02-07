@@ -159,6 +159,7 @@ export default function App() {
 
   const salaryForSelectedDate = (data?.salaryEvents ?? []).find(s => s.date === selectedDate) ?? null;
   const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
+  const vacationForSelectedDate = (data?.vacations ?? []).find(v => v.start_date <= selectedDate && v.end_date >= selectedDate) ?? null;
   const selectedDateWeekDay = new Date(selectedDate).getDay(); // 0 = Sunday, 6 = Saturday
   const selectedDateIsWeekend = selectedDateWeekDay === 0 || selectedDateWeekDay === 6;
   const selectedDateIsWorking = workSchedule === "5/2"
@@ -736,6 +737,14 @@ export default function App() {
                       >
                         Редактировать
                       </button>
+                      <button
+                        onClick={async () => {
+                          const updated = await api.deleteVacation(v.id);
+                          setData(updated);
+                        }}
+                      >
+                        Удалить
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -851,12 +860,12 @@ export default function App() {
               fontSize: 12,
               padding: "2px 8px",
               borderRadius: 999,
-              border: `1px solid ${selectedDateIsWorking ? "#1c7f4d" : "#bf3a3a"}`,
-              color: selectedDateIsWorking ? "#1c7f4d" : "#bf3a3a",
-              background: selectedDateIsWorking ? "rgba(30, 160, 90, 0.10)" : "rgba(210, 20, 20, 0.08)",
+              border: `1px solid ${vacationForSelectedDate ? "#a37500" : (selectedDateIsWorking ? "#1c7f4d" : "#bf3a3a")}`,
+              color: vacationForSelectedDate ? "#7a5200" : (selectedDateIsWorking ? "#1c7f4d" : "#bf3a3a"),
+              background: vacationForSelectedDate ? "rgba(255, 223, 99, 0.25)" : (selectedDateIsWorking ? "rgba(30, 160, 90, 0.10)" : "rgba(210, 20, 20, 0.08)"),
             }}
           >
-            {selectedDateIsWorking ? "Рабочий" : "Выходной"}
+            {vacationForSelectedDate ? "Отпуск" : (selectedDateIsWorking ? "Рабочий" : "Выходной")}
           </div>
         </div>
         {budget && (
@@ -942,50 +951,6 @@ export default function App() {
                 </div>
               </div>
             ) : null}
-
-            {((data?.vacations ?? []).filter(v => v.start_date <= selectedDate && v.end_date >= selectedDate)).map((v) => (
-              <div
-                key={v.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  border: "1px solid #eee",
-                  borderRadius: 10,
-                  padding: "8px 10px",
-                  background: "#fff8e1",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 13 }}>
-                    <b>🏖 {v.title}</b> — {v.start_date} → {v.end_date}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    onClick={async () => {
-                      const newStart = prompt("Дата начала (YYYY-MM-DD):", v.start_date) ?? v.start_date;
-                      const newEnd = prompt("Дата окончания (YYYY-MM-DD):", v.end_date) ?? v.end_date;
-                      const newTitle = prompt("Название:", v.title) ?? v.title;
-
-                      const updated = await api.upsertVacation({
-                        ...v,
-                        start_date: newStart,
-                        end_date: newEnd,
-                        title: newTitle,
-                      });
-                      setData(updated);
-                    }}
-                  >
-                    Редактировать
-                  </button>
-                </div>
-              </div>
-            ))}
-
-
 
             {(data?.transactions ?? [])
               .filter((t) => t.date === selectedDate)
@@ -1288,12 +1253,6 @@ export default function App() {
                   </div>
                 ) : null}
               </div>
-              ) : null}
-
-              {!isPickingCustomWorkDays && vacForDay ? (
-                <div style={{ fontSize: 12, marginTop: 4, opacity: 0.95 }}>
-                  🏖️ {vacForDay.title}
-                </div>
               ) : null}
 
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
