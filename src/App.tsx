@@ -81,6 +81,21 @@ export default function App() {
   const salaryThisMonth = (data?.salaryEvents ?? [])
     .filter(s => ymFromYmd(s.date) === monthKey)
     .sort((a, b) => a.date.localeCompare(b.date));
+  const topExpenseCategoriesThisMonth = useMemo(() => {
+    if (!data) return [] as Array<{ category: string; amount: number }>;
+
+    const byCategory = new Map<string, number>();
+    for (const t of data.transactions) {
+      if (t.type !== "expense") continue;
+      if (ymFromYmd(t.date) !== monthKey) continue;
+      const category = (t.category || "").trim() || "Без категории";
+      byCategory.set(category, (byCategory.get(category) ?? 0) + t.amount);
+    }
+
+    return Array.from(byCategory.entries())
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [data, monthKey]);
 
   const [workSchedule, setWorkSchedule] = useState<'5/2' | 'custom'>('5/2');
 
@@ -847,13 +862,13 @@ export default function App() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
           gap: 12,
           marginBottom: 12,
           alignItems: "start",
         }}
       >
-        <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
+        <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <b>Отпуска в этом месяце</b>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -866,7 +881,14 @@ export default function App() {
               {(isPickingVacationStart || isPickingVacationEnd) ? (
                 <button onClick={cancelVacationPicking}>Отмена</button>
               ) : null}
-              <button onClick={beginAddVacation}>Добавить</button>
+              <button
+                onClick={beginAddVacation}
+                title="Добавить отпуск"
+                aria-label="Добавить отпуск"
+                style={{ minWidth: 28, fontWeight: 700 }}
+              >
+                +
+              </button>
             </div>
           </div>
 
@@ -876,7 +898,7 @@ export default function App() {
               const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
               return v.start_date <= monthEnd && v.end_date >= monthStart;
             })).length > 0 && (
-              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
                 {((data?.vacations ?? []).filter(v => {
                   const monthStart = `${monthKey}-01`;
                   const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
@@ -890,18 +912,21 @@ export default function App() {
                       alignItems: "center",
                       gap: 10,
                       border: "1px solid #eee",
-                      borderRadius: 10,
-                      padding: "8px 10px",
+                      borderRadius: 8,
+                      padding: "6px 8px",
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: 13 }}>
+                      <div style={{ fontSize: 12 }}>
                         <b>{v.start_date}</b> — <b>{v.end_date}</b> — {v.title}
                       </div>
                     </div>
 
-                    <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 6 }}>
                       <button
+                        title="Редактировать отпуск"
+                        aria-label="Редактировать отпуск"
+                        style={{ color: "#444", fontWeight: 700 }}
                         onClick={async () => {
                           const newStart = prompt("Дата начала (YYYY-MM-DD):", v.start_date) ?? v.start_date;
                           const newEnd = prompt("Дата окончания (YYYY-MM-DD):", v.end_date) ?? v.end_date;
@@ -916,15 +941,18 @@ export default function App() {
                           setData(updated);
                         }}
                       >
-                        Редактировать
+                        ✎
                       </button>
                       <button
+                        title="Удалить отпуск"
+                        aria-label="Удалить отпуск"
+                        style={{ color: "#c51616", fontWeight: 700 }}
                         onClick={async () => {
                           const updated = await api.deleteVacation(v.id);
                           setData(updated);
                         }}
                       >
-                        Удалить
+                        ✕
                       </button>
                     </div>
                   </div>
@@ -934,7 +962,7 @@ export default function App() {
           </div>
 
         </div>
-        <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
+        <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <b>Зарплаты в этом месяце</b>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -944,12 +972,19 @@ export default function App() {
               {isPickingSalaryDate ? (
                 <button onClick={() => setIsPickingSalaryDate(false)}>Отмена</button>
               ) : null}
-              <button onClick={beginAddSalary}>Добавить</button>
+              <button
+                onClick={beginAddSalary}
+                title="Добавить зарплату"
+                aria-label="Добавить зарплату"
+                style={{ minWidth: 28, fontWeight: 700 }}
+              >
+                +
+              </button>
             </div>
           </div>
 
           {salaryThisMonth.length > 0 && (
-            <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
               {salaryThisMonth.map((s) => (
                 <div
                   key={s.id}
@@ -959,18 +994,21 @@ export default function App() {
                     alignItems: "center",
                     gap: 10,
                     border: "1px solid #eee",
-                    borderRadius: 10,
-                    padding: "8px 10px",
+                    borderRadius: 8,
+                    padding: "6px 8px",
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: 13 }}>
+                    <div style={{ fontSize: 12 }}>
                       <b>{s.date}</b> — {s.title} — {rub(s.amount)}
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 6 }}>
                     <button
+                      title="Редактировать зарплату"
+                      aria-label="Редактировать зарплату"
+                      style={{ color: "#444", fontWeight: 700 }}
                       onClick={async () => {
                         const newDate = prompt("Дата (YYYY-MM-DD):", s.date) ?? s.date;
                         const newAmountStr = prompt("Сумма (руб):", String(s.amount / 100)) ?? String(s.amount / 100);
@@ -985,21 +1023,71 @@ export default function App() {
                         setData(updated);
                       }}
                     >
-                      Редактировать
+                      ✎
                     </button>
 
                     <button
+                      title="Удалить зарплату"
+                      aria-label="Удалить зарплату"
+                      style={{ color: "#c51616", fontWeight: 700 }}
                       onClick={async () => {
                         if (!confirm("Удалить зарплатную дату?")) return;
                         const updated = await api.deleteSalaryEvent(s.id);
                         setData(updated);
                       }}
                     >
-                      Удалить
+                      ✕
                     </button>
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <b>Топ категорий за месяц</b>
+          </div>
+
+          {topExpenseCategoriesThisMonth.length > 0 ? (
+            <div
+              style={{
+                marginTop: 8,
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                maxHeight: 120,
+                overflowY: "auto",
+                paddingRight: 4,
+              }}
+            >
+              {topExpenseCategoriesThisMonth.map((item, idx) => (
+                <div
+                  key={item.category}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
+                    border: "1px solid #eee",
+                    borderRadius: 8,
+                    padding: "6px 8px",
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <b>{idx + 1}.</b> {item.category}
+                  </div>
+                  <div style={{ flexShrink: 0 }}>
+                    <b>{rub(item.amount)}</b>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
+              В этом месяце пока нет расходов по категориям.
             </div>
           )}
         </div>
@@ -1705,5 +1793,3 @@ export default function App() {
     </div>
   );
 }
-
-
