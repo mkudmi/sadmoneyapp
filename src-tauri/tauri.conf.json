@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "sadmoneyapp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.mkudm.sadmoneyapp",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -14,11 +14,21 @@
       {
         "title": "sadmoneyapp",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "maximized": true
       }
     ],
     "security": {
       "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/mkudmi/sadmoneyapp/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENCQ0IyRDY0NDlFRTU5MjYKUldRbVdlNUpaQzNMeTd0VlNKcVVpQ1NvMlNFeTA2d1hnZGJVdEpoOGNjSUI0MW52ZHhuOUtoQXkK"
     }
   },
   "bundle": {

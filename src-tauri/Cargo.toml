@@ -1,6 +1,6 @@
 [package]
 name = "sadmoneyapp"
-version = "0.1.0"
+version = "0.1.1"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -26,3 +26,5 @@ anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2.10.0"
+tauri-plugin-process = "2.3.1"

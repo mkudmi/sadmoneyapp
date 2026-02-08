@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check } from "@tauri-apps/plugin-updater";
 import { api, AppData, Transaction } from "./lib/api";
 import { rub, toKop } from "./lib/money";
 
@@ -254,6 +256,7 @@ export default function App() {
   const [dayMenuAnchorRect, setDayMenuAnchorRect] = useState<{ top: number; bottom: number } | null>(null);
   const dayMenuRef = useRef<HTMLDivElement | null>(null);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [txModalType, setTxModalType] = useState<"income" | "expense" | "planned_expense">("expense");
@@ -666,6 +669,29 @@ export default function App() {
     }
   }
 
+  async function checkForUpdates() {
+    if (isCheckingUpdates) return;
+
+    setIsCheckingUpdates(true);
+    try {
+      const update = await check();
+      if (!update) {
+        alert("Обновлений не найдено");
+        return;
+      }
+
+      await update.downloadAndInstall();
+      const shouldRelaunch = window.confirm("Обновление скачано. Перезапустить для обновления?");
+      if (shouldRelaunch) {
+        await relaunch();
+      }
+    } catch (err) {
+      alert(`Не удалось проверить обновления: ${String(err)}`);
+    } finally {
+      setIsCheckingUpdates(false);
+    }
+  }
+
   function prevMonth() {
     const d = new Date(year, month0, 1);
     d.setMonth(d.getMonth() - 1);
@@ -745,6 +771,15 @@ export default function App() {
                 }}
               >
                 Import backup
+              </button>
+              <button
+                onClick={async () => {
+                  setSettingsMenuOpen(false);
+                  await checkForUpdates();
+                }}
+                disabled={isCheckingUpdates}
+              >
+                {isCheckingUpdates ? "Проверяем обновления..." : "Проверить обновления"}
               </button>
             </div>
           ) : null}
@@ -1670,6 +1705,5 @@ export default function App() {
     </div>
   );
 }
-
 
 
