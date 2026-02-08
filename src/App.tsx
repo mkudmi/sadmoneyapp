@@ -103,6 +103,30 @@ export default function App() {
   const [vacationDaysCount, setVacationDaysCount] = useState("");
   const locale = lang === "ru" ? "ru-RU" : "en-US";
   const tr = (en: string, ru: string) => (lang === "ru" ? ru : en);
+  const vacationDaysLeft = useMemo(() => {
+    const total = Number.parseInt(vacationDaysCount, 10);
+    if (!Number.isFinite(total) || total <= 0) return 0;
+    if (!data) return total;
+
+    const yearStart = `${year}-01-01`;
+    const yearEnd = `${year}-12-31`;
+    const usedDays = new Set<string>();
+
+    for (const v of data.vacations ?? []) {
+      const start = v.start_date > yearStart ? v.start_date : yearStart;
+      const end = v.end_date < yearEnd ? v.end_date : yearEnd;
+      if (start > end) continue;
+
+      const cur = parseYmdLocal(start);
+      const endDate = parseYmdLocal(end);
+      while (cur <= endDate) {
+        usedDays.add(ymd(cur));
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+
+    return Math.max(total - usedDays.size, 0);
+  }, [data, vacationDaysCount, year]);
 
   const monthTotals = useMemo(() => {
     let inc = 0;
@@ -887,6 +911,9 @@ export default function App() {
                 fontSize: 12,
               }}
             />
+            <span style={{ fontSize: 12, opacity: 0.9, whiteSpace: "nowrap" }}>
+              {tr("Days Left", "Осталось дней")}: <b>{vacationDaysLeft}</b>
+            </span>
           </div>
         </div>
 
