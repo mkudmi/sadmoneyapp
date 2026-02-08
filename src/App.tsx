@@ -98,6 +98,7 @@ export default function App() {
   }, [data, monthKey]);
 
   const [workSchedule, setWorkSchedule] = useState<'5/2' | 'custom'>('5/2');
+  const [vacationDaysCount, setVacationDaysCount] = useState("");
 
   const monthTotals = useMemo(() => {
     let inc = 0;
@@ -821,6 +822,34 @@ export default function App() {
               Перейти к сегодня
             </button>
           </div>
+          <div
+            style={{
+              marginTop: 8,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #ddd",
+              background: "#f8f8f8",
+            }}
+          >
+            <span style={{ fontSize: 12, opacity: 0.9 }}>Кол-во дней отпуска</span>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={vacationDaysCount}
+              onChange={(e) => setVacationDaysCount(e.target.value)}
+              style={{
+                width: 56,
+                padding: "4px 6px",
+                borderRadius: 6,
+                border: "1px solid #ccc",
+                fontSize: 12,
+              }}
+            />
+          </div>
         </div>
 
         <div style={{ flex: "0 0 auto", marginLeft: "auto", textAlign: "right" }}>
@@ -858,7 +887,6 @@ export default function App() {
           ) : null}
         </div>
       </div>
-
       <div
         style={{
           display: "grid",
