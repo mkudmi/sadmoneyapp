@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
@@ -305,6 +306,7 @@ export default function App() {
   const [dayMenuAnchorRect, setDayMenuAnchorRect] = useState<{ top: number; bottom: number } | null>(null);
   const dayMenuRef = useRef<HTMLDivElement | null>(null);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>("-");
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const [txModalOpen, setTxModalOpen] = useState(false);
@@ -395,6 +397,12 @@ export default function App() {
       document.removeEventListener("keydown", onKey);
     };
   }, [settingsMenuOpen]);
+
+  useEffect(() => {
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => setAppVersion("-"));
+  }, []);
 
   function openDayMenu(date: string, anchor: HTMLElement) {
     const menuWidth = 220;
@@ -859,6 +867,9 @@ export default function App() {
               >
                 {isCheckingUpdates ? tr("Checking updates...", "Проверяем обновления...") : tr("Check for updates", "Проверить обновления")}
               </button>
+              <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+                {tr("Version", "Версия")}: {appVersion}
+              </div>
             </div>
           ) : null}
         </div>
