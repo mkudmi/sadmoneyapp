@@ -71,7 +71,9 @@ function daysInMonth(year: number, monthIndex0: number) {
 }
 
 export default function App() {
+  type Lang = "en" | "ru";
   const [data, setData] = useState<AppData | null>(null);
+  const [lang, setLang] = useState<Lang>("en");
   const [year, setYear] = useState(new Date().getFullYear());
   const [month0, setMonth0] = useState(new Date().getMonth()); // 0..11
   const [selectedDate, setSelectedDate] = useState(ymd(new Date()));
@@ -88,7 +90,7 @@ export default function App() {
     for (const t of data.transactions) {
       if (t.type !== "expense") continue;
       if (ymFromYmd(t.date) !== monthKey) continue;
-      const category = (t.category || "").trim() || "Без категории";
+      const category = (t.category || "").trim() || tr("No category", "Без категории");
       byCategory.set(category, (byCategory.get(category) ?? 0) + t.amount);
     }
 
@@ -99,6 +101,8 @@ export default function App() {
 
   const [workSchedule, setWorkSchedule] = useState<'5/2' | 'custom'>('5/2');
   const [vacationDaysCount, setVacationDaysCount] = useState("");
+  const locale = lang === "ru" ? "ru-RU" : "en-US";
+  const tr = (en: string, ru: string) => (lang === "ru" ? ru : en);
 
   const monthTotals = useMemo(() => {
     let inc = 0;
@@ -178,6 +182,11 @@ export default function App() {
   useEffect(() => {
     api.getData().then(setData);
   }, []);
+
+  useEffect(() => {
+    const saved = data?.settings?.language;
+    if (saved === "ru" || saved === "en") setLang(saved);
+  }, [data?.settings?.language]);
 
   useEffect(() => {
     api.calcDailyBudget(today).then(setBudget);
@@ -284,14 +293,14 @@ export default function App() {
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const [salaryModalDate, setSalaryModalDate] = useState<string>(today);
   const [salaryModalAmount, setSalaryModalAmount] = useState<string>("");
-  const [salaryModalTitle, setSalaryModalTitle] = useState<string>("Зарплата");
+  const [salaryModalTitle, setSalaryModalTitle] = useState<string>("Salary");
   const [isPickingVacationStart, setIsPickingVacationStart] = useState(false);
   const [isPickingVacationEnd, setIsPickingVacationEnd] = useState(false);
   const [vacationStartDate, setVacationStartDate] = useState<string | null>(null);
   const [vacationModalOpen, setVacationModalOpen] = useState(false);
   const [vacationModalStart, setVacationModalStart] = useState<string>(today);
   const [vacationModalEnd, setVacationModalEnd] = useState<string>(today);
-  const [vacationModalTitle, setVacationModalTitle] = useState<string>("Отпуск");
+  const [vacationModalTitle, setVacationModalTitle] = useState<string>("Vacation");
   const [isPickingCustomWorkDays, setIsPickingCustomWorkDays] = useState(false);
   const [customWorkingDays, setCustomWorkingDays] = useState<string[]>([]);
   const isCalendarPickerFocus =
@@ -409,18 +418,25 @@ export default function App() {
 
   const expenseCategories = useMemo(() => {
     const fromData = data?.settings?.txCategories ?? [];
-    return fromData.length > 0 ? fromData : ["Продукты", "Бензин"];
-  }, [data]);
+    return fromData.length > 0
+      ? fromData
+      : [tr("Groceries", "Продукты"), tr("Fuel", "Бензин")];
+  }, [data, lang]);
 
   const incomeCategories = useMemo(() => {
-    const defaults = ["Зарплата", "Аванс", "Подработка", "Кэшбэк"];
+    const defaults = [
+      tr("Salary", "Зарплата"),
+      tr("Advance", "Аванс"),
+      tr("Side job", "Подработка"),
+      tr("Cashback", "Кэшбэк"),
+    ];
     const fromTx = (data?.transactions ?? [])
       .filter((t) => t.type === "income")
       .map((t) => normalizeCategoryInput(t.category))
       .filter((c) => c.length > 0);
 
     return Array.from(new Set([...defaults, ...fromTx]));
-  }, [data]);
+  }, [data, lang]);
 
   const activeTxCategories = txModalType === "income" ? incomeCategories : expenseCategories;
 
@@ -446,9 +462,9 @@ export default function App() {
   }
 
   function txModalTitle(type: "income" | "expense" | "planned_expense") {
-    if (type === "income") return "Добавить доход";
-    if (type === "planned_expense") return "Добавить запланированный расход";
-    return "Добавить расход";
+    if (type === "income") return tr("Add income", "Добавить доход");
+    if (type === "planned_expense") return tr("Add planned expense", "Добавить запланированный расход");
+    return tr("Add expense", "Добавить расход");
   }
 
   function openTxModal(type: "income" | "expense" | "planned_expense", date: string) {
@@ -510,19 +526,19 @@ export default function App() {
   function openSalaryModal(date: string) {
     setSalaryModalDate(date);
     setSalaryModalAmount("");
-    setSalaryModalTitle("Зарплата");
+    setSalaryModalTitle(tr("Salary", "Зарплата"));
     setSalaryModalOpen(true);
   }
 
   function closeSalaryModal() {
     setSalaryModalOpen(false);
     setSalaryModalAmount("");
-    setSalaryModalTitle("Зарплата");
+    setSalaryModalTitle(tr("Salary", "Зарплата"));
   }
 
   async function submitSalaryModal() {
     const amount = toKop(salaryModalAmount);
-    const title = salaryModalTitle.trim() || "Зарплата";
+    const title = salaryModalTitle.trim() || tr("Salary", "Зарплата");
     if (amount <= 0) return;
 
     try {
@@ -566,17 +582,17 @@ export default function App() {
     const end = startDate <= endDate ? endDate : startDate;
     setVacationModalStart(start);
     setVacationModalEnd(end);
-    setVacationModalTitle("Отпуск");
+    setVacationModalTitle(tr("Vacation", "Отпуск"));
     setVacationModalOpen(true);
   }
 
   function closeVacationModal() {
     setVacationModalOpen(false);
-    setVacationModalTitle("Отпуск");
+    setVacationModalTitle(tr("Vacation", "Отпуск"));
   }
 
   async function submitVacationModal() {
-    const title = vacationModalTitle.trim() || "Отпуск";
+    const title = vacationModalTitle.trim() || tr("Vacation", "Отпуск");
 
     try {
       const updated = await api.upsertVacation({
@@ -658,11 +674,11 @@ export default function App() {
       const dir = await open({
         directory: true,
         multiple: false,
-        title: "Select backup folder",
+        title: tr("Select backup folder", "Выберите папку для бэкапа"),
       });
       if (!dir || Array.isArray(dir)) return;
       const savedPath = await api.saveBackupToDir(String(dir), `sadmoney-backup-${ts}.json`);
-      alert(`Backup saved: ${savedPath}`);
+      alert(`${tr("Backup saved", "Бэкап сохранён")}: ${savedPath}`);
     } catch (err) {
       alert(String(err));
     }
@@ -673,15 +689,15 @@ export default function App() {
       const path = await open({
         directory: false,
         multiple: false,
-        title: "Select backup file",
+        title: tr("Select backup file", "Выберите файл бэкапа"),
         filters: [{ name: "JSON", extensions: ["json"] }],
       });
       if (!path || Array.isArray(path)) return;
       const updated = await api.importBackupFromPath(String(path));
       setData(updated);
-      alert("Backup imported");
+      alert(tr("Backup imported", "Бэкап импортирован"));
     } catch (err) {
-      alert(`Failed to import backup: ${String(err)}`);
+      alert(`${tr("Failed to import backup", "Не удалось импортировать бэкап")}: ${String(err)}`);
     }
   }
 
@@ -692,22 +708,32 @@ export default function App() {
     try {
       const update = await check();
       if (!update) {
-        alert("Обновлений не найдено");
+        alert(tr("No updates found", "Обновлений не найдено"));
         return;
       }
 
       await update.downloadAndInstall();
-      const shouldRelaunch = window.confirm("Обновление скачано. Перезапустить для обновления?");
+      const shouldRelaunch = window.confirm(tr("Update downloaded. Restart to apply it?", "Обновление скачано. Перезапустить для обновления?"));
       if (shouldRelaunch) {
         await relaunch();
       }
     } catch (err) {
-      alert(`Не удалось проверить обновления: ${String(err)}`);
+      alert(`${tr("Failed to check updates", "Не удалось проверить обновления")}: ${String(err)}`);
     } finally {
       setIsCheckingUpdates(false);
     }
   }
 
+  
+  async function changeLanguage(next: Lang) {
+    setLang(next);
+    try {
+      const updated = await api.setLanguage(next);
+      setData(updated);
+    } catch (err) {
+      alert(`${tr("Failed to change language", "Не удалось сменить язык")}: ${String(err)}`);
+    }
+  }
   function prevMonth() {
     const d = new Date(year, month0, 1);
     d.setMonth(d.getMonth() - 1);
@@ -741,7 +767,7 @@ export default function App() {
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
         <button onClick={prevMonth}>←</button>
         <h2 style={{ margin: 0 }}>
-          {capitalizeFirst(new Date(year, month0, 1).toLocaleString("ru-RU", { month: "long", year: "numeric" }))}
+          {capitalizeFirst(new Date(year, month0, 1).toLocaleString(locale, { month: "long", year: "numeric" }))}
         </h2>
         <button onClick={nextMonth}>→</button>
         <div style={{ marginLeft: "auto", position: "relative" }} data-settings-menu="true">
@@ -778,7 +804,7 @@ export default function App() {
                   setSettingsMenuOpen(false);
                 }}
               >
-                Export backup
+                {tr("Export backup", "Экспорт бэкапа")}
               </button>
               <button
                 onClick={async () => {
@@ -786,8 +812,20 @@ export default function App() {
                   setSettingsMenuOpen(false);
                 }}
               >
-                Import backup
+                {tr("Import backup", "Импорт бэкапа")}
               </button>
+              <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "4px 2px" }}>
+                <span style={{ fontSize: 12, opacity: 0.85 }}>{tr("Language", "Язык")}</span>
+                <select
+                  value={lang}
+                  onChange={async (e) => {
+                    await changeLanguage(e.target.value as Lang);
+                  }}
+                >
+                  <option value="en">English</option>
+                  <option value="ru">Русский</option>
+                </select>
+              </label>
               <button
                 onClick={async () => {
                   setSettingsMenuOpen(false);
@@ -795,7 +833,7 @@ export default function App() {
                 }}
                 disabled={isCheckingUpdates}
               >
-                {isCheckingUpdates ? "Проверяем обновления..." : "Проверить обновления"}
+                {isCheckingUpdates ? tr("Checking updates...", "Проверяем обновления...") : tr("Check for updates", "Проверить обновления")}
               </button>
             </div>
           ) : null}
@@ -804,12 +842,12 @@ export default function App() {
 
       <div style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 380px", minWidth: 320 }}>
-          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>Получено в этом месяце (на сегодня):</b> {rub(monthTotals.inc)}</div>
-          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>Потрачено в этом месяце (на сегодня):</b> {rub(monthTotals.exp)}</div>
-          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>Среднедневной заработок:</b> {rub(avgDailyEarnings)}</div>
+          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{tr("Received this month (as of today):", "Получено в этом месяце (на сегодня):")}</b> {rub(monthTotals.inc)}</div>
+          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{tr("Spent this month (as of today):", "Потрачено в этом месяце (на сегодня):")}</b> {rub(monthTotals.exp)}</div>
+          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{tr("Average daily earnings:", "Среднедневной заработок:")}</b> {rub(avgDailyEarnings)}</div>
           <div style={{ opacity: 0.8 }}>
-            <b>Сегодня:</b>{" "}
-            {new Date().toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" })}
+            <b>{tr("Today:", "Сегодня:")}</b>{" "}
+            {new Date().toLocaleDateString(locale, { day: "2-digit", month: "long", year: "numeric" })}
             <button
               style={{ marginLeft: 12 }}
               onClick={() => {
@@ -819,7 +857,7 @@ export default function App() {
                 setSelectedDate(ymd(d));
               }}
             >
-              Перейти к сегодня
+              {tr("Go to today", "Перейти к сегодня")}
             </button>
           </div>
           <div
@@ -834,7 +872,7 @@ export default function App() {
               background: "#f8f8f8",
             }}
           >
-            <span style={{ fontSize: 12, opacity: 0.9 }}>Кол-во дней отпуска</span>
+            <span style={{ fontSize: 12, opacity: 0.9 }}>{tr("Vacation days count", "Кол-во дней отпуска")}</span>
             <input
               type="number"
               min={0}
@@ -854,7 +892,7 @@ export default function App() {
 
         <div style={{ flex: "0 0 auto", marginLeft: "auto", textAlign: "right" }}>
           <label style={{ opacity: 0.85 }}>
-            <b>График работы:</b>{" "}
+            <b>{tr("Work schedule:", "График работы:")}</b>{" "}
             <select
               value={workSchedule}
               onChange={async (e) => {
@@ -871,18 +909,18 @@ export default function App() {
               }}
             >
               <option value="5/2">5/2</option>
-              <option value="custom">Кастомный</option>
+              <option value="custom">{tr("Custom", "Кастомный")}</option>
             </select>
           </label>
           {isPickingCustomWorkDays ? (
             <div style={{ marginTop: 8, display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={saveCustomSchedule}>Выйти</button>
-              <button onClick={saveCustomSchedule}>Сохранить</button>
+              <button onClick={saveCustomSchedule}>{tr("Exit", "Выйти")}</button>
+              <button onClick={saveCustomSchedule}>{tr("Save", "Сохранить")}</button>
             </div>
           ) : null}
           {isPickingCustomWorkDays ? (
             <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-              Отметьте рабочие дни в календаре
+              {tr("Mark working days in the calendar", "Отметьте рабочие дни в календаре")}
             </div>
           ) : null}
         </div>
@@ -898,21 +936,21 @@ export default function App() {
       >
         <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <b>Отпуска в этом месяце</b>
+            <b>{tr("Vacations this month", "Отпуска в этом месяце")}</b>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {isPickingVacationStart ? (
-                <span style={{ fontSize: 12, opacity: 0.8 }}>Выберите дату начала в календаре</span>
+                <span style={{ fontSize: 12, opacity: 0.8 }}>{tr("Pick a start date in the calendar", "Выберите дату начала в календаре")}</span>
               ) : null}
               {isPickingVacationEnd ? (
-                <span style={{ fontSize: 12, opacity: 0.8 }}>Выберите дату окончания в календаре</span>
+                <span style={{ fontSize: 12, opacity: 0.8 }}>{tr("Pick an end date in the calendar", "Выберите дату окончания в календаре")}</span>
               ) : null}
               {(isPickingVacationStart || isPickingVacationEnd) ? (
-                <button onClick={cancelVacationPicking}>Отмена</button>
+                <button onClick={cancelVacationPicking}>{tr("Cancel", "Отмена")}</button>
               ) : null}
               <button
                 onClick={beginAddVacation}
-                title="Добавить отпуск"
-                aria-label="Добавить отпуск"
+                title={tr("Add vacation", "Добавить отпуск")}
+                aria-label={tr("Add vacation", "Добавить отпуск")}
                 style={{ minWidth: 28, fontWeight: 700 }}
               >
                 +
@@ -952,13 +990,13 @@ export default function App() {
 
                     <div style={{ display: "flex", gap: 6 }}>
                       <button
-                        title="Редактировать отпуск"
-                        aria-label="Редактировать отпуск"
+                        title={tr("Edit vacation", "Редактировать отпуск")}
+                        aria-label={tr("Edit vacation", "Редактировать отпуск")}
                         style={{ color: "#444", fontWeight: 700 }}
                         onClick={async () => {
-                          const newStart = prompt("Дата начала (YYYY-MM-DD):", v.start_date) ?? v.start_date;
-                          const newEnd = prompt("Дата окончания (YYYY-MM-DD):", v.end_date) ?? v.end_date;
-                          const newTitle = prompt("Название:", v.title) ?? v.title;
+                          const newStart = prompt(tr("Start date (YYYY-MM-DD):", "Дата начала (YYYY-MM-DD):"), v.start_date) ?? v.start_date;
+                          const newEnd = prompt(tr("End date (YYYY-MM-DD):", "Дата окончания (YYYY-MM-DD):"), v.end_date) ?? v.end_date;
+                          const newTitle = prompt(tr("Title:", "Название:"), v.title) ?? v.title;
 
                           const updated = await api.upsertVacation({
                             ...v,
@@ -972,8 +1010,8 @@ export default function App() {
                         ✎
                       </button>
                       <button
-                        title="Удалить отпуск"
-                        aria-label="Удалить отпуск"
+                        title={tr("Delete vacation", "Удалить отпуск")}
+                        aria-label={tr("Delete vacation", "Удалить отпуск")}
                         style={{ color: "#c51616", fontWeight: 700 }}
                         onClick={async () => {
                           const updated = await api.deleteVacation(v.id);
@@ -992,18 +1030,18 @@ export default function App() {
         </div>
         <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <b>Зарплаты в этом месяце</b>
+            <b>{tr("Salaries this month", "Зарплаты в этом месяце")}</b>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {isPickingSalaryDate ? (
-                <span style={{ fontSize: 12, opacity: 0.8 }}>Выберите дату в календаре</span>
+                <span style={{ fontSize: 12, opacity: 0.8 }}>{tr("Pick a date in the calendar", "Выберите дату в календаре")}</span>
               ) : null}
               {isPickingSalaryDate ? (
-                <button onClick={() => setIsPickingSalaryDate(false)}>Отмена</button>
+                <button onClick={() => setIsPickingSalaryDate(false)}>{tr("Cancel", "Отмена")}</button>
               ) : null}
               <button
                 onClick={beginAddSalary}
-                title="Добавить зарплату"
-                aria-label="Добавить зарплату"
+                title={tr("Add salary", "Добавить зарплату")}
+                aria-label={tr("Add salary", "Добавить зарплату")}
                 style={{ minWidth: 28, fontWeight: 700 }}
               >
                 +
@@ -1034,13 +1072,13 @@ export default function App() {
 
                   <div style={{ display: "flex", gap: 6 }}>
                     <button
-                      title="Редактировать зарплату"
-                      aria-label="Редактировать зарплату"
+                      title={tr("Edit salary", "Редактировать зарплату")}
+                      aria-label={tr("Edit salary", "Редактировать зарплату")}
                       style={{ color: "#444", fontWeight: 700 }}
                       onClick={async () => {
-                        const newDate = prompt("Дата (YYYY-MM-DD):", s.date) ?? s.date;
-                        const newAmountStr = prompt("Сумма (руб):", String(s.amount / 100)) ?? String(s.amount / 100);
-                        const newTitle = prompt("Название:", s.title) ?? s.title;
+                        const newDate = prompt(tr("Date (YYYY-MM-DD):", "Дата (YYYY-MM-DD):"), s.date) ?? s.date;
+                        const newAmountStr = prompt(tr("Amount (RUB):", "Сумма (руб):"), String(s.amount / 100)) ?? String(s.amount / 100);
+                        const newTitle = prompt(tr("Title:", "Название:"), s.title) ?? s.title;
 
                         const updated = await api.upsertSalaryEvent({
                           ...s,
@@ -1055,11 +1093,11 @@ export default function App() {
                     </button>
 
                     <button
-                      title="Удалить зарплату"
-                      aria-label="Удалить зарплату"
+                      title={tr("Delete salary", "Удалить зарплату")}
+                      aria-label={tr("Delete salary", "Удалить зарплату")}
                       style={{ color: "#c51616", fontWeight: 700 }}
                       onClick={async () => {
-                        if (!confirm("Удалить зарплатную дату?")) return;
+                        if (!confirm(tr("Delete salary date?", "Удалить зарплатную дату?"))) return;
                         const updated = await api.deleteSalaryEvent(s.id);
                         setData(updated);
                       }}
@@ -1075,7 +1113,7 @@ export default function App() {
 
         <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <b>Топ категорий за месяц</b>
+            <b>{tr("Top categories this month", "Топ категорий за месяц")}</b>
           </div>
 
           {topExpenseCategoriesThisMonth.length > 0 ? (
@@ -1115,7 +1153,7 @@ export default function App() {
             </div>
           ) : (
             <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
-              В этом месяце пока нет расходов по категориям.
+              {tr("No category expenses yet this month.", "В этом месяце пока нет расходов по категориям.")}
             </div>
           )}
         </div>
@@ -1151,7 +1189,7 @@ export default function App() {
           }}
         >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div><b>Выбранная дата:</b> {selectedDate}</div>
+          <div><b>{tr("Selected date:", "Выбранная дата:")}</b> {selectedDate}</div>
           <div
             style={{
               fontSize: 12,
@@ -1162,25 +1200,25 @@ export default function App() {
               background: vacationForSelectedDate ? "rgba(255, 223, 99, 0.25)" : (selectedDateIsWorking ? "rgba(30, 160, 90, 0.10)" : "rgba(210, 20, 20, 0.08)"),
             }}
           >
-            {vacationForSelectedDate ? "Отпуск" : (selectedDateIsWorking ? "Рабочий" : "Выходной")}
+            {vacationForSelectedDate ? tr("Vacation", "Отпуск") : (selectedDateIsWorking ? tr("Working", "Рабочий") : tr("Day off", "Выходной"))}
           </div>
         </div>
         {budget && (
           <>
-            <div><b>До следующей зарплаты:</b> {budget.next_salary_date ? (() => {
+            <div><b>{tr("Until next salary:", "До следующей зарплаты:")}</b> {budget.next_salary_date ? (() => {
             const nd = new Date(budget.next_salary_date);
             const td = new Date();
             const nd0 = new Date(nd.getFullYear(), nd.getMonth(), nd.getDate());
             const td0 = new Date(td.getFullYear(), td.getMonth(), td.getDate());
             const diff = Math.round((nd0.getTime() - td0.getTime()) / (1000 * 60 * 60 * 24));
-            return diff >= 0 ? `${diff} дн.` : `0 дн.`;
-          })() : "не задана"}</div>
-            <div><b>Доступно:</b> {rub(budget.available)}</div>
-            <div><b>Можно тратить в день:</b> {rub(budget.per_day)}</div>
+            return diff >= 0 ? `${diff} ${tr("days", "дн.")}` : `0 ${tr("days", "дн.")}`;
+          })() : tr("not set", "не задана")}</div>
+            <div><b>{tr("Available:", "Доступно:")}</b> {rub(budget.available)}</div>
+            <div><b>{tr("Daily spend limit:", "Можно тратить в день:")}</b> {rub(budget.per_day)}</div>
           </>
         )}
         <div style={{ marginTop: 12, flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <b>Операции за {selectedDate}:</b>
+          <b>{tr("Transactions for", "Операции за")} {selectedDate}:</b>
 
           <div
             style={{
@@ -1232,7 +1270,7 @@ export default function App() {
                 }}
               >
                 <div style={{ fontSize: 13 }}>
-                  <b>После запланированных расходов</b>
+                  <b>{tr("After planned expenses", "После запланированных расходов")}</b>
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 700 }}>
                   {rub(plannedAfterExpensesForSelectedDate)}
@@ -1259,7 +1297,7 @@ export default function App() {
                       <div style={{ fontSize: 13 }}>
                         <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "⏳" : "-"}</b> {rub(t.amount)} — {t.category}
                         {t.type === "planned_expense" ? (
-                          <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>(запланировано)</span>
+                          <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>{tr("(planned)", "(запланировано)")}</span>
                         ) : null}
                       </div>
                       {t.note ? <div style={{ fontSize: 12, opacity: 0.7 }}>{t.note}</div> : null}
@@ -1268,8 +1306,8 @@ export default function App() {
                     <div style={{ display: "flex", gap: 8 }}>
                       {t.type === "planned_expense" ? (
                         <button
-                          title="Оплачено"
-                          aria-label="Оплачено"
+                          title={tr("Paid", "Оплачено")}
+                          aria-label={tr("Paid", "Оплачено")}
                           style={{ color: "#138a36", fontWeight: 700 }}
                           onClick={async () => {
                             const updated = await api.updateTransaction({
@@ -1283,17 +1321,17 @@ export default function App() {
                         </button>
                       ) : null}
                       <button
-                        title="Редактировать"
-                        aria-label="Редактировать"
+                        title={tr("Edit", "Редактировать")}
+                        aria-label={tr("Edit", "Редактировать")}
                         style={{ color: "#444", fontWeight: 700 }}
                         onClick={async () => {
                           if (!data) return;
 
-                          const newAmountStr = prompt("Новая сумма (руб):", String(t.amount / 100));
+                          const newAmountStr = prompt(tr("New amount (RUB):", "Новая сумма (руб):"), String(t.amount / 100));
                           if (!newAmountStr) return;
 
-                          const newCategory = prompt("Категория:", t.category) ?? t.category;
-                          const newNote = prompt("Комментарий:", t.note) ?? t.note;
+                          const newCategory = prompt(tr("Category:", "Категория:"), t.category) ?? t.category;
+                          const newNote = prompt(tr("Comment:", "Комментарий:"), t.note) ?? t.note;
 
                           const updated = await api.updateTransaction({
                             ...t,
@@ -1308,8 +1346,8 @@ export default function App() {
                       </button>
 
                       <button
-                        title="Удалить"
-                        aria-label="Удалить"
+                        title={tr("Delete", "Удалить")}
+                        aria-label={tr("Delete", "Удалить")}
                         style={{ color: "#c51616", fontWeight: 700 }}
                         onClick={async () => {
                           const updated = await api.deleteTransaction(t.id);
@@ -1450,7 +1488,7 @@ export default function App() {
               {!isCalendarPickerFocus ? (
               <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 10 }} data-day-menu="true">
                 <button
-                  aria-label="Меню"
+                  aria-label={tr("Menu", "Меню")}
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedDate(d);
@@ -1488,7 +1526,7 @@ export default function App() {
                         setDayMenuOpen(null);
                       }}
                     >
-                      Добавить доход
+                      {tr("Add income", "Добавить доход")}
                     </button>
                     {!isFutureDate ? (
                       <button
@@ -1498,7 +1536,7 @@ export default function App() {
                           setDayMenuOpen(null);
                         }}
                       >
-                        Добавить расход
+                        {tr("Add expense", "Добавить расход")}
                       </button>
                     ) : null}
                     <button
@@ -1508,7 +1546,7 @@ export default function App() {
                         setDayMenuOpen(null);
                       }}
                     >
-                      Запланированный расход
+                      {tr("Planned expense", "Запланированный расход")}
                     </button>
                     <div style={{ height: 1, background: "#eee", margin: "4px 0" }} />
                     <button
@@ -1539,7 +1577,7 @@ export default function App() {
                         setDayMenuOpen(null);
                       }}
                     >
-                      {effectiveWorking ? "Установить как выходной" : "Установить как рабочий"}
+                      {effectiveWorking ? tr("Mark as day off", "Установить как выходной") : tr("Mark as working", "Установить как рабочий")}
                     </button>
                   </div>
                 ) : null}
@@ -1548,7 +1586,7 @@ export default function App() {
 
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <div style={{ fontSize: 12, opacity: 0.7, fontWeight: isCustomMarkedWorking ? 700 : 400, color: isPickingCustomWorkDays ? (isCustomMarkedWorking ? '#17653e' : undefined) : (isCustomMainView ? (isCustomNonWorking ? '#b10000' : undefined) : (isCustomNonWorking ? '#b10000' : (vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#0b5' : undefined)))) ) }}>{d.slice(8, 10)}</div>
-                <div style={{ fontSize: 11, opacity: 0.7, color: isPickingCustomWorkDays ? (isCustomMarkedWorking ? '#17653e' : undefined) : (isCustomMainView ? (isCustomNonWorking ? '#b10000' : undefined) : (isCustomNonWorking ? '#b10000' : (vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#0b5' : undefined)))) ) }}>{new Date(d).toLocaleDateString("ru-RU", { weekday: "short" })}</div>
+                <div style={{ fontSize: 11, opacity: 0.7, color: isPickingCustomWorkDays ? (isCustomMarkedWorking ? '#17653e' : undefined) : (isCustomMainView ? (isCustomNonWorking ? '#b10000' : undefined) : (isCustomNonWorking ? '#b10000' : (vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#0b5' : undefined)))) ) }}>{new Date(d).toLocaleDateString(locale, { weekday: "short" })}</div>
               </div>
               <div style={{ fontSize: 12 }}>+ {rub(s.inc)}</div>
               <div style={{ fontSize: 12 }}>- {rub(s.exp)}</div>
@@ -1610,12 +1648,12 @@ export default function App() {
               <b style={{ fontSize: 14 }}>
                 {txModalTitle(txModalType)} — {txModalDate}
               </b>
-              <button onClick={closeTxModal} aria-label="Закрыть">✕</button>
+              <button onClick={closeTxModal} aria-label={tr("Close", "Закрыть")}>✕</button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Сумма (руб)</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("Amount (RUB)", "Сумма (руб)")}</div>
                 <input
                   value={txModalAmount}
                   onChange={(e) => setTxModalAmount(e.target.value)}
@@ -1626,20 +1664,20 @@ export default function App() {
               </div>
 
               <div style={{ minWidth: 0 }} data-tx-category="true">
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Категория</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("Category", "Категория")}</div>
                 <div style={{ position: "relative" }}>
                   <div style={{ display: "flex", gap: 8 }}>
                     <input
                       value={txModalCategory}
                       onChange={(e) => setTxModalCategory(e.target.value)}
                       onFocus={() => setTxCategoryMenuOpen(true)}
-                      placeholder={txModalType === "income" ? "Например: Зарплата" : "Например: Продукты"}
+                      placeholder={txModalType === "income" ? tr("e.g. Salary", "Например: Зарплата") : tr("e.g. Groceries", "Например: Продукты")}
                       style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                     />
                     <button
                       type="button"
                       onClick={() => setTxCategoryMenuOpen((v) => !v)}
-                      aria-label="Показать список категорий"
+                      aria-label={tr("Show category list", "Показать список категорий")}
                     >▾</button>
                   </div>
 
@@ -1689,7 +1727,7 @@ export default function App() {
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-              <button onClick={closeTxModal}>Отмена</button>
+              <button onClick={closeTxModal}>{tr("Cancel", "Отмена")}</button>
               <button onClick={submitTxModal}>{txModalTitle(txModalType)}</button>
             </div>
           </div>
@@ -1725,26 +1763,26 @@ export default function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>
-                Добавить отпуск - {vacationModalStart} {"->"} {vacationModalEnd}
+                {tr("Add vacation", "Добавить отпуск")} - {vacationModalStart} {"->"} {vacationModalEnd}
               </b>
-              <button onClick={closeVacationModal} aria-label="Закрыть">✕</button>
+              <button onClick={closeVacationModal} aria-label={tr("Close", "Закрыть")}>✕</button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Название</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("Title", "Название")}</div>
                 <input
                   value={vacationModalTitle}
                   onChange={(e) => setVacationModalTitle(e.target.value)}
-                  placeholder="Отпуск"
+                  placeholder={tr("Vacation", "Отпуск")}
                   style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                 />
               </div>
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-              <button onClick={closeVacationModal}>Отмена</button>
-              <button onClick={submitVacationModal}>Добавить отпуск</button>
+              <button onClick={closeVacationModal}>{tr("Cancel", "Отмена")}</button>
+              <button onClick={submitVacationModal}>{tr("Add vacation", "Добавить отпуск")}</button>
             </div>
           </div>
         </div>
@@ -1779,14 +1817,14 @@ export default function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>
-                Добавить зарплату - {salaryModalDate}
+                {tr("Add salary", "Добавить зарплату")} - {salaryModalDate}
               </b>
-              <button onClick={closeSalaryModal} aria-label="Закрыть">✕</button>
+              <button onClick={closeSalaryModal} aria-label={tr("Close", "Закрыть")}>✕</button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Сумма (руб)</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("Amount (RUB)", "Сумма (руб)")}</div>
                 <input
                   value={salaryModalAmount}
                   onChange={(e) => setSalaryModalAmount(e.target.value)}
@@ -1797,19 +1835,19 @@ export default function App() {
               </div>
 
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Название</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("Title", "Название")}</div>
                 <input
                   value={salaryModalTitle}
                   onChange={(e) => setSalaryModalTitle(e.target.value)}
-                  placeholder="Зарплата"
+                  placeholder={tr("Salary", "Зарплата")}
                   style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                 />
               </div>
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-              <button onClick={closeSalaryModal}>Отмена</button>
-              <button onClick={submitSalaryModal}>Добавить зарплату</button>
+              <button onClick={closeSalaryModal}>{tr("Cancel", "Отмена")}</button>
+              <button onClick={submitSalaryModal}>{tr("Add salary", "Добавить зарплату")}</button>
             </div>
           </div>
         </div>

@@ -39,6 +39,7 @@ export type AppData = {
     minBalance: number;
     dailyCalcMode: "exclude_payday" | "include_payday";
     txCategories: string[];
+    language?: "ru" | "en";
   };
   salaryEvents: SalaryEvent[];
   vacations: Vacation[];
@@ -70,6 +71,7 @@ export const api = {
     invoke<string>("save_backup_to_dir", { dirPath, fileName }),
   importBackup: (backupJson: string) => invoke<AppData>("import_backup", { backupJson }),
   importBackupFromPath: (path: string) => invoke<AppData>("import_backup_from_path", { path }),
+  setLanguage: (language: "ru" | "en") => invoke<AppData>("set_language", { language }),
   calcDailyBudget: (fromDate: string) =>
     invoke<DailyBudgetResult>("calc_daily_budget", { fromDate }),
 };

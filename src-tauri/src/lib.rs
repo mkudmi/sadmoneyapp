@@ -11,6 +11,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::get_data,
+            commands::set_language,
             commands::add_transaction,
             commands::update_transaction,
             commands::delete_transaction,

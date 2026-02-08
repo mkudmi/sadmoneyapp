@@ -64,6 +64,18 @@ pub fn get_data(app: AppHandle) -> Result<AppData, String> {
 }
 
 #[tauri::command]
+pub fn set_language(app: AppHandle, language: String) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    let normalized = language.trim().to_lowercase();
+    if normalized != "en" && normalized != "ru" {
+        return Err("language must be 'en' or 'ru'".to_string());
+    }
+    data.settings.language = normalized;
+    save(&app, &data)?;
+    Ok(data)
+}
+
+#[tauri::command]
 pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, String> {
     let mut data = load(&app)?;
 

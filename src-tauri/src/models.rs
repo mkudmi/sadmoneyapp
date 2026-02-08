@@ -44,6 +44,8 @@ pub struct Settings {
     #[serde(rename = "txCategories")]
     #[serde(default = "default_tx_categories")]
     pub tx_categories: Vec<String>,
+    #[serde(default = "default_language")]
+    pub language: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -55,7 +57,11 @@ pub enum DailyCalcMode {
 }
 
 fn default_tx_categories() -> Vec<String> {
-    vec!["Продукты".to_string(), "Бензин".to_string()]
+    vec!["Groceries".to_string(), "Fuel".to_string()]
+}
+
+fn default_language() -> String {
+    "en".to_string()
 }
 
 impl Default for Settings {
@@ -65,6 +71,7 @@ impl Default for Settings {
             min_balance: 0,
             daily_calc_mode: DailyCalcMode::default(),
             tx_categories: default_tx_categories(),
+            language: default_language(),
         }
     }
 }
