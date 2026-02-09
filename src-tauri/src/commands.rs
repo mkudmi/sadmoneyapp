@@ -138,6 +138,26 @@ pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData
 #[tauri::command]
 pub fn delete_transaction(app: AppHandle, id: String) -> Result<AppData, String> {
     let mut data = load(&app)?;
+
+    // If we delete an expense linked to a debt person, restore that amount back to the debt.
+    if let Some(tx) = data.transactions.iter().find(|t| t.id == id).cloned() {
+        if let (TxType::Expense, Some(person)) = (tx.r#type, tx.debt_person.as_ref()) {
+            if let Some(d) = data
+                .debts
+                .iter_mut()
+                .find(|d| d.person.eq_ignore_ascii_case(person))
+            {
+                d.amount = d.amount.saturating_add(tx.amount);
+            } else {
+                data.debts.push(Debt {
+                    id: format!("debt_{}", Uuid::new_v4()),
+                    person: normalize_person(person),
+                    amount: tx.amount.saturating_abs(),
+                });
+            }
+        }
+    }
+
     data.transactions.retain(|t| t.id != id);
     save(&app, &data)?;
     Ok(data)
