@@ -3,7 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
-import { api, AppData, Transaction } from "./lib/api";
+import { api, AppData, Debt, Transaction } from "./lib/api";
 import { rub, toKop } from "./lib/money";
 
 function ymd(d: Date) {
@@ -319,6 +319,7 @@ export default function App() {
   const [debtModalOpen, setDebtModalOpen] = useState(false);
   const [debtModalAmount, setDebtModalAmount] = useState<string>("");
   const [debtModalPerson, setDebtModalPerson] = useState<string>("");
+  const [debtModalEditId, setDebtModalEditId] = useState<string | null>(null);
   const [isPickingSalaryDate, setIsPickingSalaryDate] = useState(false);
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const [salaryModalDate, setSalaryModalDate] = useState<string>(today);
@@ -578,13 +579,26 @@ export default function App() {
     }
   }
 
-  function openDebtModal() {
-    setDebtModalAmount("");
-    setDebtModalPerson("");
+  function formatDebtAmountInput(amountKop: number) {
+    const value = amountKop / 100;
+    return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  }
+
+  function openDebtModal(debt?: Debt) {
+    if (debt) {
+      setDebtModalEditId(debt.id);
+      setDebtModalAmount(formatDebtAmountInput(debt.amount));
+      setDebtModalPerson(debt.person);
+    } else {
+      setDebtModalEditId(null);
+      setDebtModalAmount("");
+      setDebtModalPerson("");
+    }
     setDebtModalOpen(true);
   }
 
   function closeDebtModal() {
+    setDebtModalEditId(null);
     setDebtModalAmount("");
     setDebtModalPerson("");
     setDebtModalOpen(false);
@@ -598,7 +612,7 @@ export default function App() {
 
     try {
       const updated = await api.upsertDebt({
-        id: "",
+        id: debtModalEditId ?? "",
         person,
         amount,
       });
@@ -1045,7 +1059,7 @@ export default function App() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <b>{tr("Debts", "Долги")}</b>
             <button
-              onClick={openDebtModal}
+              onClick={() => openDebtModal()}
               title={tr("Add debt", "Добавить долг")}
               aria-label={tr("Add debt", "Добавить долг")}
               style={{ minWidth: 28, fontWeight: 700 }}
@@ -1089,6 +1103,14 @@ export default function App() {
                     <div style={{ flexShrink: 0 }}>
                       <b>{rub(d.amount)}</b>
                     </div>
+                    <button
+                      title={tr("Edit debt", "Редактировать долг")}
+                      aria-label={tr("Edit debt", "Редактировать долг")}
+                      style={{ color: "#444", fontWeight: 700 }}
+                      onClick={() => openDebtModal(d)}
+                    >
+                      ✎
+                    </button>
                     <button
                       title={tr("Delete debt", "Удалить долг")}
                       aria-label={tr("Delete debt", "Удалить долг")}
@@ -1966,7 +1988,9 @@ export default function App() {
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-              <b style={{ fontSize: 14 }}>{tr("Add debt", "Добавить долг")}</b>
+              <b style={{ fontSize: 14 }}>
+                {debtModalEditId ? tr("Edit debt", "Редактировать долг") : tr("Add debt", "Добавить долг")}
+              </b>
               <button onClick={closeDebtModal} aria-label={tr("Close", "Закрыть")}>✕</button>
             </div>
 
@@ -1994,7 +2018,9 @@ export default function App() {
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
               <button onClick={closeDebtModal}>{tr("Cancel", "Отмена")}</button>
-              <button onClick={submitDebtModal}>{tr("Add debt", "Добавить долг")}</button>
+              <button onClick={submitDebtModal}>
+                {debtModalEditId ? tr("Save", "Сохранить") : tr("Add debt", "Добавить долг")}
+              </button>
             </div>
           </div>
         </div>
@@ -2125,5 +2151,3 @@ export default function App() {
     </div>
   );
 }
-
-
