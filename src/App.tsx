@@ -297,9 +297,10 @@ export default function App() {
   }, [data, budget?.next_salary_date, selectedDate]);
   const selectedDateWeekDay = new Date(selectedDate).getDay(); // 0 = Sunday, 6 = Saturday
   const selectedDateIsWeekend = selectedDateWeekDay === 0 || selectedDateWeekDay === 6;
-  const selectedDateIsWorking = workSchedule === "5/2"
-    ? !selectedDateIsWeekend
-    : !!offForSelectedDate?.is_working;
+  const selectedDateDefaultWorking = workSchedule === "5/2" ? !selectedDateIsWeekend : false;
+  const selectedDateIsWorking = offForSelectedDate
+    ? !!offForSelectedDate.is_working
+    : selectedDateDefaultWorking;
 
   const [dayMenuOpen, setDayMenuOpen] = useState<string | null>(null);
   const [dayMenuPos, setDayMenuPos] = useState<{ left: number; top: number }>({ left: 8, top: 8 });
@@ -1615,14 +1616,14 @@ export default function App() {
 
           const dayOfWeek = new Date(d).getDay(); // 0 = Sunday, 6 = Saturday
           const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-          const workingOverride = offForDay?.is_working ?? false;
-          const weekendHighlight = workSchedule === '5/2' && isWeekend;
+          const defaultWorking = workSchedule === "5/2" ? !isWeekend : false;
+          const effectiveWorking = offForDay ? !!offForDay.is_working : defaultWorking;
+          const weekendHighlight = workSchedule === "5/2" && isWeekend && !effectiveWorking;
           const vacationHighlight = vacForDay !== null;
-          const offDayHighlight = workSchedule === "custom" && offForDay !== null && !(offForDay?.is_working);
-          const effectiveWorking = isWeekend ? workingOverride : !(offForDay && !offForDay.is_working);
+          const offDayHighlight = !effectiveWorking && !weekendHighlight;
           const isCustomMarkedWorking = isPickingCustomWorkDays && customWorkingDays.includes(d);
           const isCustomMainView = workSchedule === "custom" && !isPickingCustomWorkDays;
-          const isCustomNonWorking = workSchedule === "custom" && !isPickingCustomWorkDays && !workingOverride;
+          const isCustomNonWorking = workSchedule === "custom" && !isPickingCustomWorkDays && !effectiveWorking;
           const tileBackground = isPickingCustomWorkDays
             ? (isCustomMarkedWorking ? "rgba(30, 160, 90, 0.18)" : "transparent")
             : isCustomMainView
@@ -1636,7 +1637,7 @@ export default function App() {
               : vacationHighlight
                 ? "rgba(255, 223, 99, 0.25)"
                 : offDayHighlight
-                  ? "rgba(0, 120, 255, 0.06)"
+                  ? "rgba(255, 0, 0, 0.06)"
                   : "transparent";
 
           return (
@@ -1757,21 +1758,31 @@ export default function App() {
                       onClick={async () => {
                         try {
                           const makeWorking = !effectiveWorking;
-                          if (isWeekend) {
-                            if (makeWorking) {
-                              const updated = await api.upsertOffDay({ id: offForDay?.id ?? "", date: d, note: offForDay?.note ?? "", is_working: true });
-                              setData(updated);
-                            } else if (offForDay) {
-                              const updated = await api.deleteOffDay(offForDay.id);
-                              setData(updated);
-                            }
+                          if (workSchedule === "custom") {
+                            const updated = await api.upsertOffDay({
+                              id: offForDay?.id ?? "",
+                              date: d,
+                              note: offForDay?.note ?? "",
+                              is_working: makeWorking,
+                            });
+                            setData(updated);
                           } else {
-                            if (!makeWorking) {
-                              const updated = await api.upsertOffDay({ id: offForDay?.id ?? "", date: d, note: offForDay?.note ?? "", is_working: false });
-                              setData(updated);
-                            } else if (offForDay) {
-                              const updated = await api.deleteOffDay(offForDay.id);
-                              setData(updated);
+                            if (isWeekend) {
+                              if (makeWorking) {
+                                const updated = await api.upsertOffDay({ id: offForDay?.id ?? "", date: d, note: offForDay?.note ?? "", is_working: true });
+                                setData(updated);
+                              } else if (offForDay) {
+                                const updated = await api.deleteOffDay(offForDay.id);
+                                setData(updated);
+                              }
+                            } else {
+                              if (!makeWorking) {
+                                const updated = await api.upsertOffDay({ id: offForDay?.id ?? "", date: d, note: offForDay?.note ?? "", is_working: false });
+                                setData(updated);
+                              } else if (offForDay) {
+                                const updated = await api.deleteOffDay(offForDay.id);
+                                setData(updated);
+                              }
                             }
                           }
                         } catch (err) {
@@ -1789,8 +1800,8 @@ export default function App() {
               ) : null}
 
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: isCustomMarkedWorking ? 700 : 400, color: isPickingCustomWorkDays ? (isCustomMarkedWorking ? '#17653e' : undefined) : (isCustomMainView ? (isCustomNonWorking ? '#b10000' : undefined) : (isCustomNonWorking ? '#b10000' : (vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#0b5' : undefined)))) ) }}>{d.slice(8, 10)}</div>
-                <div style={{ fontSize: 11, opacity: 0.7, color: isPickingCustomWorkDays ? (isCustomMarkedWorking ? '#17653e' : undefined) : (isCustomMainView ? (isCustomNonWorking ? '#b10000' : undefined) : (isCustomNonWorking ? '#b10000' : (vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#0b5' : undefined)))) ) }}>{new Date(d).toLocaleDateString(locale, { weekday: "short" })}</div>
+                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: isCustomMarkedWorking ? 700 : 400, color: isPickingCustomWorkDays ? (isCustomMarkedWorking ? '#17653e' : undefined) : (isCustomMainView ? (isCustomNonWorking ? '#b10000' : undefined) : (isCustomNonWorking ? '#b10000' : (vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#c00' : undefined)))) ) }}>{d.slice(8, 10)}</div>
+                <div style={{ fontSize: 11, opacity: 0.7, color: isPickingCustomWorkDays ? (isCustomMarkedWorking ? '#17653e' : undefined) : (isCustomMainView ? (isCustomNonWorking ? '#b10000' : undefined) : (isCustomNonWorking ? '#b10000' : (vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#c00' : undefined)))) ) }}>{new Date(d).toLocaleDateString(locale, { weekday: "short" })}</div>
               </div>
               <div style={{ fontSize: 12 }}>+ {rub(s.inc)}</div>
               <div style={{ fontSize: 12 }}>- {rub(s.exp)}</div>
