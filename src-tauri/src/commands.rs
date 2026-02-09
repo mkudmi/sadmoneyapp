@@ -1,4 +1,4 @@
-use crate::models::{AppData, OffDay, SalaryEvent, Transaction, TxType, Vacation};
+use crate::models::{AppData, Debt, OffDay, SalaryEvent, Transaction, TxType, Vacation};
 use crate::storage;
 use anyhow::Result;
 use chrono::NaiveDate;
@@ -30,14 +30,13 @@ fn normalize_category(s: &str) -> String {
     }
 
     s.split_whitespace()
-        .map(|w| {
-            w.split('-')
-                .map(cap_segment)
-                .collect::<Vec<_>>()
-                .join("-")
-        })
+        .map(|w| w.split('-').map(cap_segment).collect::<Vec<_>>().join("-"))
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn normalize_person(s: &str) -> String {
+    normalize_category(s)
 }
 
 fn remember_category(settings: &mut crate::models::Settings, category: &str) {
@@ -89,6 +88,21 @@ pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, S
     remember_category(&mut data.settings, &tx.category);
     tx.category = normalize_category(&tx.category);
     remember_category(&mut data.settings, &tx.category);
+    tx.debt_person = tx
+        .debt_person
+        .as_ref()
+        .map(|p| normalize_person(p))
+        .filter(|p| !p.is_empty());
+
+    if let (TxType::Expense, Some(person)) = (&tx.r#type, tx.debt_person.as_ref()) {
+        if let Some(d) = data
+            .debts
+            .iter_mut()
+            .find(|d| d.person.eq_ignore_ascii_case(person))
+        {
+            d.amount = (d.amount - tx.amount).max(0);
+        }
+    }
 
     data.transactions.push(tx);
     save(&app, &data)?;
@@ -109,6 +123,12 @@ pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData
     };
 
     tx.amount = tx.amount.saturating_abs();
+    tx.category = normalize_category(&tx.category);
+    tx.debt_person = tx
+        .debt_person
+        .as_ref()
+        .map(|p| normalize_person(p))
+        .filter(|p| !p.is_empty());
 
     data.transactions[i] = tx;
     save(&app, &data)?;
@@ -210,6 +230,48 @@ pub fn delete_off_day(app: AppHandle, id: String) -> Result<AppData, String> {
 }
 
 #[tauri::command]
+pub fn upsert_debt(app: AppHandle, mut debt: Debt) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+
+    debt.person = normalize_person(&debt.person);
+    if debt.person.is_empty() {
+        return Err("debt person is empty".to_string());
+    }
+    debt.amount = debt.amount.saturating_abs();
+    if debt.amount <= 0 {
+        return Err("debt amount must be > 0".to_string());
+    }
+
+    if debt.id.trim().is_empty() {
+        if let Some(existing) = data
+            .debts
+            .iter_mut()
+            .find(|d| d.person.eq_ignore_ascii_case(&debt.person))
+        {
+            existing.amount = existing.amount.saturating_add(debt.amount);
+        } else {
+            debt.id = format!("debt_{}", Uuid::new_v4());
+            data.debts.push(debt);
+        }
+    } else if let Some(i) = data.debts.iter().position(|x| x.id == debt.id) {
+        data.debts[i] = debt;
+    } else {
+        data.debts.push(debt);
+    }
+
+    save(&app, &data)?;
+    Ok(data)
+}
+
+#[tauri::command]
+pub fn delete_debt(app: AppHandle, id: String) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    data.debts.retain(|d| d.id != id);
+    save(&app, &data)?;
+    Ok(data)
+}
+
+#[tauri::command]
 pub fn export_backup(app: AppHandle) -> Result<String, String> {
     let data = load(&app)?;
     serde_json::to_string_pretty(&data).map_err(|e| e.to_string())
@@ -222,7 +284,11 @@ pub fn save_backup_to_path(app: AppHandle, path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn save_backup_to_dir(app: AppHandle, dir_path: String, file_name: String) -> Result<String, String> {
+pub fn save_backup_to_dir(
+    app: AppHandle,
+    dir_path: String,
+    file_name: String,
+) -> Result<String, String> {
     let backup = export_backup(app)?;
     let mut full_path = std::path::PathBuf::from(dir_path);
     let file = if file_name.trim().is_empty() {

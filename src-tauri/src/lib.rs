@@ -27,6 +27,8 @@ pub fn run() {
             commands::delete_salary_event,
             commands::delete_vacation,
             commands::delete_off_day,
+            commands::upsert_debt,
+            commands::delete_debt,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

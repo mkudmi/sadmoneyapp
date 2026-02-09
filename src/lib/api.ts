@@ -6,22 +6,23 @@ export type Transaction = {
   id: string;
   date: string; // YYYY-MM-DD
   type: TxType;
-  amount: number; // копейки
+  amount: number; // kopecks
   category: string;
   note: string;
+  debt_person?: string | null;
 };
 
 export type SalaryEvent = {
   id: string;
   date: string;
-  amount: number; // копейки
+  amount: number; // kopecks
   title: string;
 };
 
 export type Vacation = {
   id: string;
   start_date: string; // YYYY-MM-DD
-  end_date: string;   // YYYY-MM-DD
+  end_date: string; // YYYY-MM-DD
   title: string;
 };
 
@@ -30,6 +31,12 @@ export type OffDay = {
   date: string; // YYYY-MM-DD
   note: string;
   is_working?: boolean;
+};
+
+export type Debt = {
+  id: string;
+  person: string;
+  amount: number; // kopecks
 };
 
 export type AppData = {
@@ -44,6 +51,7 @@ export type AppData = {
   salaryEvents: SalaryEvent[];
   vacations: Vacation[];
   offDays: OffDay[];
+  debts?: Debt[];
   transactions: Transaction[];
 };
 
@@ -65,6 +73,8 @@ export const api = {
   deleteVacation: (id: string) => invoke<AppData>("delete_vacation", { id }),
   upsertOffDay: (od: OffDay) => invoke<AppData>("upsert_off_day", { ev: od }),
   deleteOffDay: (id: string) => invoke<AppData>("delete_off_day", { id }),
+  upsertDebt: (debt: Debt) => invoke<AppData>("upsert_debt", { debt }),
+  deleteDebt: (id: string) => invoke<AppData>("delete_debt", { id }),
   exportBackup: () => invoke<string>("export_backup"),
   saveBackupToPath: (path: string) => invoke<void>("save_backup_to_path", { path }),
   saveBackupToDir: (dirPath: string, fileName: string) =>
@@ -72,6 +82,5 @@ export const api = {
   importBackup: (backupJson: string) => invoke<AppData>("import_backup", { backupJson }),
   importBackupFromPath: (path: string) => invoke<AppData>("import_backup_from_path", { path }),
   setLanguage: (language: "ru" | "en") => invoke<AppData>("set_language", { language }),
-  calcDailyBudget: (fromDate: string) =>
-    invoke<DailyBudgetResult>("calc_daily_budget", { fromDate }),
+  calcDailyBudget: (fromDate: string) => invoke<DailyBudgetResult>("calc_daily_budget", { fromDate }),
 };

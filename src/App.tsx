@@ -314,7 +314,11 @@ export default function App() {
   const [txModalDate, setTxModalDate] = useState<string>(today);
   const [txModalAmount, setTxModalAmount] = useState<string>("");
   const [txModalCategory, setTxModalCategory] = useState<string>("");
+  const [txModalDebtPerson, setTxModalDebtPerson] = useState<string>("");
   const [txCategoryMenuOpen, setTxCategoryMenuOpen] = useState(false);
+  const [debtModalOpen, setDebtModalOpen] = useState(false);
+  const [debtModalAmount, setDebtModalAmount] = useState<string>("");
+  const [debtModalPerson, setDebtModalPerson] = useState<string>("");
   const [isPickingSalaryDate, setIsPickingSalaryDate] = useState(false);
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const [salaryModalDate, setSalaryModalDate] = useState<string>(today);
@@ -470,13 +474,34 @@ export default function App() {
     return Array.from(new Set([...defaults, ...fromTx]));
   }, [data, lang]);
 
-  const activeTxCategories = txModalType === "income" ? incomeCategories : expenseCategories;
+  const expenseCategoriesWithDebt = useMemo(() => {
+    const debtCategory = tr("Debt", "Долг");
+    if (expenseCategories.some((c) => normalizeCategoryInput(c).toLowerCase() === normalizeCategoryInput(debtCategory).toLowerCase())) {
+      return expenseCategories;
+    }
+    return [...expenseCategories, debtCategory];
+  }, [expenseCategories, lang]);
+
+  const activeTxCategories = txModalType === "income" ? incomeCategories : expenseCategoriesWithDebt;
 
   const txCategoryOptions = useMemo(() => {
     const q = txModalCategory.trim().toLowerCase();
     if (!q) return activeTxCategories;
     return activeTxCategories.filter((c) => c.toLowerCase().includes(q));
   }, [activeTxCategories, txModalCategory]);
+
+  const debts = useMemo(() => {
+    return [...(data?.debts ?? [])].sort((a, b) => {
+      if (b.amount !== a.amount) return b.amount - a.amount;
+      return a.person.localeCompare(b.person, locale);
+    });
+  }, [data?.debts, locale]);
+
+  const debtPeople = useMemo(() => {
+    return Array.from(new Set(debts.map((d) => normalizeCategoryInput(d.person)).filter((p) => p.length > 0)));
+  }, [debts]);
+
+  const totalDebt = useMemo(() => debts.reduce((sum, d) => sum + d.amount, 0), [debts]);
 
   function normalizeCategoryInput(raw: string) {
     const s0 = raw.trim().replace(/\s+/g, " ");
@@ -504,6 +529,7 @@ export default function App() {
     setTxModalDate(date);
     setTxModalAmount("");
     setTxModalCategory("");
+    setTxModalDebtPerson("");
     setTxCategoryMenuOpen(false);
     setTxModalOpen(true);
   }
@@ -512,13 +538,24 @@ export default function App() {
     setTxModalOpen(false);
     setTxModalAmount("");
     setTxModalCategory("");
+    setTxModalDebtPerson("");
     setTxCategoryMenuOpen(false);
+  }
+
+  function isDebtCategory(categoryRaw: string) {
+    const normalized = normalizeCategoryInput(categoryRaw).toLowerCase();
+    const en = normalizeCategoryInput("Debt").toLowerCase();
+    const ru = normalizeCategoryInput("Долг").toLowerCase();
+    return normalized === en || normalized === ru;
   }
 
   async function submitTxModal() {
     const category = normalizeCategoryInput(txModalCategory);
+    const debtPerson = normalizeCategoryInput(txModalDebtPerson);
+    const shouldUseDebtPerson = txModalType === "expense" && isDebtCategory(category);
     if (!txModalAmount.trim()) return;
     if (!category) return;
+    if (shouldUseDebtPerson && !debtPerson) return;
 
     try {
       const tx: Transaction = {
@@ -528,6 +565,7 @@ export default function App() {
         amount: toKop(txModalAmount),
         category,
         note: "",
+        debt_person: shouldUseDebtPerson ? debtPerson : null,
       };
 
       if (tx.amount <= 0) return;
@@ -535,6 +573,37 @@ export default function App() {
       const updated = await api.addTransaction(tx);
       setData(updated);
       closeTxModal();
+    } catch (err) {
+      alert(String(err));
+    }
+  }
+
+  function openDebtModal() {
+    setDebtModalAmount("");
+    setDebtModalPerson("");
+    setDebtModalOpen(true);
+  }
+
+  function closeDebtModal() {
+    setDebtModalAmount("");
+    setDebtModalPerson("");
+    setDebtModalOpen(false);
+  }
+
+  async function submitDebtModal() {
+    const amount = toKop(debtModalAmount);
+    const person = normalizeCategoryInput(debtModalPerson);
+    if (amount <= 0) return;
+    if (!person) return;
+
+    try {
+      const updated = await api.upsertDebt({
+        id: "",
+        person,
+        amount,
+      });
+      setData(updated);
+      closeDebtModal();
     } catch (err) {
       alert(String(err));
     }
@@ -974,6 +1043,76 @@ export default function App() {
       >
         <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <b>{tr("Debts", "Долги")}</b>
+            <button
+              onClick={openDebtModal}
+              title={tr("Add debt", "Добавить долг")}
+              aria-label={tr("Add debt", "Добавить долг")}
+              style={{ minWidth: 28, fontWeight: 700 }}
+            >
+              +
+            </button>
+          </div>
+          <div style={{ fontSize: 12, marginBottom: 6 }}>
+            <b>{tr("Total:", "Итого:")}</b> {rub(totalDebt)}
+          </div>
+          {debts.length > 0 ? (
+            <div
+              style={{
+                marginTop: 8,
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                maxHeight: 120,
+                overflowY: "auto",
+                paddingRight: 4,
+              }}
+            >
+              {debts.map((d) => (
+                <div
+                  key={d.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
+                    border: "1px solid #eee",
+                    borderRadius: 8,
+                    padding: "6px 8px",
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <b>{d.person}</b>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flexShrink: 0 }}>
+                      <b>{rub(d.amount)}</b>
+                    </div>
+                    <button
+                      title={tr("Delete debt", "Удалить долг")}
+                      aria-label={tr("Delete debt", "Удалить долг")}
+                      style={{ color: "#c51616", fontWeight: 700 }}
+                      onClick={async () => {
+                        const updated = await api.deleteDebt(d.id);
+                        setData(updated);
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
+              {tr("No debts yet.", "Пока нет долгов.")}
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <b>{tr("Vacations this month", "Отпуска в этом месяце")}</b>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {isPickingVacationStart ? (
@@ -1334,6 +1473,11 @@ export default function App() {
                     <div>
                       <div style={{ fontSize: 13 }}>
                         <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "⏳" : "-"}</b> {rub(t.amount)} — {t.category}
+                        {t.debt_person ? (
+                          <span style={{ marginLeft: 6, fontSize: 12, opacity: 0.75 }}>
+                            {tr("to", "кому")}: {t.debt_person}
+                          </span>
+                        ) : null}
                         {t.type === "planned_expense" ? (
                           <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>{tr("(planned)", "(запланировано)")}</span>
                         ) : null}
@@ -1762,11 +1906,95 @@ export default function App() {
                   ) : null}
                 </div>
               </div>
+              {txModalType === "expense" && isDebtCategory(txModalCategory) ? (
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("To whom", "Кому")}</div>
+                  <select
+                    value={txModalDebtPerson}
+                    onChange={(e) => setTxModalDebtPerson(e.target.value)}
+                    style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                  >
+                    <option value="">{tr("Select person", "Выберите человека")}</option>
+                    {debtPeople.map((person) => (
+                      <option key={person} value={person}>
+                        {person}
+                      </option>
+                    ))}
+                  </select>
+                  {debtPeople.length === 0 ? (
+                    <div style={{ marginTop: 4, fontSize: 11, opacity: 0.75 }}>
+                      {tr("Add a debt in the Debts card first.", "Сначала добавьте долг в плашке «Долги».")}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
               <button onClick={closeTxModal}>{tr("Cancel", "Отмена")}</button>
               <button onClick={submitTxModal}>{txModalTitle(txModalType)}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {debtModalOpen ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            zIndex: 5000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeDebtModal();
+          }}
+        >
+          <div
+            style={{
+              width: "min(460px, 100%)",
+              background: "#fff",
+              borderRadius: 12,
+              border: "1px solid #ddd",
+              padding: 12,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <b style={{ fontSize: 14 }}>{tr("Add debt", "Добавить долг")}</b>
+              <button onClick={closeDebtModal} aria-label={tr("Close", "Закрыть")}>✕</button>
+            </div>
+
+            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("Amount (RUB)", "Сумма (руб)")}</div>
+                <input
+                  value={debtModalAmount}
+                  onChange={(e) => setDebtModalAmount(e.target.value)}
+                  placeholder="1000"
+                  inputMode="decimal"
+                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("To whom you owe", "Кому должен")}</div>
+                <input
+                  value={debtModalPerson}
+                  onChange={(e) => setDebtModalPerson(e.target.value)}
+                  placeholder={tr("e.g. Ivan", "Например: Иван")}
+                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <button onClick={closeDebtModal}>{tr("Cancel", "Отмена")}</button>
+              <button onClick={submitDebtModal}>{tr("Add debt", "Добавить долг")}</button>
             </div>
           </div>
         </div>
@@ -1897,3 +2125,5 @@ export default function App() {
     </div>
   );
 }
+
+

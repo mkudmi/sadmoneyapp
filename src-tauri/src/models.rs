@@ -10,6 +10,8 @@ pub struct AppData {
     pub vacations: Vec<Vacation>,
     #[serde(rename = "offDays")]
     pub off_days: Vec<OffDay>,
+    #[serde(default)]
+    pub debts: Vec<Debt>,
     pub transactions: Vec<Transaction>,
 }
 
@@ -57,7 +59,11 @@ pub enum DailyCalcMode {
 }
 
 fn default_tx_categories() -> Vec<String> {
-    vec!["Groceries".to_string(), "Fuel".to_string()]
+    vec![
+        "Groceries".to_string(),
+        "Fuel".to_string(),
+        "Debt".to_string(),
+    ]
 }
 
 fn default_language() -> String {
@@ -100,6 +106,15 @@ pub struct Transaction {
     pub amount: i64, // копейки
     pub category: String,
     pub note: String,
+    #[serde(default)]
+    pub debt_person: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Debt {
+    pub id: String,
+    pub person: String,
+    pub amount: i64,
 }
 
 impl Default for AppData {
@@ -110,6 +125,7 @@ impl Default for AppData {
             salary_events: vec![],
             vacations: vec![],
             off_days: vec![],
+            debts: vec![],
             transactions: vec![],
         }
     }
