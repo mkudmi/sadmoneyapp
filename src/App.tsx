@@ -71,6 +71,15 @@ function daysInMonth(year: number, monthIndex0: number) {
   return new Date(year, monthIndex0 + 1, 0).getDate();
 }
 
+function inclusiveDays(startYmd: string, endYmd: string) {
+  const start = parseYmdLocal(startYmd);
+  const end = parseYmdLocal(endYmd);
+  const start0 = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const end0 = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  const diffDays = Math.floor((end0.getTime() - start0.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  return Math.max(diffDays, 0);
+}
+
 export default function App() {
   const [data, setData] = useState<AppData | null>(null);
   const [year, setYear] = useState(new Date().getFullYear());
@@ -981,7 +990,7 @@ export default function App() {
           </div>
         </div>
 
-        <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
+        <div style={{ flex: "1 1 460px", minWidth: 380, padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <b>{"Vacations this month"}</b>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1031,7 +1040,7 @@ export default function App() {
                   >
                     <div>
                       <div style={{ fontSize: 12 }}>
-                        <b>{v.start_date}</b> — <b>{v.end_date}</b> — {v.title}
+                        <b>{v.start_date}</b> — <b>{v.end_date}</b> — {v.title} — {rub(avgDailyEarnings * inclusiveDays(v.start_date, v.end_date))}
                       </div>
                     </div>
 
@@ -1075,7 +1084,7 @@ export default function App() {
           </div>
 
         </div>
-        <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
+        <div style={{ flex: "1 1 460px", minWidth: 380, padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <b>{"Salaries this month"}</b>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
