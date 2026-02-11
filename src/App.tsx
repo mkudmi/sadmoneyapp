@@ -80,6 +80,13 @@ function inclusiveDays(startYmd: string, endYmd: string) {
   return Math.max(diffDays, 0);
 }
 
+function overlapInclusiveDays(aStart: string, aEnd: string, bStart: string, bEnd: string) {
+  const start = aStart > bStart ? aStart : bStart;
+  const end = aEnd < bEnd ? aEnd : bEnd;
+  if (start > end) return 0;
+  return inclusiveDays(start, end);
+}
+
 export default function App() {
   const [data, setData] = useState<AppData | null>(null);
   const [year, setYear] = useState(new Date().getFullYear());
@@ -259,7 +266,9 @@ export default function App() {
     return map;
   }, [data]);
 
-  const salaryForSelectedDate = (data?.salaryEvents ?? []).find(s => s.date === selectedDate) ?? null;
+  const salaryEventsForSelectedDate = (data?.salaryEvents ?? []).filter((s) => s.date === selectedDate);
+  const salaryForSelectedDate = salaryEventsForSelectedDate[0] ?? null;
+  const salaryAmountForSelectedDate = salaryEventsForSelectedDate.reduce((sum, s) => sum + s.amount, 0);
   const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
   const vacationForSelectedDate = (data?.vacations ?? []).find(v => v.start_date <= selectedDate && v.end_date >= selectedDate) ?? null;
   const plannedAfterExpensesForSelectedDate = useMemo(() => {
@@ -296,6 +305,67 @@ export default function App() {
 
     return nextSalaryAmount - plannedUntilSelected;
   }, [data, budget?.next_salary_date, selectedDate]);
+  const afterVacationForSelectedDate = useMemo(() => {
+    if (!data || salaryAmountForSelectedDate <= 0 || avgDailyEarnings <= 0) return null;
+
+    const selected = parseYmdLocal(selectedDate);
+    const selectedYear = selected.getFullYear();
+    const selectedMonth0 = selected.getMonth();
+    const selectedDay = selected.getDate();
+    const selectedMonthKey = `${selectedYear}-${String(selectedMonth0 + 1).padStart(2, "0")}`;
+    let vacationDaysForThisSalary = 0;
+
+    for (const v of data.vacations ?? []) {
+      const vacStart = parseYmdLocal(v.start_date);
+      const vacEnd = parseYmdLocal(v.end_date);
+      const cursor = new Date(vacStart.getFullYear(), vacStart.getMonth(), 1);
+      const endMonthCursor = new Date(vacEnd.getFullYear(), vacEnd.getMonth(), 1);
+
+      while (cursor <= endMonthCursor) {
+        const y = cursor.getFullYear();
+        const m0 = cursor.getMonth();
+        const monthKey = `${y}-${String(m0 + 1).padStart(2, "0")}`;
+        const monthDays = daysInMonth(y, m0);
+        const monthStart = `${monthKey}-01`;
+        const monthEnd = `${monthKey}-${String(monthDays).padStart(2, "0")}`;
+
+        // First half (1..15) affects the salary in the second half (16..end) of the same month.
+        if (selectedMonthKey === monthKey && selectedDay >= 16) {
+          const firstHalfEnd = `${monthKey}-15`;
+          vacationDaysForThisSalary += overlapInclusiveDays(v.start_date, v.end_date, monthStart, firstHalfEnd);
+        }
+
+        // Second half (16..end) affects the salary up to day 5 of the next month.
+        const nextMonthDate = new Date(y, m0 + 1, 1);
+        const nextMonthKey = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}`;
+        if (selectedMonthKey === nextMonthKey && selectedDay <= 5) {
+          const secondHalfStart = `${monthKey}-16`;
+          vacationDaysForThisSalary += overlapInclusiveDays(v.start_date, v.end_date, secondHalfStart, monthEnd);
+        }
+
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+    }
+
+    if (vacationDaysForThisSalary <= 0) return null;
+
+    const vacationDeduction = vacationDaysForThisSalary * avgDailyEarnings;
+    const baseAmount = plannedAfterExpensesForSelectedDate ?? salaryAmountForSelectedDate;
+
+    return {
+      vacationDays: vacationDaysForThisSalary,
+      vacationDeduction,
+      baseAmount,
+      amount: baseAmount - vacationDeduction,
+      basedOnPlannedAfterExpenses: plannedAfterExpensesForSelectedDate !== null,
+    };
+  }, [
+    data,
+    selectedDate,
+    salaryAmountForSelectedDate,
+    avgDailyEarnings,
+    plannedAfterExpensesForSelectedDate,
+  ]);
   const selectedDateWeekDay = new Date(selectedDate).getDay(); // 0 = Sunday, 6 = Saturday
   const selectedDateIsWeekend = selectedDateWeekDay === 0 || selectedDateWeekDay === 6;
   const selectedDateDefaultWorking = workSchedule === "5/2" ? !selectedDateIsWeekend : false;
@@ -1452,6 +1522,32 @@ export default function App() {
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 700 }}>
                   {rub(plannedAfterExpensesForSelectedDate)}
+                </div>
+              </div>
+            ) : null}
+
+            {afterVacationForSelectedDate !== null ? (
+              <div
+                key={"after-vacation"}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  border: "1px solid #eee",
+                  borderRadius: 10,
+                  padding: "8px 10px",
+                  background: "#fff9f0",
+                }}
+              >
+                <div style={{ fontSize: 13 }}>
+                  <b>{"After vacation"}</b>
+                  <span style={{ marginLeft: 8, opacity: 0.75 }}>
+                    {`(-${rub(afterVacationForSelectedDate.vacationDeduction)}, ${afterVacationForSelectedDate.vacationDays}d${afterVacationForSelectedDate.basedOnPlannedAfterExpenses ? ", incl. planned" : ""})`}
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>
+                  {rub(afterVacationForSelectedDate.amount)}
                 </div>
               </div>
             ) : null}
