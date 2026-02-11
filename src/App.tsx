@@ -72,9 +72,7 @@ function daysInMonth(year: number, monthIndex0: number) {
 }
 
 export default function App() {
-  type Lang = "en" | "ru";
   const [data, setData] = useState<AppData | null>(null);
-  const [lang, setLang] = useState<Lang>("en");
   const [year, setYear] = useState(new Date().getFullYear());
   const [month0, setMonth0] = useState(new Date().getMonth()); // 0..11
   const [selectedDate, setSelectedDate] = useState(ymd(new Date()));
@@ -91,7 +89,7 @@ export default function App() {
     for (const t of data.transactions) {
       if (t.type !== "expense") continue;
       if (ymFromYmd(t.date) !== monthKey) continue;
-      const category = (t.category || "").trim() || tr("No category", "Без категории");
+      const category = (t.category || "").trim() || "No category";
       byCategory.set(category, (byCategory.get(category) ?? 0) + t.amount);
     }
 
@@ -102,8 +100,7 @@ export default function App() {
 
   const [workSchedule, setWorkSchedule] = useState<'5/2' | 'custom'>('5/2');
   const [vacationDaysCount, setVacationDaysCount] = useState("");
-  const locale = lang === "ru" ? "ru-RU" : "en-US";
-  const tr = (en: string, ru: string) => (lang === "ru" ? ru : en);
+  const locale = "en-US";
   const vacationDaysLeft = useMemo(() => {
     const total = Number.parseInt(vacationDaysCount, 10);
     if (!Number.isFinite(total) || total <= 0) return 0;
@@ -136,7 +133,7 @@ export default function App() {
 
     for (const t of data.transactions) {
       if (ymFromYmd(t.date) !== monthKey) continue;
-      // считаем только операции не позже сегодняшней даты
+      // count only operations up to today
       if (t.date > today) continue;
       if (t.type === "income") inc += t.amount;
       if (t.type === "expense") exp += t.amount;
@@ -150,21 +147,21 @@ export default function App() {
   }, [data, monthKey]);
 
   const avgDailyEarnings = useMemo(() => {
-    // Сумма зарплат/авансов за последние 12 месяцев, делённая на число отработанных дней
-    // (исключаем выходные, отпуска и пользовательские нерабочие дни)
+    // Salary/advance sum for the last 12 months divided by worked days
+    // (excluding weekends, vacations, and user-defined non-working days)
     if (!data) return 0;
     const end = new Date(today);
     const start = new Date(end);
     start.setFullYear(start.getFullYear() - 1);
 
-    // Суммируем все зарплатные события в диапазоне
+    // Sum all salary events in range
     let total = 0;
     for (const s of data.salaryEvents ?? []) {
       const sd = new Date(s.date);
       if (sd >= start && sd <= end) total += s.amount;
     }
 
-    // Считаем количество рабочих дней в диапазоне
+    // Count worked days in range
     const vacations = data.vacations ?? [];
     const offDays = data.offDays ?? [];
     let workedDays = 0;
@@ -173,7 +170,7 @@ export default function App() {
       const y = ymd(d);
       const day = d.getDay(); // 0 = Sun, 6 = Sat
 
-      // исключаем отпуска в любом случае
+      // always exclude vacation days
       let inVacation = false;
       for (const v of vacations) {
         if (v.start_date <= y && y <= v.end_date) {
@@ -186,32 +183,27 @@ export default function App() {
       const off = offDays.find(o => o.date === y) ?? null;
 
       if (day === 0 || day === 6) {
-        // Выходной по календарю: учитываем только если явно помечен как рабочий
+        // Weekend by calendar: count only when explicitly marked as working
         if (off && off.is_working) {
           workedDays++;
         } else {
           continue;
         }
       } else {
-        // Рабочий день по календарю: исключаем только если явно помечен как нерабочий
+        // Weekday by calendar: exclude only when explicitly marked as non-working
         if (off && !off.is_working) continue;
         workedDays++;
       }
     }
 
     if (workedDays === 0) return 0;
-    // Возвращаем средний в копейках
+    // Return average in kopecks
     return Math.round(total / workedDays);
   }, [data, today]);
 
   useEffect(() => {
     api.getData().then(setData);
   }, []);
-
-  useEffect(() => {
-    const saved = data?.settings?.language;
-    if (saved === "ru" || saved === "en") setLang(saved);
-  }, [data?.settings?.language]);
 
   useEffect(() => {
     api.calcDailyBudget(today).then(setBudget);
@@ -227,7 +219,7 @@ export default function App() {
     return out;
   }, [year, month0]);
 
-  // Формируем ячейки для сетки: делаем так, чтобы неделя начиналась с понедельника и заканчивалась воскресеньем
+  // Build calendar grid cells so weeks start on Monday and end on Sunday
   const firstDayJs = new Date(year, month0, 1).getDay(); // 0 = Sun .. 6 = Sat
   const leadingEmpty = (firstDayJs + 6) % 7; // convert to Mon=0..Sun=6
   const totalCells = leadingEmpty + monthDays.length;
@@ -248,7 +240,7 @@ export default function App() {
       map.set(t.date, cur);
     }
 
-    // Добавляем зарплатные события как доход того дня
+    // Add salary events as income for each day
     for (const s of data.salaryEvents ?? []) {
       const cur = map.get(s.date) ?? { inc: 0, exp: 0 };
       cur.inc += s.amount;
@@ -458,15 +450,15 @@ export default function App() {
     const fromData = data?.settings?.txCategories ?? [];
     return fromData.length > 0
       ? fromData
-      : [tr("Groceries", "Продукты"), tr("Fuel", "Бензин")];
-  }, [data, lang]);
+      : ["Groceries", "Fuel"];
+  }, [data]);
 
   const incomeCategories = useMemo(() => {
     const defaults = [
-      tr("Salary", "Зарплата"),
-      tr("Advance", "Аванс"),
-      tr("Side job", "Подработка"),
-      tr("Cashback", "Кэшбэк"),
+      "Salary",
+      "Advance",
+      "Side job",
+      "Cashback",
     ];
     const fromTx = (data?.transactions ?? [])
       .filter((t) => t.type === "income")
@@ -474,15 +466,15 @@ export default function App() {
       .filter((c) => c.length > 0);
 
     return Array.from(new Set([...defaults, ...fromTx]));
-  }, [data, lang]);
+  }, [data]);
 
   const expenseCategoriesWithDebt = useMemo(() => {
-    const debtCategory = tr("Debt", "Долг");
+    const debtCategory = "Debt";
     if (expenseCategories.some((c) => normalizeCategoryInput(c).toLowerCase() === normalizeCategoryInput(debtCategory).toLowerCase())) {
       return expenseCategories;
     }
     return [...expenseCategories, debtCategory];
-  }, [expenseCategories, lang]);
+  }, [expenseCategories]);
 
   const activeTxCategories = txModalType === "income" ? incomeCategories : expenseCategoriesWithDebt;
 
@@ -521,9 +513,9 @@ export default function App() {
   }
 
   function txModalTitle(type: "income" | "expense" | "planned_expense") {
-    if (type === "income") return tr("Add income", "Добавить доход");
-    if (type === "planned_expense") return tr("Add planned expense", "Добавить запланированный расход");
-    return tr("Add expense", "Добавить расход");
+    if (type === "income") return "Add income";
+    if (type === "planned_expense") return "Add planned expense";
+    return "Add expense";
   }
 
   function openTxModal(type: "income" | "expense" | "planned_expense", date: string) {
@@ -547,8 +539,7 @@ export default function App() {
   function isDebtCategory(categoryRaw: string) {
     const normalized = normalizeCategoryInput(categoryRaw).toLowerCase();
     const en = normalizeCategoryInput("Debt").toLowerCase();
-    const ru = normalizeCategoryInput("Долг").toLowerCase();
-    return normalized === en || normalized === ru;
+    return normalized === en;
   }
 
   async function submitTxModal() {
@@ -642,19 +633,19 @@ export default function App() {
   function openSalaryModal(date: string) {
     setSalaryModalDate(date);
     setSalaryModalAmount("");
-    setSalaryModalTitle(tr("Salary", "Зарплата"));
+    setSalaryModalTitle("Salary");
     setSalaryModalOpen(true);
   }
 
   function closeSalaryModal() {
     setSalaryModalOpen(false);
     setSalaryModalAmount("");
-    setSalaryModalTitle(tr("Salary", "Зарплата"));
+    setSalaryModalTitle("Salary");
   }
 
   async function submitSalaryModal() {
     const amount = toKop(salaryModalAmount);
-    const title = salaryModalTitle.trim() || tr("Salary", "Зарплата");
+    const title = salaryModalTitle.trim() || "Salary";
     if (amount <= 0) return;
 
     try {
@@ -698,17 +689,17 @@ export default function App() {
     const end = startDate <= endDate ? endDate : startDate;
     setVacationModalStart(start);
     setVacationModalEnd(end);
-    setVacationModalTitle(tr("Vacation", "Отпуск"));
+    setVacationModalTitle("Vacation");
     setVacationModalOpen(true);
   }
 
   function closeVacationModal() {
     setVacationModalOpen(false);
-    setVacationModalTitle(tr("Vacation", "Отпуск"));
+    setVacationModalTitle("Vacation");
   }
 
   async function submitVacationModal() {
-    const title = vacationModalTitle.trim() || tr("Vacation", "Отпуск");
+    const title = vacationModalTitle.trim() || "Vacation";
 
     try {
       const updated = await api.upsertVacation({
@@ -790,11 +781,11 @@ export default function App() {
       const dir = await open({
         directory: true,
         multiple: false,
-        title: tr("Select backup folder", "Выберите папку для бэкапа"),
+        title: "Select backup folder",
       });
       if (!dir || Array.isArray(dir)) return;
       const savedPath = await api.saveBackupToDir(String(dir), `sadmoney-backup-${ts}.json`);
-      alert(`${tr("Backup saved", "Бэкап сохранён")}: ${savedPath}`);
+      alert(`${"Backup saved"}: ${savedPath}`);
     } catch (err) {
       alert(String(err));
     }
@@ -805,15 +796,15 @@ export default function App() {
       const path = await open({
         directory: false,
         multiple: false,
-        title: tr("Select backup file", "Выберите файл бэкапа"),
+        title: "Select backup file",
         filters: [{ name: "JSON", extensions: ["json"] }],
       });
       if (!path || Array.isArray(path)) return;
       const updated = await api.importBackupFromPath(String(path));
       setData(updated);
-      alert(tr("Backup imported", "Бэкап импортирован"));
+      alert("Backup imported");
     } catch (err) {
-      alert(`${tr("Failed to import backup", "Не удалось импортировать бэкап")}: ${String(err)}`);
+      alert(`${"Failed to import backup"}: ${String(err)}`);
     }
   }
 
@@ -824,32 +815,22 @@ export default function App() {
     try {
       const update = await check();
       if (!update) {
-        alert(tr("No updates found", "Обновлений не найдено"));
+        alert("No updates found");
         return;
       }
 
       await update.downloadAndInstall();
-      const shouldRelaunch = window.confirm(tr("Update downloaded. Restart to apply it?", "Обновление скачано. Перезапустить для обновления?"));
+      const shouldRelaunch = window.confirm("Update downloaded. Restart to apply it?");
       if (shouldRelaunch) {
         await relaunch();
       }
     } catch (err) {
-      alert(`${tr("Failed to check updates", "Не удалось проверить обновления")}: ${String(err)}`);
+      alert(`${"Failed to check updates"}: ${String(err)}`);
     } finally {
       setIsCheckingUpdates(false);
     }
   }
 
-  
-  async function changeLanguage(next: Lang) {
-    setLang(next);
-    try {
-      const updated = await api.setLanguage(next);
-      setData(updated);
-    } catch (err) {
-      alert(`${tr("Failed to change language", "Не удалось сменить язык")}: ${String(err)}`);
-    }
-  }
   function prevMonth() {
     const d = new Date(year, month0, 1);
     d.setMonth(d.getMonth() - 1);
@@ -920,7 +901,7 @@ export default function App() {
                   setSettingsMenuOpen(false);
                 }}
               >
-                {tr("Export backup", "Экспорт бэкапа")}
+                {"Export backup"}
               </button>
               <button
                 onClick={async () => {
@@ -928,20 +909,8 @@ export default function App() {
                   setSettingsMenuOpen(false);
                 }}
               >
-                {tr("Import backup", "Импорт бэкапа")}
+                {"Import backup"}
               </button>
-              <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "4px 2px" }}>
-                <span style={{ fontSize: 12, opacity: 0.85 }}>{tr("Language", "Язык")}</span>
-                <select
-                  value={lang}
-                  onChange={async (e) => {
-                    await changeLanguage(e.target.value as Lang);
-                  }}
-                >
-                  <option value="en">English</option>
-                  <option value="ru">Русский</option>
-                </select>
-              </label>
               <button
                 onClick={async () => {
                   setSettingsMenuOpen(false);
@@ -949,10 +918,10 @@ export default function App() {
                 }}
                 disabled={isCheckingUpdates}
               >
-                {isCheckingUpdates ? tr("Checking updates...", "Проверяем обновления...") : tr("Check for updates", "Проверить обновления")}
+                {isCheckingUpdates ? "Checking updates..." : "Check for updates"}
               </button>
               <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                {tr("Version", "Версия")}: {appVersion}
+                {"Version"}: {appVersion}
               </div>
             </div>
           ) : null}
@@ -961,11 +930,11 @@ export default function App() {
 
       <div style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 380px", minWidth: 320 }}>
-          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{tr("Received this month (as of today):", "Получено в этом месяце (на сегодня):")}</b> {rub(monthTotals.inc)}</div>
-          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{tr("Spent this month (as of today):", "Потрачено в этом месяце (на сегодня):")}</b> {rub(monthTotals.exp)}</div>
-          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{tr("Average daily earnings:", "Среднедневной заработок:")}</b> {rub(avgDailyEarnings)}</div>
+          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Received this month (as of today):"}</b> {rub(monthTotals.inc)}</div>
+          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Spent this month (as of today):"}</b> {rub(monthTotals.exp)}</div>
+          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Average daily earnings:"}</b> {rub(avgDailyEarnings)}</div>
           <div style={{ opacity: 0.8 }}>
-            <b>{tr("Today:", "Сегодня:")}</b>{" "}
+            <b>{"Today:"}</b>{" "}
             {new Date().toLocaleDateString(locale, { day: "2-digit", month: "long", year: "numeric" })}
             <button
               style={{ marginLeft: 12 }}
@@ -976,7 +945,7 @@ export default function App() {
                 setSelectedDate(ymd(d));
               }}
             >
-              {tr("Go to today", "Перейти к сегодня")}
+              {"Go to today"}
             </button>
           </div>
           <div
@@ -991,7 +960,7 @@ export default function App() {
               background: "#f8f8f8",
             }}
           >
-            <span style={{ fontSize: 12, opacity: 0.9 }}>{tr("Vacation days count", "Кол-во дней отпуска")}</span>
+            <span style={{ fontSize: 12, opacity: 0.9 }}>{"Vacation days count"}</span>
             <input
               type="number"
               min={0}
@@ -1007,150 +976,28 @@ export default function App() {
               }}
             />
             <span style={{ fontSize: 12, opacity: 0.9, whiteSpace: "nowrap" }}>
-              {tr("Days Left", "Осталось дней")}: <b>{vacationDaysLeft}</b>
+              {"Days Left"}: <b>{vacationDaysLeft}</b>
             </span>
           </div>
         </div>
 
-        <div style={{ flex: "0 0 auto", marginLeft: "auto", textAlign: "right" }}>
-          <label style={{ opacity: 0.85 }}>
-            <b>{tr("Work schedule:", "График работы:")}</b>{" "}
-            <select
-              value={workSchedule}
-              onChange={async (e) => {
-                const next = e.target.value as "5/2" | "custom";
-                if (next === "5/2") {
-                  await saveFiveTwoSchedule();
-                }
-                setWorkSchedule(next);
-                if (next === "custom") {
-                  beginCustomSchedulePick();
-                } else {
-                  cancelCustomSchedulePick();
-                }
-              }}
-            >
-              <option value="5/2">5/2</option>
-              <option value="custom">{tr("Custom", "Кастомный")}</option>
-            </select>
-          </label>
-          {isPickingCustomWorkDays ? (
-            <div style={{ marginTop: 8, display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={saveCustomSchedule}>{tr("Exit", "Выйти")}</button>
-              <button onClick={saveCustomSchedule}>{tr("Save", "Сохранить")}</button>
-            </div>
-          ) : null}
-          {isPickingCustomWorkDays ? (
-            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-              {tr("Mark working days in the calendar", "Отметьте рабочие дни в календаре")}
-            </div>
-          ) : null}
-        </div>
-      </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-          gap: 12,
-          marginBottom: 12,
-          alignItems: "start",
-        }}
-      >
         <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <b>{tr("Debts", "Долги")}</b>
-            <button
-              onClick={() => openDebtModal()}
-              title={tr("Add debt", "Добавить долг")}
-              aria-label={tr("Add debt", "Добавить долг")}
-              style={{ minWidth: 28, fontWeight: 700 }}
-            >
-              +
-            </button>
-          </div>
-          <div style={{ fontSize: 12, marginBottom: 6 }}>
-            <b>{tr("Total:", "Итого:")}</b> {rub(totalDebt)}
-          </div>
-          {debts.length > 0 ? (
-            <div
-              style={{
-                marginTop: 8,
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
-                maxHeight: 120,
-                overflowY: "auto",
-                paddingRight: 4,
-              }}
-            >
-              {debts.map((d) => (
-                <div
-                  key={d.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 10,
-                    border: "1px solid #eee",
-                    borderRadius: 8,
-                    padding: "6px 8px",
-                    fontSize: 12,
-                  }}
-                >
-                  <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    <b>{d.person}</b>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ flexShrink: 0 }}>
-                      <b>{rub(d.amount)}</b>
-                    </div>
-                    <button
-                      title={tr("Edit debt", "Редактировать долг")}
-                      aria-label={tr("Edit debt", "Редактировать долг")}
-                      style={{ color: "#444", fontWeight: 700 }}
-                      onClick={() => openDebtModal(d)}
-                    >
-                      ✎
-                    </button>
-                    <button
-                      title={tr("Delete debt", "Удалить долг")}
-                      aria-label={tr("Delete debt", "Удалить долг")}
-                      style={{ color: "#c51616", fontWeight: 700 }}
-                      onClick={async () => {
-                        const updated = await api.deleteDebt(d.id);
-                        setData(updated);
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
-              {tr("No debts yet.", "Пока нет долгов.")}
-            </div>
-          )}
-        </div>
-
-        <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <b>{tr("Vacations this month", "Отпуска в этом месяце")}</b>
+            <b>{"Vacations this month"}</b>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {isPickingVacationStart ? (
-                <span style={{ fontSize: 12, opacity: 0.8 }}>{tr("Pick a start date in the calendar", "Выберите дату начала в календаре")}</span>
+                <span style={{ fontSize: 12, opacity: 0.8 }}>{"Pick a start date in the calendar"}</span>
               ) : null}
               {isPickingVacationEnd ? (
-                <span style={{ fontSize: 12, opacity: 0.8 }}>{tr("Pick an end date in the calendar", "Выберите дату окончания в календаре")}</span>
+                <span style={{ fontSize: 12, opacity: 0.8 }}>{"Pick an end date in the calendar"}</span>
               ) : null}
               {(isPickingVacationStart || isPickingVacationEnd) ? (
-                <button onClick={cancelVacationPicking}>{tr("Cancel", "Отмена")}</button>
+                <button onClick={cancelVacationPicking}>{"Cancel"}</button>
               ) : null}
               <button
                 onClick={beginAddVacation}
-                title={tr("Add vacation", "Добавить отпуск")}
-                aria-label={tr("Add vacation", "Добавить отпуск")}
+                title={"Add vacation"}
+                aria-label={"Add vacation"}
                 style={{ minWidth: 28, fontWeight: 700 }}
               >
                 +
@@ -1190,13 +1037,13 @@ export default function App() {
 
                     <div style={{ display: "flex", gap: 6 }}>
                       <button
-                        title={tr("Edit vacation", "Редактировать отпуск")}
-                        aria-label={tr("Edit vacation", "Редактировать отпуск")}
+                        title={"Edit vacation"}
+                        aria-label={"Edit vacation"}
                         style={{ color: "#444", fontWeight: 700 }}
                         onClick={async () => {
-                          const newStart = prompt(tr("Start date (YYYY-MM-DD):", "Дата начала (YYYY-MM-DD):"), v.start_date) ?? v.start_date;
-                          const newEnd = prompt(tr("End date (YYYY-MM-DD):", "Дата окончания (YYYY-MM-DD):"), v.end_date) ?? v.end_date;
-                          const newTitle = prompt(tr("Title:", "Название:"), v.title) ?? v.title;
+                          const newStart = prompt("Start date (YYYY-MM-DD):", v.start_date) ?? v.start_date;
+                          const newEnd = prompt("End date (YYYY-MM-DD):", v.end_date) ?? v.end_date;
+                          const newTitle = prompt("Title:", v.title) ?? v.title;
 
                           const updated = await api.upsertVacation({
                             ...v,
@@ -1210,8 +1057,8 @@ export default function App() {
                         ✎
                       </button>
                       <button
-                        title={tr("Delete vacation", "Удалить отпуск")}
-                        aria-label={tr("Delete vacation", "Удалить отпуск")}
+                        title={"Delete vacation"}
+                        aria-label={"Delete vacation"}
                         style={{ color: "#c51616", fontWeight: 700 }}
                         onClick={async () => {
                           const updated = await api.deleteVacation(v.id);
@@ -1230,18 +1077,18 @@ export default function App() {
         </div>
         <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <b>{tr("Salaries this month", "Зарплаты в этом месяце")}</b>
+            <b>{"Salaries this month"}</b>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {isPickingSalaryDate ? (
-                <span style={{ fontSize: 12, opacity: 0.8 }}>{tr("Pick a date in the calendar", "Выберите дату в календаре")}</span>
+                <span style={{ fontSize: 12, opacity: 0.8 }}>{"Pick a date in the calendar"}</span>
               ) : null}
               {isPickingSalaryDate ? (
-                <button onClick={() => setIsPickingSalaryDate(false)}>{tr("Cancel", "Отмена")}</button>
+                <button onClick={() => setIsPickingSalaryDate(false)}>{"Cancel"}</button>
               ) : null}
               <button
                 onClick={beginAddSalary}
-                title={tr("Add salary", "Добавить зарплату")}
-                aria-label={tr("Add salary", "Добавить зарплату")}
+                title={"Add salary"}
+                aria-label={"Add salary"}
                 style={{ minWidth: 28, fontWeight: 700 }}
               >
                 +
@@ -1272,13 +1119,13 @@ export default function App() {
 
                   <div style={{ display: "flex", gap: 6 }}>
                     <button
-                      title={tr("Edit salary", "Редактировать зарплату")}
-                      aria-label={tr("Edit salary", "Редактировать зарплату")}
+                      title={"Edit salary"}
+                      aria-label={"Edit salary"}
                       style={{ color: "#444", fontWeight: 700 }}
                       onClick={async () => {
-                        const newDate = prompt(tr("Date (YYYY-MM-DD):", "Дата (YYYY-MM-DD):"), s.date) ?? s.date;
-                        const newAmountStr = prompt(tr("Amount (RUB):", "Сумма (руб):"), String(s.amount / 100)) ?? String(s.amount / 100);
-                        const newTitle = prompt(tr("Title:", "Название:"), s.title) ?? s.title;
+                        const newDate = prompt("Date (YYYY-MM-DD):", s.date) ?? s.date;
+                        const newAmountStr = prompt("Amount (RUB):", String(s.amount / 100)) ?? String(s.amount / 100);
+                        const newTitle = prompt("Title:", s.title) ?? s.title;
 
                         const updated = await api.upsertSalaryEvent({
                           ...s,
@@ -1293,11 +1140,11 @@ export default function App() {
                     </button>
 
                     <button
-                      title={tr("Delete salary", "Удалить зарплату")}
-                      aria-label={tr("Delete salary", "Удалить зарплату")}
+                      title={"Delete salary"}
+                      aria-label={"Delete salary"}
                       style={{ color: "#c51616", fontWeight: 700 }}
                       onClick={async () => {
-                        if (!confirm(tr("Delete salary date?", "Удалить зарплатную дату?"))) return;
+                        if (!confirm("Delete salary date?")) return;
                         const updated = await api.deleteSalaryEvent(s.id);
                         setData(updated);
                       }}
@@ -1310,10 +1157,132 @@ export default function App() {
             </div>
           )}
         </div>
+        <div style={{ flex: "0 0 auto", marginLeft: "auto", textAlign: "right" }}>
+          <label style={{ opacity: 0.85 }}>
+            <b>{"Work schedule:"}</b>{" "}
+            <select
+              value={workSchedule}
+              onChange={async (e) => {
+                const next = e.target.value as "5/2" | "custom";
+                if (next === "5/2") {
+                  await saveFiveTwoSchedule();
+                }
+                setWorkSchedule(next);
+                if (next === "custom") {
+                  beginCustomSchedulePick();
+                } else {
+                  cancelCustomSchedulePick();
+                }
+              }}
+            >
+              <option value="5/2">5/2</option>
+              <option value="custom">{"Custom"}</option>
+            </select>
+          </label>
+          {isPickingCustomWorkDays ? (
+            <div style={{ marginTop: 8, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={saveCustomSchedule}>{"Exit"}</button>
+              <button onClick={saveCustomSchedule}>{"Save"}</button>
+            </div>
+          ) : null}
+          {isPickingCustomWorkDays ? (
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
+              {"Mark working days in the calendar"}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 12,
+          marginBottom: 12,
+          alignItems: "start",
+        }}
+      >
+        <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <b>{"Debts"}</b>
+            <button
+              onClick={() => openDebtModal()}
+              title={"Add debt"}
+              aria-label={"Add debt"}
+              style={{ minWidth: 28, fontWeight: 700 }}
+            >
+              +
+            </button>
+          </div>
+          <div style={{ fontSize: 12, marginBottom: 6 }}>
+            <b>{"Total:"}</b> {rub(totalDebt)}
+          </div>
+          {debts.length > 0 ? (
+            <div
+              style={{
+                marginTop: 8,
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                maxHeight: 120,
+                overflowY: "auto",
+                paddingRight: 4,
+              }}
+            >
+              {debts.map((d) => (
+                <div
+                  key={d.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
+                    border: "1px solid #eee",
+                    borderRadius: 8,
+                    padding: "6px 8px",
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <b>{d.person}</b>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flexShrink: 0 }}>
+                      <b>{rub(d.amount)}</b>
+                    </div>
+                    <button
+                      title={"Edit debt"}
+                      aria-label={"Edit debt"}
+                      style={{ color: "#444", fontWeight: 700 }}
+                      onClick={() => openDebtModal(d)}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      title={"Delete debt"}
+                      aria-label={"Delete debt"}
+                      style={{ color: "#c51616", fontWeight: 700 }}
+                      onClick={async () => {
+                        const updated = await api.deleteDebt(d.id);
+                        setData(updated);
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
+              {"No debts yet."}
+            </div>
+          )}
+        </div>
+
 
         <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <b>{tr("Top categories this month", "Топ категорий за месяц")}</b>
+            <b>{"Top categories this month"}</b>
           </div>
 
           {topExpenseCategoriesThisMonth.length > 0 ? (
@@ -1353,7 +1322,7 @@ export default function App() {
             </div>
           ) : (
             <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
-              {tr("No category expenses yet this month.", "В этом месяце пока нет расходов по категориям.")}
+              {"No category expenses yet this month."}
             </div>
           )}
         </div>
@@ -1389,7 +1358,7 @@ export default function App() {
           }}
         >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div><b>{tr("Selected date:", "Выбранная дата:")}</b> {selectedDate}</div>
+          <div><b>{"Selected date:"}</b> {selectedDate}</div>
           <div
             style={{
               fontSize: 12,
@@ -1400,25 +1369,25 @@ export default function App() {
               background: vacationForSelectedDate ? "rgba(255, 223, 99, 0.25)" : (selectedDateIsWorking ? "rgba(30, 160, 90, 0.10)" : "rgba(210, 20, 20, 0.08)"),
             }}
           >
-            {vacationForSelectedDate ? tr("Vacation", "Отпуск") : (selectedDateIsWorking ? tr("Working", "Рабочий") : tr("Day off", "Выходной"))}
+            {vacationForSelectedDate ? "Vacation" : (selectedDateIsWorking ? "Working" : "Day off")}
           </div>
         </div>
         {budget && (
           <>
-            <div><b>{tr("Until next salary:", "До следующей зарплаты:")}</b> {budget.next_salary_date ? (() => {
+            <div><b>{"Until next salary:"}</b> {budget.next_salary_date ? (() => {
             const nd = new Date(budget.next_salary_date);
             const td = new Date();
             const nd0 = new Date(nd.getFullYear(), nd.getMonth(), nd.getDate());
             const td0 = new Date(td.getFullYear(), td.getMonth(), td.getDate());
             const diff = Math.round((nd0.getTime() - td0.getTime()) / (1000 * 60 * 60 * 24));
-            return diff >= 0 ? `${diff} ${tr("days", "дн.")}` : `0 ${tr("days", "дн.")}`;
-          })() : tr("not set", "не задана")}</div>
-            <div><b>{tr("Available:", "Доступно:")}</b> {rub(budget.available)}</div>
-            <div><b>{tr("Daily spend limit:", "Можно тратить в день:")}</b> {rub(budget.per_day)}</div>
+            return diff >= 0 ? `${diff} ${"days"}` : `0 ${"days"}`;
+          })() : "not set"}</div>
+            <div><b>{"Available:"}</b> {rub(budget.available)}</div>
+            <div><b>{"Daily spend limit:"}</b> {rub(budget.per_day)}</div>
           </>
         )}
         <div style={{ marginTop: 12, flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <b>{tr("Transactions for", "Операции за")} {selectedDate}:</b>
+          <b>{"Transactions for"} {selectedDate}:</b>
 
           <div
             style={{
@@ -1470,7 +1439,7 @@ export default function App() {
                 }}
               >
                 <div style={{ fontSize: 13 }}>
-                  <b>{tr("After planned expenses", "После запланированных расходов")}</b>
+                  <b>{"After planned expenses"}</b>
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 700 }}>
                   {rub(plannedAfterExpensesForSelectedDate)}
@@ -1498,11 +1467,11 @@ export default function App() {
                         <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "⏳" : "-"}</b> {rub(t.amount)} — {t.category}
                         {t.debt_person ? (
                           <span style={{ marginLeft: 6, fontSize: 12, opacity: 0.75 }}>
-                            {tr("to", "кому")}: {t.debt_person}
+                            {"to"}: {t.debt_person}
                           </span>
                         ) : null}
                         {t.type === "planned_expense" ? (
-                          <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>{tr("(planned)", "(запланировано)")}</span>
+                          <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>{"(planned)"}</span>
                         ) : null}
                       </div>
                       {t.note ? <div style={{ fontSize: 12, opacity: 0.7 }}>{t.note}</div> : null}
@@ -1511,8 +1480,8 @@ export default function App() {
                     <div style={{ display: "flex", gap: 8 }}>
                       {t.type === "planned_expense" ? (
                         <button
-                          title={tr("Paid", "Оплачено")}
-                          aria-label={tr("Paid", "Оплачено")}
+                          title={"Paid"}
+                          aria-label={"Paid"}
                           style={{ color: "#138a36", fontWeight: 700 }}
                           onClick={async () => {
                             const updated = await api.updateTransaction({
@@ -1526,17 +1495,17 @@ export default function App() {
                         </button>
                       ) : null}
                       <button
-                        title={tr("Edit", "Редактировать")}
-                        aria-label={tr("Edit", "Редактировать")}
+                        title={"Edit"}
+                        aria-label={"Edit"}
                         style={{ color: "#444", fontWeight: 700 }}
                         onClick={async () => {
                           if (!data) return;
 
-                          const newAmountStr = prompt(tr("New amount (RUB):", "Новая сумма (руб):"), String(t.amount / 100));
+                          const newAmountStr = prompt("New amount (RUB):", String(t.amount / 100));
                           if (!newAmountStr) return;
 
-                          const newCategory = prompt(tr("Category:", "Категория:"), t.category) ?? t.category;
-                          const newNote = prompt(tr("Comment:", "Комментарий:"), t.note) ?? t.note;
+                          const newCategory = prompt("Category:", t.category) ?? t.category;
+                          const newNote = prompt("Comment:", t.note) ?? t.note;
 
                           const updated = await api.updateTransaction({
                             ...t,
@@ -1551,8 +1520,8 @@ export default function App() {
                       </button>
 
                       <button
-                        title={tr("Delete", "Удалить")}
-                        aria-label={tr("Delete", "Удалить")}
+                        title={"Delete"}
+                        aria-label={"Delete"}
                         style={{ color: "#c51616", fontWeight: 700 }}
                         onClick={async () => {
                           const updated = await api.deleteTransaction(t.id);
@@ -1693,7 +1662,7 @@ export default function App() {
               {!isCalendarPickerFocus ? (
               <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 10 }} data-day-menu="true">
                 <button
-                  aria-label={tr("Menu", "Меню")}
+                  aria-label={"Menu"}
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedDate(d);
@@ -1731,7 +1700,7 @@ export default function App() {
                         setDayMenuOpen(null);
                       }}
                     >
-                      {tr("Add income", "Добавить доход")}
+                      {"Add income"}
                     </button>
                     {!isFutureDate ? (
                       <button
@@ -1741,7 +1710,7 @@ export default function App() {
                           setDayMenuOpen(null);
                         }}
                       >
-                        {tr("Add expense", "Добавить расход")}
+                        {"Add expense"}
                       </button>
                     ) : null}
                     <button
@@ -1751,7 +1720,7 @@ export default function App() {
                         setDayMenuOpen(null);
                       }}
                     >
-                      {tr("Planned expense", "Запланированный расход")}
+                      {"Planned expense"}
                     </button>
                     <div style={{ height: 1, background: "#eee", margin: "4px 0" }} />
                     <button
@@ -1792,7 +1761,7 @@ export default function App() {
                         setDayMenuOpen(null);
                       }}
                     >
-                      {effectiveWorking ? tr("Mark as day off", "Установить как выходной") : tr("Mark as working", "Установить как рабочий")}
+                      {effectiveWorking ? "Mark as day off" : "Mark as working"}
                     </button>
                   </div>
                 ) : null}
@@ -1863,12 +1832,12 @@ export default function App() {
               <b style={{ fontSize: 14 }}>
                 {txModalTitle(txModalType)} — {txModalDate}
               </b>
-              <button onClick={closeTxModal} aria-label={tr("Close", "Закрыть")}>✕</button>
+              <button onClick={closeTxModal} aria-label={"Close"}>✕</button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("Amount (RUB)", "Сумма (руб)")}</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
                 <input
                   value={txModalAmount}
                   onChange={(e) => setTxModalAmount(e.target.value)}
@@ -1879,20 +1848,20 @@ export default function App() {
               </div>
 
               <div style={{ minWidth: 0 }} data-tx-category="true">
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("Category", "Категория")}</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Category"}</div>
                 <div style={{ position: "relative" }}>
                   <div style={{ display: "flex", gap: 8 }}>
                     <input
                       value={txModalCategory}
                       onChange={(e) => setTxModalCategory(e.target.value)}
                       onFocus={() => setTxCategoryMenuOpen(true)}
-                      placeholder={txModalType === "income" ? tr("e.g. Salary", "Например: Зарплата") : tr("e.g. Groceries", "Например: Продукты")}
+                      placeholder={txModalType === "income" ? "e.g. Salary" : "e.g. Groceries"}
                       style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                     />
                     <button
                       type="button"
                       onClick={() => setTxCategoryMenuOpen((v) => !v)}
-                      aria-label={tr("Show category list", "Показать список категорий")}
+                      aria-label={"Show category list"}
                     >▾</button>
                   </div>
 
@@ -1941,13 +1910,13 @@ export default function App() {
               </div>
               {txModalType === "expense" && isDebtCategory(txModalCategory) ? (
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("To whom", "Кому")}</div>
+                  <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"To whom"}</div>
                   <select
                     value={txModalDebtPerson}
                     onChange={(e) => setTxModalDebtPerson(e.target.value)}
                     style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                   >
-                    <option value="">{tr("Select person", "Выберите человека")}</option>
+                    <option value="">{"Select person"}</option>
                     {debtPeople.map((person) => (
                       <option key={person} value={person}>
                         {person}
@@ -1956,7 +1925,7 @@ export default function App() {
                   </select>
                   {debtPeople.length === 0 ? (
                     <div style={{ marginTop: 4, fontSize: 11, opacity: 0.75 }}>
-                      {tr("Add a debt in the Debts card first.", "Сначала добавьте долг в плашке «Долги».")}
+                      {"Add a debt in the Debts card first."}
                     </div>
                   ) : null}
                 </div>
@@ -1964,7 +1933,7 @@ export default function App() {
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-              <button onClick={closeTxModal}>{tr("Cancel", "Отмена")}</button>
+              <button onClick={closeTxModal}>{"Cancel"}</button>
               <button onClick={submitTxModal}>{txModalTitle(txModalType)}</button>
             </div>
           </div>
@@ -2000,14 +1969,14 @@ export default function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>
-                {debtModalEditId ? tr("Edit debt", "Редактировать долг") : tr("Add debt", "Добавить долг")}
+                {debtModalEditId ? "Edit debt" : "Add debt"}
               </b>
-              <button onClick={closeDebtModal} aria-label={tr("Close", "Закрыть")}>✕</button>
+              <button onClick={closeDebtModal} aria-label={"Close"}>✕</button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
               <div>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("Amount (RUB)", "Сумма (руб)")}</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
                 <input
                   value={debtModalAmount}
                   onChange={(e) => setDebtModalAmount(e.target.value)}
@@ -2017,20 +1986,20 @@ export default function App() {
                 />
               </div>
               <div>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("To whom you owe", "Кому должен")}</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"To whom you owe"}</div>
                 <input
                   value={debtModalPerson}
                   onChange={(e) => setDebtModalPerson(e.target.value)}
-                  placeholder={tr("e.g. Ivan", "Например: Иван")}
+                  placeholder={"e.g. Ivan"}
                   style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                 />
               </div>
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-              <button onClick={closeDebtModal}>{tr("Cancel", "Отмена")}</button>
+              <button onClick={closeDebtModal}>{"Cancel"}</button>
               <button onClick={submitDebtModal}>
-                {debtModalEditId ? tr("Save", "Сохранить") : tr("Add debt", "Добавить долг")}
+                {debtModalEditId ? "Save" : "Add debt"}
               </button>
             </div>
           </div>
@@ -2066,26 +2035,26 @@ export default function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>
-                {tr("Add vacation", "Добавить отпуск")} - {vacationModalStart} {"->"} {vacationModalEnd}
+                {"Add vacation"} - {vacationModalStart} {"->"} {vacationModalEnd}
               </b>
-              <button onClick={closeVacationModal} aria-label={tr("Close", "Закрыть")}>✕</button>
+              <button onClick={closeVacationModal} aria-label={"Close"}>✕</button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("Title", "Название")}</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Title"}</div>
                 <input
                   value={vacationModalTitle}
                   onChange={(e) => setVacationModalTitle(e.target.value)}
-                  placeholder={tr("Vacation", "Отпуск")}
+                  placeholder={"Vacation"}
                   style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                 />
               </div>
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-              <button onClick={closeVacationModal}>{tr("Cancel", "Отмена")}</button>
-              <button onClick={submitVacationModal}>{tr("Add vacation", "Добавить отпуск")}</button>
+              <button onClick={closeVacationModal}>{"Cancel"}</button>
+              <button onClick={submitVacationModal}>{"Add vacation"}</button>
             </div>
           </div>
         </div>
@@ -2120,14 +2089,14 @@ export default function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>
-                {tr("Add salary", "Добавить зарплату")} - {salaryModalDate}
+                {"Add salary"} - {salaryModalDate}
               </b>
-              <button onClick={closeSalaryModal} aria-label={tr("Close", "Закрыть")}>✕</button>
+              <button onClick={closeSalaryModal} aria-label={"Close"}>✕</button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("Amount (RUB)", "Сумма (руб)")}</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
                 <input
                   value={salaryModalAmount}
                   onChange={(e) => setSalaryModalAmount(e.target.value)}
@@ -2138,19 +2107,19 @@ export default function App() {
               </div>
 
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{tr("Title", "Название")}</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Title"}</div>
                 <input
                   value={salaryModalTitle}
                   onChange={(e) => setSalaryModalTitle(e.target.value)}
-                  placeholder={tr("Salary", "Зарплата")}
+                  placeholder={"Salary"}
                   style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                 />
               </div>
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-              <button onClick={closeSalaryModal}>{tr("Cancel", "Отмена")}</button>
-              <button onClick={submitSalaryModal}>{tr("Add salary", "Добавить зарплату")}</button>
+              <button onClick={closeSalaryModal}>{"Cancel"}</button>
+              <button onClick={submitSalaryModal}>{"Add salary"}</button>
             </div>
           </div>
         </div>
