@@ -1700,6 +1700,8 @@ export default function App() {
           const isCustomNonWorking = workSchedule === "custom" && !isPickingCustomWorkDays && !effectiveWorking;
           const tileBackground = isPickingCustomWorkDays
             ? (isCustomMarkedWorking ? "rgba(30, 160, 90, 0.18)" : "transparent")
+            : vacationHighlight
+              ? "rgba(255, 223, 99, 0.25)"
             : isCustomMainView
               ? (isCustomNonWorking ? "rgba(210, 20, 20, 0.10)" : "#fff")
             : isCustomNonWorking
@@ -1708,11 +1710,22 @@ export default function App() {
                 ? "rgba(255, 0, 0, 0.06)"
               : isToday
                 ? "rgba(0, 200, 120, 0.08)"
-              : vacationHighlight
-                ? "rgba(255, 223, 99, 0.25)"
                 : offDayHighlight
                   ? "rgba(255, 0, 0, 0.06)"
                   : "transparent";
+          const dayLabelColor = isPickingCustomWorkDays
+            ? (isCustomMarkedWorking ? "#17653e" : undefined)
+            : vacationHighlight
+              ? "#7a5200"
+            : isCustomMainView
+              ? (isCustomNonWorking ? "#b10000" : undefined)
+            : isCustomNonWorking
+              ? "#b10000"
+            : weekendHighlight
+              ? "#c00"
+            : offDayHighlight
+              ? "#c00"
+            : undefined;
 
           return (
             <div
@@ -1874,8 +1887,8 @@ export default function App() {
               ) : null}
 
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: isCustomMarkedWorking ? 700 : 400, color: isPickingCustomWorkDays ? (isCustomMarkedWorking ? '#17653e' : undefined) : (isCustomMainView ? (isCustomNonWorking ? '#b10000' : undefined) : (isCustomNonWorking ? '#b10000' : (vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#c00' : undefined)))) ) }}>{d.slice(8, 10)}</div>
-                <div style={{ fontSize: 11, opacity: 0.7, color: isPickingCustomWorkDays ? (isCustomMarkedWorking ? '#17653e' : undefined) : (isCustomMainView ? (isCustomNonWorking ? '#b10000' : undefined) : (isCustomNonWorking ? '#b10000' : (vacationHighlight ? '#7a5200' : (weekendHighlight ? '#c00' : (offDayHighlight ? '#c00' : undefined)))) ) }}>{new Date(d).toLocaleDateString(locale, { weekday: "short" })}</div>
+                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: isCustomMarkedWorking ? 700 : 400, color: dayLabelColor }}>{d.slice(8, 10)}</div>
+                <div style={{ fontSize: 11, opacity: 0.7, color: dayLabelColor }}>{new Date(d).toLocaleDateString(locale, { weekday: "short" })}</div>
               </div>
               <div style={{ fontSize: 12 }}>+ {rub(s.inc)}</div>
               <div style={{ fontSize: 12 }}>- {rub(s.exp)}</div>
