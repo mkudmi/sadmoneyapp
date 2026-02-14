@@ -87,6 +87,8 @@ function overlapInclusiveDays(aStart: string, aEnd: string, bStart: string, bEnd
   return inclusiveDays(start, end);
 }
 
+const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
+
 export default function App() {
   const [data, setData] = useState<AppData | null>(null);
   const [year, setYear] = useState(new Date().getFullYear());
@@ -480,6 +482,33 @@ export default function App() {
       .then(setAppVersion)
       .catch(() => setAppVersion("-"));
   }, []);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(VACATION_DAYS_COUNT_STORAGE_KEY);
+      if (stored !== null) {
+        const normalized = String(Math.max(0, Number.parseInt(stored, 10) || 0));
+        setVacationDaysCount(normalized);
+      }
+    } catch (e) {
+      console.error("failed to load vacation days count", e);
+    }
+  }, []);
+
+  function persistVacationDaysCount(rawValue: string) {
+    const normalized = String(Math.max(0, Number.parseInt(rawValue, 10) || 0));
+    setVacationDaysCount(normalized);
+    try {
+      localStorage.setItem(VACATION_DAYS_COUNT_STORAGE_KEY, normalized);
+    } catch (e) {
+      console.error("failed to save vacation days count", e);
+    }
+  }
+
+  function handleVacationDaysCountChange(rawValue: string) {
+    if (!/^\d*$/.test(rawValue)) return;
+    setVacationDaysCount(rawValue);
+  }
 
   function openDayMenu(date: string, anchor: HTMLElement) {
     const menuWidth = 220;
@@ -1041,11 +1070,37 @@ export default function App() {
           >
             <span style={{ fontSize: 12, opacity: 0.9 }}>{"Vacation days count"}</span>
             <input
-              type="number"
-              min={0}
-              step={1}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={vacationDaysCount}
-              onChange={(e) => setVacationDaysCount(e.target.value)}
+              onChange={(e) => handleVacationDaysCountChange(e.target.value)}
+              onBlur={(e) => {
+                if (e.target.value === "") {
+                  try {
+                    localStorage.removeItem(VACATION_DAYS_COUNT_STORAGE_KEY);
+                  } catch (err) {
+                    console.error("failed to clear vacation days count", err);
+                  }
+                  return;
+                }
+                persistVacationDaysCount(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const value = (e.target as HTMLInputElement).value;
+                  if (value === "") {
+                    try {
+                      localStorage.removeItem(VACATION_DAYS_COUNT_STORAGE_KEY);
+                    } catch (err) {
+                      console.error("failed to clear vacation days count", err);
+                    }
+                  } else {
+                    persistVacationDaysCount(value);
+                  }
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
               style={{
                 width: 56,
                 padding: "4px 6px",
