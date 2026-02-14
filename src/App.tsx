@@ -1478,6 +1478,7 @@ export default function App() {
           const isCustomMarkedWorking = isPickingCustomWorkDays && customWorkingDays.includes(d);
           const isCustomMainView = workSchedule === "custom" && !isPickingCustomWorkDays;
           const isCustomNonWorking = workSchedule === "custom" && !isPickingCustomWorkDays && !effectiveWorking;
+          const isManuallyMarkedWorking = !!offForDay?.is_working;
           const tileBackground = isPickingCustomWorkDays
             ? (isCustomMarkedWorking ? "rgba(30, 160, 90, 0.18)" : "transparent")
             : vacationHighlight
@@ -1489,7 +1490,7 @@ export default function App() {
               : weekendHighlight
                 ? "rgba(255, 0, 0, 0.06)"
               : isToday
-                ? "rgba(0, 200, 120, 0.08)"
+                ? (isManuallyMarkedWorking ? "#fff" : "rgba(0, 200, 120, 0.08)")
                 : offDayHighlight
                   ? "rgba(255, 0, 0, 0.06)"
                   : "transparent";
