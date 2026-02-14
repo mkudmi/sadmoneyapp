@@ -87,6 +87,14 @@ function overlapInclusiveDays(aStart: string, aEnd: string, bStart: string, bEnd
   return inclusiveDays(start, end);
 }
 
+function normalizeVacationType(raw: string | undefined) {
+  return raw === "unpaid" ? "unpaid" : "paid";
+}
+
+function vacationTypeLabel(vacationType: "paid" | "unpaid") {
+  return vacationType === "unpaid" ? "Unpaid" : "Paid";
+}
+
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
 
 export default function App() {
@@ -129,6 +137,7 @@ export default function App() {
     const usedDays = new Set<string>();
 
     for (const v of data.vacations ?? []) {
+      if (normalizeVacationType(v.vacation_type) !== "paid") continue;
       const start = v.start_date > yearStart ? v.start_date : yearStart;
       const end = v.end_date < yearEnd ? v.end_date : yearEnd;
       if (start > end) continue;
@@ -406,6 +415,8 @@ export default function App() {
   const [vacationModalStart, setVacationModalStart] = useState<string>(today);
   const [vacationModalEnd, setVacationModalEnd] = useState<string>(today);
   const [vacationModalTitle, setVacationModalTitle] = useState<string>("Vacation");
+  const [vacationModalType, setVacationModalType] = useState<"paid" | "unpaid">("paid");
+  const [vacationTypeMenuOpen, setVacationTypeMenuOpen] = useState(false);
   const [isPickingCustomWorkDays, setIsPickingCustomWorkDays] = useState(false);
   const [customWorkingDays, setCustomWorkingDays] = useState<string[]>([]);
   const isCalendarPickerFocus =
@@ -458,6 +469,24 @@ export default function App() {
       document.removeEventListener("keydown", onKey);
     };
   }, [txCategoryMenuOpen]);
+
+  useEffect(() => {
+    if (!vacationTypeMenuOpen) return;
+    function onDocClick(e: MouseEvent) {
+      const tgt = e.target as HTMLElement | null;
+      if (tgt && tgt.closest("[data-vacation-type-menu]")) return;
+      setVacationTypeMenuOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setVacationTypeMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [vacationTypeMenuOpen]);
 
   useEffect(() => {
     if (!settingsMenuOpen) return;
@@ -732,6 +761,7 @@ export default function App() {
     setIsPickingVacationEnd(false);
     setVacationStartDate(null);
     setVacationModalOpen(false);
+    setVacationTypeMenuOpen(false);
     setIsPickingCustomWorkDays(false);
     setSalaryModalOpen(false);
     setDayMenuOpen(null);
@@ -771,16 +801,18 @@ export default function App() {
     }
   }
 
-  async function beginAddVacation() {
+  async function beginAddVacation(vacationType: "paid" | "unpaid") {
     if (isPickingCustomWorkDays) {
       await saveCustomSchedule();
     }
+    setVacationModalType(vacationType);
     setIsPickingSalaryDate(false);
     setIsPickingVacationStart(true);
     setIsPickingVacationEnd(false);
     setVacationStartDate(null);
     setSalaryModalOpen(false);
     setVacationModalOpen(false);
+    setVacationTypeMenuOpen(false);
     setIsPickingCustomWorkDays(false);
     setDayMenuOpen(null);
     setDayMenuAnchorRect(null);
@@ -790,6 +822,7 @@ export default function App() {
     setIsPickingVacationStart(false);
     setIsPickingVacationEnd(false);
     setVacationStartDate(null);
+    setVacationTypeMenuOpen(false);
   }
 
   function openVacationModal(startDate: string, endDate: string) {
@@ -804,6 +837,7 @@ export default function App() {
   function closeVacationModal() {
     setVacationModalOpen(false);
     setVacationModalTitle("Vacation");
+    setVacationModalType("paid");
   }
 
   async function submitVacationModal() {
@@ -815,6 +849,7 @@ export default function App() {
         start_date: vacationModalStart,
         end_date: vacationModalEnd,
         title,
+        vacation_type: vacationModalType,
       });
       setData(updated);
       closeVacationModal();
@@ -831,6 +866,7 @@ export default function App() {
     setIsPickingVacationStart(false);
     setIsPickingVacationEnd(false);
     setVacationStartDate(null);
+    setVacationTypeMenuOpen(false);
     setDayMenuOpen(null);
     setDayMenuAnchorRect(null);
   }
@@ -1128,14 +1164,42 @@ export default function App() {
               {(isPickingVacationStart || isPickingVacationEnd) ? (
                 <button onClick={cancelVacationPicking}>{"Cancel"}</button>
               ) : null}
-              <button
-                onClick={beginAddVacation}
-                title={"Add vacation"}
-                aria-label={"Add vacation"}
-                style={{ minWidth: 28, fontWeight: 700 }}
-              >
-                +
-              </button>
+              <div style={{ position: "relative" }} data-vacation-type-menu="true">
+                <button
+                  onClick={() => setVacationTypeMenuOpen((v) => !v)}
+                  title={"Add vacation"}
+                  aria-label={"Add vacation"}
+                  style={{ minWidth: 28, fontWeight: 700 }}
+                >
+                  +
+                </button>
+                {vacationTypeMenuOpen ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 4px)",
+                      right: 0,
+                      zIndex: 100,
+                      minWidth: 170,
+                      padding: 6,
+                      borderRadius: 8,
+                      border: "1px solid #ddd",
+                      background: "#fff",
+                      boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4,
+                    }}
+                  >
+                    <button type="button" onClick={() => beginAddVacation("paid")}>
+                      {"Paid"}
+                    </button>
+                    <button type="button" onClick={() => beginAddVacation("unpaid")}>
+                      {"Unpaid"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -1165,7 +1229,7 @@ export default function App() {
                   >
                     <div>
                       <div style={{ fontSize: 12 }}>
-                        <b>{v.start_date}</b> — <b>{v.end_date}</b> — {v.title} — {rub(avgDailyEarnings * inclusiveDays(v.start_date, v.end_date))}
+                        <b>{v.start_date}</b> — <b>{v.end_date}</b> — {v.title} — {vacationTypeLabel(normalizeVacationType(v.vacation_type))} — {normalizeVacationType(v.vacation_type) === "paid" ? rub(avgDailyEarnings * inclusiveDays(v.start_date, v.end_date)) : "No vacation payout"}
                       </div>
                     </div>
 
@@ -1178,12 +1242,16 @@ export default function App() {
                           const newStart = prompt("Start date (YYYY-MM-DD):", v.start_date) ?? v.start_date;
                           const newEnd = prompt("End date (YYYY-MM-DD):", v.end_date) ?? v.end_date;
                           const newTitle = prompt("Title:", v.title) ?? v.title;
+                          const currentType = normalizeVacationType(v.vacation_type);
+                          const newTypeRaw = prompt('Type ("paid" | "unpaid"):', currentType) ?? currentType;
+                          const newType = normalizeVacationType(newTypeRaw.trim().toLowerCase());
 
                           const updated = await api.upsertVacation({
                             ...v,
                             start_date: newStart,
                             end_date: newEnd,
                             title: newTitle,
+                            vacation_type: newType,
                           });
                           setData(updated);
                         }}
@@ -2214,6 +2282,14 @@ export default function App() {
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Type"}</div>
+                <input
+                  value={vacationTypeLabel(vacationModalType)}
+                  readOnly
+                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd", background: "#f7f7f7" }}
+                />
+              </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Title"}</div>
                 <input

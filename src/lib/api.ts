@@ -24,6 +24,7 @@ export type Vacation = {
   start_date: string; // YYYY-MM-DD
   end_date: string; // YYYY-MM-DD
   title: string;
+  vacation_type?: "paid" | "unpaid";
 };
 
 export type OffDay = {

@@ -30,6 +30,20 @@ pub struct Vacation {
     pub start_date: String, // YYYY-MM-DD
     pub end_date: String,   // YYYY-MM-DD
     pub title: String,
+    #[serde(default = "default_vacation_type")]
+    pub vacation_type: VacationType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum VacationType {
+    #[default]
+    Paid,
+    Unpaid,
+}
+
+fn default_vacation_type() -> VacationType {
+    VacationType::Paid
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
