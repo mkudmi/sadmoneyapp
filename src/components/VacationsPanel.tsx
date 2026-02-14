@@ -31,7 +31,7 @@ export function VacationsPanel(props: VacationsPanelProps) {
   } = props;
 
   return (
-    <div style={{ flex: "1 1 460px", minWidth: 380, padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
+    <div className="surface" style={{ minWidth: 0, height: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <b>{"Vacations this month"}</b>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -55,6 +55,7 @@ export function VacationsPanel(props: VacationsPanelProps) {
             </button>
             {vacationTypeMenuOpen ? (
               <div
+                className="menu-pop"
                 style={{
                   position: "absolute",
                   top: "calc(100% + 4px)",
@@ -62,10 +63,6 @@ export function VacationsPanel(props: VacationsPanelProps) {
                   zIndex: 100,
                   minWidth: 170,
                   padding: 6,
-                  borderRadius: 8,
-                  border: "1px solid #ddd",
-                  background: "#fff",
-                  boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
                   display: "flex",
                   flexDirection: "column",
                   gap: 4,
@@ -85,17 +82,16 @@ export function VacationsPanel(props: VacationsPanelProps) {
 
       <div style={{ marginTop: 10 }}>
         {vacations.length > 0 && (
-          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+          <div className="panel-list" style={{ marginTop: 8 }}>
             {vacations.map((v) => (
               <div
+                className="panel-item"
                 key={v.id}
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
                   gap: 10,
-                  border: "1px solid #eee",
-                  borderRadius: 8,
                   padding: "6px 8px",
                 }}
               >
@@ -107,17 +103,17 @@ export function VacationsPanel(props: VacationsPanelProps) {
 
                 <div style={{ display: "flex", gap: 6 }}>
                   <button
+                    className="edit-pencil-btn"
                     title={"Edit vacation"}
                     aria-label={"Edit vacation"}
-                    style={{ color: "#444", fontWeight: 700 }}
                     onClick={() => onEditVacation(v)}
                   >
-                    {"Edit"}
+                    <span aria-hidden="true">✎</span>
                   </button>
                   <button
                     title={"Delete vacation"}
                     aria-label={"Delete vacation"}
-                    style={{ color: "#c51616", fontWeight: 700 }}
+                    style={{ color: "var(--danger)", fontWeight: 700 }}
                     onClick={() => onDeleteVacation(v.id)}
                   >
                     {"Delete"}

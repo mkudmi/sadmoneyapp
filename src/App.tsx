@@ -866,6 +866,7 @@ export default function App() {
 
 
     <div
+      className="app-shell"
       style={{
         height: "100%",
         overflow: "hidden",
@@ -873,16 +874,47 @@ export default function App() {
         flexDirection: "column",
         padding: 12,
         boxSizing: "border-box",
-        fontFamily: "system-ui, sans-serif",
-      }}
+              }}
     >
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
-        <button onClick={prevMonth}>←</button>
-        <h2 style={{ margin: 0 }}>
+      <div className="topbar" style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+        <button onClick={prevMonth}>{"<"}</button>
+        <h2 className="summary-title">
           {capitalizeFirst(new Date(year, month0, 1).toLocaleString(locale, { month: "long", year: "numeric" }))}
         </h2>
-        <button onClick={nextMonth}>→</button>
-        <div style={{ marginLeft: "auto", position: "relative" }} data-settings-menu="true">
+        <button onClick={nextMonth}>{">"}</button>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <label style={{ opacity: 0.85, whiteSpace: "nowrap" }}>
+            <b>{"Work schedule:"}</b>{" "}
+            <select
+              value={workSchedule}
+              onChange={async (e) => {
+                const next = e.target.value as "5/2" | "custom";
+                if (next === "5/2") {
+                  await saveFiveTwoSchedule();
+                }
+                setWorkSchedule(next);
+                if (next === "custom") {
+                  beginCustomSchedulePick();
+                } else {
+                  cancelCustomSchedulePick();
+                }
+              }}
+            >
+              <option value="5/2">5/2</option>
+              <option value="custom">{"Custom"}</option>
+            </select>
+          </label>
+          {isPickingCustomWorkDays ? (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button onClick={saveCustomSchedule}>{"Exit"}</button>
+              <button onClick={saveCustomSchedule}>{"Save"}</button>
+              <div style={{ fontSize: 12, opacity: 0.8, whiteSpace: "nowrap" }}>
+                {"Mark working days in the calendar"}
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <div style={{ position: "relative" }} data-settings-menu="true">
           <button
             aria-label="Settings"
             onClick={() => setSettingsMenuOpen((v) => !v)}
@@ -892,6 +924,7 @@ export default function App() {
           </button>
           {settingsMenuOpen ? (
             <div
+              className="menu-pop"
               ref={settingsMenuRef}
               data-settings-menu="true"
               style={{
@@ -903,12 +936,7 @@ export default function App() {
                 flexDirection: "column",
                 gap: 4,
                 minWidth: 180,
-                padding: 8,
-                borderRadius: 8,
-                border: "1px solid #ddd",
-                background: "#fff",
-                boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
-              }}
+                padding: 8,              }}
             >
               <button
                 onClick={async () => {
@@ -943,8 +971,17 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 380px", minWidth: 320 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gridAutoRows: "1fr",
+          gap: 12,
+          marginBottom: 12,
+          alignItems: "stretch",
+        }}
+      >
+        <div className="surface" style={{ minWidth: 0, height: "100%" }}>
           <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Received this month (as of today):"}</b> {rub(monthTotals.inc)}</div>
           <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Spent this month (as of today):"}</b> {rub(monthTotals.exp)}</div>
           <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Average daily earnings:"}</b> {rub(avgDailyEarnings)}</div>
@@ -963,18 +1000,13 @@ export default function App() {
               {"Go to today"}
             </button>
           </div>
-          <div
-            style={{
+          <div className="metric-chip" style={{
               marginTop: 8,
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
               padding: "6px 10px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              background: "#f8f8f8",
-            }}
-          >
+            }}>
             <span style={{ fontSize: 12, opacity: 0.9 }}>{"Vacation days count"}</span>
             <input
               type="text"
@@ -1002,7 +1034,78 @@ export default function App() {
             </span>
           </div>
         </div>
-
+        <div className="surface" style={{ minWidth: 0, height: "100%" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <b>{"Debts"}</b>
+            <button
+              onClick={() => openDebtModal()}
+              title={"Add debt"}
+              aria-label={"Add debt"}
+              style={{ minWidth: 28, fontWeight: 700 }}
+            >
+              +
+            </button>
+          </div>
+          <div style={{ fontSize: 12, marginBottom: 6 }}>
+            <b>{"Total:"}</b> {rub(totalDebt)}
+          </div>
+          {debts.length > 0 ? (
+            <div className="panel-list"
+              style={{
+                marginTop: 8,
+                maxHeight: 120,
+                overflowY: "auto",
+                paddingRight: 4,
+              }}
+            >
+              {debts.map((d) => (
+                <div className="panel-item"
+                  key={d.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "6px 8px",
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <b>{d.person}</b>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flexShrink: 0 }}>
+                      <b>{rub(d.amount)}</b>
+                    </div>
+                    <button
+                      className="edit-pencil-btn"
+                      title={"Edit debt"}
+                      aria-label={"Edit debt"}
+                      onClick={() => openDebtModal(d)}
+                    >
+                      <span aria-hidden="true">✎</span>
+                    </button>
+                    <button
+                      title={"Delete debt"}
+                      aria-label={"Delete debt"}
+                      style={{ color: "var(--danger)", fontWeight: 700 }}
+                      onClick={async () => {
+                        const updated = await api.deleteDebt(d.id);
+                        setData(updated);
+                      }}
+                    >
+                      {"Delete"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
+              {"No debts yet."}
+            </div>
+          )}
+        </div>
         <VacationsPanel
           vacations={vacationsThisMonth}
           avgDailyEarnings={avgDailyEarnings}
@@ -1023,156 +1126,55 @@ export default function App() {
           onEditSalary={handleEditSalary}
           onDeleteSalary={handleDeleteSalary}
         />
-        <div style={{ flex: "0 0 auto", marginLeft: "auto", textAlign: "right" }}>
-          <label style={{ opacity: 0.85 }}>
-            <b>{"Work schedule:"}</b>{" "}
-            <select
-              value={workSchedule}
-              onChange={async (e) => {
-                const next = e.target.value as "5/2" | "custom";
-                if (next === "5/2") {
-                  await saveFiveTwoSchedule();
-                }
-                setWorkSchedule(next);
-                if (next === "custom") {
-                  beginCustomSchedulePick();
-                } else {
-                  cancelCustomSchedulePick();
-                }
-              }}
-            >
-              <option value="5/2">5/2</option>
-              <option value="custom">{"Custom"}</option>
-            </select>
-          </label>
-          {isPickingCustomWorkDays ? (
-            <div style={{ marginTop: 8, display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={saveCustomSchedule}>{"Exit"}</button>
-              <button onClick={saveCustomSchedule}>{"Save"}</button>
-            </div>
-          ) : null}
-          {isPickingCustomWorkDays ? (
-            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-              {"Mark working days in the calendar"}
-            </div>
-          ) : null}
-        </div>
       </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-          gap: 12,
-          marginBottom: 12,
-          alignItems: "start",
-        }}
-      >
-        <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <b>{"Debts"}</b>
-            <button
-              onClick={() => openDebtModal()}
-              title={"Add debt"}
-              aria-label={"Add debt"}
-              style={{ minWidth: 28, fontWeight: 700 }}
-            >
-              +
-            </button>
-          </div>
-          <div style={{ fontSize: 12, marginBottom: 6 }}>
-            <b>{"Total:"}</b> {rub(totalDebt)}
-          </div>
-          {debts.length > 0 ? (
-            <div
-              style={{
-                marginTop: 8,
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
-                maxHeight: 120,
-                overflowY: "auto",
-                paddingRight: 4,
-              }}
-            >
-              {debts.map((d) => (
-                <div
-                  key={d.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 10,
-                    border: "1px solid #eee",
-                    borderRadius: 8,
-                    padding: "6px 8px",
-                    fontSize: 12,
-                  }}
-                >
-                  <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    <b>{d.person}</b>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ flexShrink: 0 }}>
-                      <b>{rub(d.amount)}</b>
-                    </div>
-                    <button
-                      title={"Edit debt"}
-                      aria-label={"Edit debt"}
-                      style={{ color: "#444", fontWeight: 700 }}
-                      onClick={() => openDebtModal(d)}
-                    >
-                      ✎
-                    </button>
-                    <button
-                      title={"Delete debt"}
-                      aria-label={"Delete debt"}
-                      style={{ color: "#c51616", fontWeight: 700 }}
-                      onClick={async () => {
-                        const updated = await api.deleteDebt(d.id);
-                        setData(updated);
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
-              {"No debts yet."}
-            </div>
-          )}
-        </div>
-
-
-        <div style={{ padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
+      <div style={{ flex: "1 1 auto", minHeight: 0, overflow: "hidden" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            alignItems: "stretch",
+            flexDirection: "row-reverse",
+            flexWrap: "wrap",
+            height: "100%",
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
+        <div
+          style={{
+            flex: "0 0 320px",
+            width: "100%",
+            maxWidth: 320,
+            minWidth: 320,
+            height: "100%",
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+        <div className="surface" style={{ width: "100%", boxSizing: "border-box" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <b>{"Top categories this month"}</b>
           </div>
 
           {topExpenseCategoriesThisMonth.length > 0 ? (
-            <div
+            <div className="panel-list"
               style={{
                 marginTop: 8,
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
                 maxHeight: 120,
                 overflowY: "auto",
                 paddingRight: 4,
               }}
             >
               {topExpenseCategoriesThisMonth.map((item, idx) => (
-                <div
+                <div className="panel-item"
                   key={item.category}
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
                     gap: 10,
-                    border: "1px solid #eee",
-                    borderRadius: 8,
                     padding: "6px 8px",
                     fontSize: 12,
                   }}
@@ -1192,30 +1194,13 @@ export default function App() {
             </div>
           )}
         </div>
-      </div>
-
-      <div style={{ flex: "1 1 auto", minHeight: 0, overflow: "hidden" }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 12,
-            alignItems: "stretch",
-            flexDirection: "row-reverse",
-            flexWrap: "wrap",
-            height: "100%",
-            minHeight: 0,
-            overflow: "hidden",
-          }}
-        >
         <div
           style={{
             padding: 12,
             border: "1px solid #ddd",
             borderRadius: 12,
-            marginBottom: 12,
-            flex: "1 1 220px",
-            minWidth: 240,
-            height: "100%",
+            width: "100%",
+            flex: "1 1 auto",
             minHeight: 0,
             overflow: "hidden",
             display: "flex",
@@ -1283,7 +1268,7 @@ export default function App() {
               >
                 <div>
                   <div style={{ fontSize: 13 }}>
-                    <b>+ </b> {salaryForSelectedDate.title} — {rub(salaryForSelectedDate.amount)}
+                    <b>+ </b> {salaryForSelectedDate.title}  -  {rub(salaryForSelectedDate.amount)}
                   </div>
                 </div>
 
@@ -1356,7 +1341,7 @@ export default function App() {
                   >
                     <div>
                       <div style={{ fontSize: 13 }}>
-                        <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "⏳" : "-"}</b> {rub(t.amount)} — {t.category}
+                        <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "P" : "-"}</b> {rub(t.amount)}  -  {t.category}
                         {t.debt_person ? (
                           <span style={{ marginLeft: 6, fontSize: 12, opacity: 0.75 }}>
                             {"to"}: {t.debt_person}
@@ -1383,13 +1368,13 @@ export default function App() {
                             setData(updated);
                           }}
                         >
-                          ✓
+                          Save
                         </button>
                       ) : null}
                       <button
+                        className="edit-pencil-btn"
                         title={"Edit"}
                         aria-label={"Edit"}
-                        style={{ color: "#444", fontWeight: 700 }}
                         onClick={async () => {
                           if (!data) return;
 
@@ -1408,7 +1393,7 @@ export default function App() {
                           setData(updated);
                         }}
                       >
-                        ✎
+                        <span aria-hidden="true">✎</span>
                       </button>
 
                       <button
@@ -1420,7 +1405,7 @@ export default function App() {
                           setData(updated);
                         }}
                       >
-                        ✕
+                        x
                       </button>
                     </div>
                   </div>
@@ -1429,6 +1414,7 @@ export default function App() {
         </div>
 
 
+      </div>
       </div>
 
       <div
@@ -1574,7 +1560,7 @@ export default function App() {
                     openDayMenu(d, e.currentTarget);
                   }}
                 >
-                  ⋯
+                  Menu
                 </button>
 
                 {dayMenuOpen === d ? (
@@ -1590,12 +1576,7 @@ export default function App() {
                       flexDirection: "column",
                       gap: 4,
                       width: 220,
-                      padding: 8,
-                      borderRadius: 8,
-                      border: "1px solid #ddd",
-                      background: "#fff",
-                      boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
-                    }}
+                      padding: 8,                    }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
@@ -1688,6 +1669,7 @@ export default function App() {
 
       {isCalendarPickerFocus ? (
         <div
+          className="modal-backdrop"
           style={{
             position: "fixed",
             inset: 0,
@@ -1708,6 +1690,7 @@ export default function App() {
 
       {txModalOpen ? (
         <div
+          className="modal-backdrop"
           style={{
             position: "fixed",
             inset: 0,
@@ -1723,21 +1706,18 @@ export default function App() {
           }}
         >
           <div
+            className="modal-panel"
             style={{
               width: "min(520px, 100%)",
-              background: "#fff",
-              borderRadius: 12,
-              border: "1px solid #ddd",
               padding: 12,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
             }}
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>
-                {txModalTitle(txModalType)} — {txModalDate}
+                {txModalTitle(txModalType)}  -  {txModalDate}
               </b>
-              <button onClick={closeTxModal} aria-label={"Close"}>✕</button>
+              <button onClick={closeTxModal} aria-label={"Close"}>x</button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -1767,11 +1747,12 @@ export default function App() {
                       type="button"
                       onClick={() => setTxCategoryMenuOpen((v) => !v)}
                       aria-label={"Show category list"}
-                    >▾</button>
+                    >v</button>
                   </div>
 
                   {txCategoryMenuOpen && txCategoryOptions.length > 0 ? (
                     <div
+                      className="menu-pop"
                       style={{
                         position: "absolute",
                         top: "calc(100% + 4px)",
@@ -1780,10 +1761,6 @@ export default function App() {
                         zIndex: 20,
                         maxHeight: 180,
                         overflowY: "auto",
-                        border: "1px solid #ddd",
-                        borderRadius: 8,
-                        background: "#fff",
-                        boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
                         padding: 4,
                         boxSizing: "border-box",
                       }}
@@ -1847,6 +1824,7 @@ export default function App() {
 
       {debtModalOpen ? (
         <div
+          className="modal-backdrop"
           style={{
             position: "fixed",
             inset: 0,
@@ -1862,13 +1840,10 @@ export default function App() {
           }}
         >
           <div
+            className="modal-panel"
             style={{
               width: "min(460px, 100%)",
-              background: "#fff",
-              borderRadius: 12,
-              border: "1px solid #ddd",
               padding: 12,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
             }}
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -1876,7 +1851,7 @@ export default function App() {
               <b style={{ fontSize: 14 }}>
                 {debtModalEditId ? "Edit debt" : "Add debt"}
               </b>
-              <button onClick={closeDebtModal} aria-label={"Close"}>✕</button>
+              <button onClick={closeDebtModal} aria-label={"Close"}>x</button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -1913,6 +1888,7 @@ export default function App() {
 
       {vacationModalOpen ? (
         <div
+          className="modal-backdrop"
           style={{
             position: "fixed",
             inset: 0,
@@ -1928,13 +1904,10 @@ export default function App() {
           }}
         >
           <div
+            className="modal-panel"
             style={{
               width: "min(520px, 100%)",
-              background: "#fff",
-              borderRadius: 12,
-              border: "1px solid #ddd",
               padding: 12,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
             }}
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -1942,7 +1915,7 @@ export default function App() {
               <b style={{ fontSize: 14 }}>
                 {"Add vacation"} - {vacationModalStart} {"->"} {vacationModalEnd}
               </b>
-              <button onClick={closeVacationModal} aria-label={"Close"}>✕</button>
+              <button onClick={closeVacationModal} aria-label={"Close"}>x</button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -1975,6 +1948,7 @@ export default function App() {
 
       {salaryModalOpen ? (
         <div
+          className="modal-backdrop"
           style={{
             position: "fixed",
             inset: 0,
@@ -1990,13 +1964,10 @@ export default function App() {
           }}
         >
           <div
+            className="modal-panel"
             style={{
               width: "min(520px, 100%)",
-              background: "#fff",
-              borderRadius: 12,
-              border: "1px solid #ddd",
               padding: 12,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
             }}
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -2004,7 +1975,7 @@ export default function App() {
               <b style={{ fontSize: 14 }}>
                 {"Add salary"} - {salaryModalDate}
               </b>
-              <button onClick={closeSalaryModal} aria-label={"Close"}>✕</button>
+              <button onClick={closeSalaryModal} aria-label={"Close"}>x</button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -2044,4 +2015,3 @@ export default function App() {
     </div>
   );
 }
-

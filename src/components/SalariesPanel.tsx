@@ -21,7 +21,7 @@ export function SalariesPanel(props: SalariesPanelProps) {
   } = props;
 
   return (
-    <div style={{ flex: "1 1 460px", minWidth: 380, padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
+    <div className="surface" style={{ minWidth: 0, height: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <b>{"Salaries this month"}</b>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -43,17 +43,16 @@ export function SalariesPanel(props: SalariesPanelProps) {
       </div>
 
       {salaries.length > 0 && (
-        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+        <div className="panel-list" style={{ marginTop: 8 }}>
           {salaries.map((s) => (
             <div
+              className="panel-item"
               key={s.id}
               style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
                 gap: 10,
-                border: "1px solid #eee",
-                borderRadius: 8,
                 padding: "6px 8px",
               }}
             >
@@ -65,18 +64,18 @@ export function SalariesPanel(props: SalariesPanelProps) {
 
               <div style={{ display: "flex", gap: 6 }}>
                 <button
+                  className="edit-pencil-btn"
                   title={"Edit salary"}
                   aria-label={"Edit salary"}
-                  style={{ color: "#444", fontWeight: 700 }}
                   onClick={() => onEditSalary(s)}
                 >
-                  {"Edit"}
+                  <span aria-hidden="true">✎</span>
                 </button>
 
                 <button
                   title={"Delete salary"}
                   aria-label={"Delete salary"}
-                  style={{ color: "#c51616", fontWeight: 700 }}
+                  style={{ color: "var(--danger)", fontWeight: 700 }}
                   onClick={() => onDeleteSalary(s.id)}
                 >
                   {"Delete"}
