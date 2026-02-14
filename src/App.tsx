@@ -1095,7 +1095,7 @@ export default function App() {
                         setData(updated);
                       }}
                     >
-                      {"Delete"}
+                      {"x"}
                     </button>
                   </div>
                 </div>
@@ -1200,6 +1200,7 @@ export default function App() {
             padding: 12,
             border: "1px solid #ddd",
             borderRadius: 12,
+            background: "#fff",
             width: "100%",
             flex: "1 1 auto",
             minHeight: 0,
@@ -1216,9 +1217,9 @@ export default function App() {
               fontSize: 12,
               padding: "2px 8px",
               borderRadius: 999,
-              border: `1px solid ${vacationForSelectedDate ? "#a37500" : (selectedDateIsWorking ? "#1c7f4d" : "#bf3a3a")}`,
-              color: vacationForSelectedDate ? "#7a5200" : (selectedDateIsWorking ? "#1c7f4d" : "#bf3a3a"),
-              background: vacationForSelectedDate ? "rgba(255, 223, 99, 0.25)" : (selectedDateIsWorking ? "rgba(30, 160, 90, 0.10)" : "rgba(210, 20, 20, 0.08)"),
+              border: "1px solid #cfcfcf",
+              color: "#333",
+              background: "#fff",
             }}
           >
             {vacationForSelectedDate ? "Vacation" : (selectedDateIsWorking ? "Working" : "Day off")}
@@ -1264,7 +1265,7 @@ export default function App() {
                   border: "1px solid #eee",
                   borderRadius: 10,
                   padding: "8px 10px",
-                  background: "#f8fdf8",
+                  background: "#fff",
                 }}
               >
                 <div>
@@ -1287,7 +1288,7 @@ export default function App() {
                   border: "1px solid #eee",
                   borderRadius: 10,
                   padding: "8px 10px",
-                  background: "#f7f9ff",
+                  background: "#fff",
                 }}
               >
                 <div style={{ fontSize: 13 }}>
@@ -1310,7 +1311,7 @@ export default function App() {
                   border: "1px solid #eee",
                   borderRadius: 10,
                   padding: "8px 10px",
-                  background: "#fff9f0",
+                  background: "#fff",
                 }}
               >
                 <div style={{ fontSize: 13 }}>
@@ -1400,7 +1401,7 @@ export default function App() {
                       <button
                         title={"Delete"}
                         aria-label={"Delete"}
-                        style={{ color: "#c51616", fontWeight: 700 }}
+                        style={{ color: "var(--danger)", fontWeight: 700 }}
                         onClick={async () => {
                           const updated = await api.deleteTransaction(t.id);
                           setData(updated);

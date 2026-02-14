@@ -78,7 +78,7 @@ export function SalariesPanel(props: SalariesPanelProps) {
                   style={{ color: "var(--danger)", fontWeight: 700 }}
                   onClick={() => onDeleteSalary(s.id)}
                 >
-                  {"Delete"}
+                  {"x"}
                 </button>
               </div>
             </div>

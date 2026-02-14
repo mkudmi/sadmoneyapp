@@ -116,7 +116,7 @@ export function VacationsPanel(props: VacationsPanelProps) {
                     style={{ color: "var(--danger)", fontWeight: 700 }}
                     onClick={() => onDeleteVacation(v.id)}
                   >
-                    {"Delete"}
+                    {"x"}
                   </button>
                 </div>
               </div>
