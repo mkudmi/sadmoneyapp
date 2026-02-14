@@ -3,97 +3,17 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
-import { api, AppData, Debt, Transaction } from "./lib/api";
+import { api, AppData, Debt, SalaryEvent, Transaction, Vacation } from "./lib/api";
 import { rub, toKop } from "./lib/money";
-
-function ymd(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function ymFromYmd(s: string) {
-  return s.slice(0, 7); // "YYYY-MM"
-}
-
-function parseYmdLocal(s: string) {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function capitalizeFirst(s: string) {
-  if (!s) return s;
-  return s.slice(0, 1).toUpperCase() + s.slice(1);
-}
-
-function getRecurringSalaryDays(salaryDates: string[]) {
-  return Array.from(
-    new Set(
-      salaryDates
-        .map((date) => Number(date.slice(8, 10)))
-        .filter((day) => Number.isInteger(day) && day >= 1 && day <= 31)
-    )
-  ).sort((a, b) => a - b);
-}
-
-function findFollowingSalaryDate(nextSalaryDate: string, salaryDates: string[]) {
-  const knownNext = salaryDates
-    .filter((date) => date > nextSalaryDate)
-    .sort((a, b) => a.localeCompare(b))[0] ?? null;
-  if (knownNext) return knownNext;
-
-  const recurringDays = getRecurringSalaryDays(salaryDates);
-  if (recurringDays.length === 0) return null;
-
-  const base = parseYmdLocal(nextSalaryDate);
-  const candidates: string[] = [];
-
-  for (let monthOffset = 0; monthOffset <= 2; monthOffset++) {
-    const y = base.getFullYear();
-    const m = base.getMonth() + monthOffset;
-    const expectedMonth0 = ((m % 12) + 12) % 12;
-
-    for (const day of recurringDays) {
-      const candidate = new Date(y, m, day);
-      if (candidate.getMonth() !== expectedMonth0) continue;
-
-      const candidateYmd = ymd(candidate);
-      if (candidateYmd > nextSalaryDate) candidates.push(candidateYmd);
-    }
-  }
-
-  return candidates.sort((a, b) => a.localeCompare(b))[0] ?? null;
-}
-
-
-function daysInMonth(year: number, monthIndex0: number) {
-  return new Date(year, monthIndex0 + 1, 0).getDate();
-}
-
-function inclusiveDays(startYmd: string, endYmd: string) {
-  const start = parseYmdLocal(startYmd);
-  const end = parseYmdLocal(endYmd);
-  const start0 = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-  const end0 = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-  const diffDays = Math.floor((end0.getTime() - start0.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  return Math.max(diffDays, 0);
-}
-
-function overlapInclusiveDays(aStart: string, aEnd: string, bStart: string, bEnd: string) {
-  const start = aStart > bStart ? aStart : bStart;
-  const end = aEnd < bEnd ? aEnd : bEnd;
-  if (start > end) return 0;
-  return inclusiveDays(start, end);
-}
-
-function normalizeVacationType(raw: string | undefined) {
-  return raw === "unpaid" ? "unpaid" : "paid";
-}
-
-function vacationTypeLabel(vacationType: "paid" | "unpaid") {
-  return vacationType === "unpaid" ? "Unpaid" : "Paid";
-}
+import { capitalizeFirst } from "./lib/text";
+import { findFollowingSalaryDate } from "./lib/salary";
+import { daysInMonth, overlapInclusiveDays, parseYmdLocal, ymd, ymFromYmd } from "./lib/date";
+import { isDebtCategory, normalizeCategoryInput } from "./lib/category";
+import { normalizeVacationType, vacationTypeLabel, VacationType } from "./lib/vacation";
+import { useDismissible } from "./hooks/useDismissible";
+import { useVacationDaysCount } from "./hooks/useVacationDaysCount";
+import { VacationsPanel } from "./components/VacationsPanel";
+import { SalariesPanel } from "./components/SalariesPanel";
 
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
 
@@ -108,6 +28,11 @@ export default function App() {
   const salaryThisMonth = (data?.salaryEvents ?? [])
     .filter(s => ymFromYmd(s.date) === monthKey)
     .sort((a, b) => a.date.localeCompare(b.date));
+  const vacationsThisMonth = useMemo(() => {
+    const monthStart = `${monthKey}-01`;
+    const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
+    return (data?.vacations ?? []).filter(v => v.start_date <= monthEnd && v.end_date >= monthStart);
+  }, [data?.vacations, month0, monthKey, year]);
   const topExpenseCategoriesThisMonth = useMemo(() => {
     if (!data) return [] as Array<{ category: string; amount: number }>;
 
@@ -125,7 +50,8 @@ export default function App() {
   }, [data, monthKey]);
 
   const [workSchedule, setWorkSchedule] = useState<'5/2' | 'custom'>('5/2');
-  const [vacationDaysCount, setVacationDaysCount] = useState("");
+  const { vacationDaysCount, handleVacationDaysCountChange, commitVacationDaysCount } =
+    useVacationDaysCount(VACATION_DAYS_COUNT_STORAGE_KEY);
   const locale = "en-US";
   const vacationDaysLeft = useMemo(() => {
     const total = Number.parseInt(vacationDaysCount, 10);
@@ -415,7 +341,7 @@ export default function App() {
   const [vacationModalStart, setVacationModalStart] = useState<string>(today);
   const [vacationModalEnd, setVacationModalEnd] = useState<string>(today);
   const [vacationModalTitle, setVacationModalTitle] = useState<string>("Vacation");
-  const [vacationModalType, setVacationModalType] = useState<"paid" | "unpaid">("paid");
+  const [vacationModalType, setVacationModalType] = useState<VacationType>("paid");
   const [vacationTypeMenuOpen, setVacationTypeMenuOpen] = useState(false);
   const [isPickingCustomWorkDays, setIsPickingCustomWorkDays] = useState(false);
   const [customWorkingDays, setCustomWorkingDays] = useState<string[]>([]);
@@ -452,92 +378,15 @@ export default function App() {
     };
   }, [dayMenuOpen]);
 
-  useEffect(() => {
-    if (!txCategoryMenuOpen) return;
-    function onDocClick(e: MouseEvent) {
-      const tgt = e.target as HTMLElement | null;
-      if (tgt && tgt.closest("[data-tx-category]")) return;
-      setTxCategoryMenuOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setTxCategoryMenuOpen(false);
-    }
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [txCategoryMenuOpen]);
-
-  useEffect(() => {
-    if (!vacationTypeMenuOpen) return;
-    function onDocClick(e: MouseEvent) {
-      const tgt = e.target as HTMLElement | null;
-      if (tgt && tgt.closest("[data-vacation-type-menu]")) return;
-      setVacationTypeMenuOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setVacationTypeMenuOpen(false);
-    }
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [vacationTypeMenuOpen]);
-
-  useEffect(() => {
-    if (!settingsMenuOpen) return;
-    function onDocClick(e: MouseEvent) {
-      const tgt = e.target as HTMLElement | null;
-      if (tgt && tgt.closest("[data-settings-menu]")) return;
-      setSettingsMenuOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setSettingsMenuOpen(false);
-    }
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [settingsMenuOpen]);
+  useDismissible(txCategoryMenuOpen, () => setTxCategoryMenuOpen(false), "[data-tx-category]");
+  useDismissible(vacationTypeMenuOpen, () => setVacationTypeMenuOpen(false), "[data-vacation-type-menu]");
+  useDismissible(settingsMenuOpen, () => setSettingsMenuOpen(false), "[data-settings-menu]");
 
   useEffect(() => {
     getVersion()
       .then(setAppVersion)
       .catch(() => setAppVersion("-"));
   }, []);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(VACATION_DAYS_COUNT_STORAGE_KEY);
-      if (stored !== null) {
-        const normalized = String(Math.max(0, Number.parseInt(stored, 10) || 0));
-        setVacationDaysCount(normalized);
-      }
-    } catch (e) {
-      console.error("failed to load vacation days count", e);
-    }
-  }, []);
-
-  function persistVacationDaysCount(rawValue: string) {
-    const normalized = String(Math.max(0, Number.parseInt(rawValue, 10) || 0));
-    setVacationDaysCount(normalized);
-    try {
-      localStorage.setItem(VACATION_DAYS_COUNT_STORAGE_KEY, normalized);
-    } catch (e) {
-      console.error("failed to save vacation days count", e);
-    }
-  }
-
-  function handleVacationDaysCountChange(rawValue: string) {
-    if (!/^\d*$/.test(rawValue)) return;
-    setVacationDaysCount(rawValue);
-  }
 
   function openDayMenu(date: string, anchor: HTMLElement) {
     const menuWidth = 220;
@@ -634,21 +483,6 @@ export default function App() {
 
   const totalDebt = useMemo(() => debts.reduce((sum, d) => sum + d.amount, 0), [debts]);
 
-  function normalizeCategoryInput(raw: string) {
-    const s0 = raw.trim().replace(/\s+/g, " ");
-    if (!s0) return "";
-
-    const cap = (seg: string) => {
-      if (!seg) return "";
-      return seg.slice(0, 1).toUpperCase() + seg.slice(1).toLowerCase();
-    };
-
-    return s0
-      .split(" ")
-      .map((w) => w.split("-").map(cap).join("-"))
-      .join(" ");
-  }
-
   function txModalTitle(type: "income" | "expense" | "planned_expense") {
     if (type === "income") return "Add income";
     if (type === "planned_expense") return "Add planned expense";
@@ -671,12 +505,6 @@ export default function App() {
     setTxModalCategory("");
     setTxModalDebtPerson("");
     setTxCategoryMenuOpen(false);
-  }
-
-  function isDebtCategory(categoryRaw: string) {
-    const normalized = normalizeCategoryInput(categoryRaw).toLowerCase();
-    const en = normalizeCategoryInput("Debt").toLowerCase();
-    return normalized === en;
   }
 
   async function submitTxModal() {
@@ -801,7 +629,7 @@ export default function App() {
     }
   }
 
-  async function beginAddVacation(vacationType: "paid" | "unpaid") {
+  async function beginAddVacation(vacationType: VacationType) {
     if (isPickingCustomWorkDays) {
       await saveCustomSchedule();
     }
@@ -991,6 +819,49 @@ export default function App() {
     setSelectedDate(ymd(d));
   }
 
+  async function handleEditVacation(v: Vacation) {
+    const newStart = prompt("Start date (YYYY-MM-DD):", v.start_date) ?? v.start_date;
+    const newEnd = prompt("End date (YYYY-MM-DD):", v.end_date) ?? v.end_date;
+    const newTitle = prompt("Title:", v.title) ?? v.title;
+    const currentType = normalizeVacationType(v.vacation_type);
+    const newTypeRaw = prompt('Type ("paid" | "unpaid"):', currentType) ?? currentType;
+    const newType = normalizeVacationType(newTypeRaw.trim().toLowerCase());
+
+    const updated = await api.upsertVacation({
+      ...v,
+      start_date: newStart,
+      end_date: newEnd,
+      title: newTitle,
+      vacation_type: newType,
+    });
+    setData(updated);
+  }
+
+  async function handleDeleteVacation(id: string) {
+    const updated = await api.deleteVacation(id);
+    setData(updated);
+  }
+
+  async function handleEditSalary(s: SalaryEvent) {
+    const newDate = prompt("Date (YYYY-MM-DD):", s.date) ?? s.date;
+    const newAmountStr = prompt("Amount (RUB):", String(s.amount / 100)) ?? String(s.amount / 100);
+    const newTitle = prompt("Title:", s.title) ?? s.title;
+
+    const updated = await api.upsertSalaryEvent({
+      ...s,
+      date: newDate,
+      amount: toKop(newAmountStr),
+      title: newTitle,
+    });
+    setData(updated);
+  }
+
+  async function handleDeleteSalary(id: string) {
+    if (!confirm("Delete salary date?")) return;
+    const updated = await api.deleteSalaryEvent(id);
+    setData(updated);
+  }
+
   return (
 
 
@@ -1111,29 +982,10 @@ export default function App() {
               pattern="[0-9]*"
               value={vacationDaysCount}
               onChange={(e) => handleVacationDaysCountChange(e.target.value)}
-              onBlur={(e) => {
-                if (e.target.value === "") {
-                  try {
-                    localStorage.removeItem(VACATION_DAYS_COUNT_STORAGE_KEY);
-                  } catch (err) {
-                    console.error("failed to clear vacation days count", err);
-                  }
-                  return;
-                }
-                persistVacationDaysCount(e.target.value);
-              }}
+              onBlur={(e) => commitVacationDaysCount(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
-                  const value = (e.target as HTMLInputElement).value;
-                  if (value === "") {
-                    try {
-                      localStorage.removeItem(VACATION_DAYS_COUNT_STORAGE_KEY);
-                    } catch (err) {
-                      console.error("failed to clear vacation days count", err);
-                    }
-                  } else {
-                    persistVacationDaysCount(value);
-                  }
+                  commitVacationDaysCount((e.target as HTMLInputElement).value);
                   (e.target as HTMLInputElement).blur();
                 }
               }}
@@ -1151,214 +1003,26 @@ export default function App() {
           </div>
         </div>
 
-        <div style={{ flex: "1 1 460px", minWidth: 380, padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <b>{"Vacations this month"}</b>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {isPickingVacationStart ? (
-                <span style={{ fontSize: 12, opacity: 0.8 }}>{"Pick a start date in the calendar"}</span>
-              ) : null}
-              {isPickingVacationEnd ? (
-                <span style={{ fontSize: 12, opacity: 0.8 }}>{"Pick an end date in the calendar"}</span>
-              ) : null}
-              {(isPickingVacationStart || isPickingVacationEnd) ? (
-                <button onClick={cancelVacationPicking}>{"Cancel"}</button>
-              ) : null}
-              <div style={{ position: "relative" }} data-vacation-type-menu="true">
-                <button
-                  onClick={() => setVacationTypeMenuOpen((v) => !v)}
-                  title={"Add vacation"}
-                  aria-label={"Add vacation"}
-                  style={{ minWidth: 28, fontWeight: 700 }}
-                >
-                  +
-                </button>
-                {vacationTypeMenuOpen ? (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "calc(100% + 4px)",
-                      right: 0,
-                      zIndex: 100,
-                      minWidth: 170,
-                      padding: 6,
-                      borderRadius: 8,
-                      border: "1px solid #ddd",
-                      background: "#fff",
-                      boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 4,
-                    }}
-                  >
-                    <button type="button" onClick={() => beginAddVacation("paid")}>
-                      {"Paid"}
-                    </button>
-                    <button type="button" onClick={() => beginAddVacation("unpaid")}>
-                      {"Unpaid"}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 10 }}>
-            {((data?.vacations ?? []).filter(v => {
-              const monthStart = `${monthKey}-01`;
-              const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
-              return v.start_date <= monthEnd && v.end_date >= monthStart;
-            })).length > 0 && (
-              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-                {((data?.vacations ?? []).filter(v => {
-                  const monthStart = `${monthKey}-01`;
-                  const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
-                  return v.start_date <= monthEnd && v.end_date >= monthStart;
-                })).map((v) => (
-                  <div
-                    key={v.id}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 10,
-                      border: "1px solid #eee",
-                      borderRadius: 8,
-                      padding: "6px 8px",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 12 }}>
-                        <b>{v.start_date}</b> — <b>{v.end_date}</b> — {v.title} — {vacationTypeLabel(normalizeVacationType(v.vacation_type))} — {normalizeVacationType(v.vacation_type) === "paid" ? rub(avgDailyEarnings * inclusiveDays(v.start_date, v.end_date)) : "No vacation payout"}
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button
-                        title={"Edit vacation"}
-                        aria-label={"Edit vacation"}
-                        style={{ color: "#444", fontWeight: 700 }}
-                        onClick={async () => {
-                          const newStart = prompt("Start date (YYYY-MM-DD):", v.start_date) ?? v.start_date;
-                          const newEnd = prompt("End date (YYYY-MM-DD):", v.end_date) ?? v.end_date;
-                          const newTitle = prompt("Title:", v.title) ?? v.title;
-                          const currentType = normalizeVacationType(v.vacation_type);
-                          const newTypeRaw = prompt('Type ("paid" | "unpaid"):', currentType) ?? currentType;
-                          const newType = normalizeVacationType(newTypeRaw.trim().toLowerCase());
-
-                          const updated = await api.upsertVacation({
-                            ...v,
-                            start_date: newStart,
-                            end_date: newEnd,
-                            title: newTitle,
-                            vacation_type: newType,
-                          });
-                          setData(updated);
-                        }}
-                      >
-                        ✎
-                      </button>
-                      <button
-                        title={"Delete vacation"}
-                        aria-label={"Delete vacation"}
-                        style={{ color: "#c51616", fontWeight: 700 }}
-                        onClick={async () => {
-                          const updated = await api.deleteVacation(v.id);
-                          setData(updated);
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-        </div>
-        <div style={{ flex: "1 1 460px", minWidth: 380, padding: 10, border: "1px solid #ddd", borderRadius: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <b>{"Salaries this month"}</b>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {isPickingSalaryDate ? (
-                <span style={{ fontSize: 12, opacity: 0.8 }}>{"Pick a date in the calendar"}</span>
-              ) : null}
-              {isPickingSalaryDate ? (
-                <button onClick={() => setIsPickingSalaryDate(false)}>{"Cancel"}</button>
-              ) : null}
-              <button
-                onClick={beginAddSalary}
-                title={"Add salary"}
-                aria-label={"Add salary"}
-                style={{ minWidth: 28, fontWeight: 700 }}
-              >
-                +
-              </button>
-            </div>
-          </div>
-
-          {salaryThisMonth.length > 0 && (
-            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-              {salaryThisMonth.map((s) => (
-                <div
-                  key={s.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 10,
-                    border: "1px solid #eee",
-                    borderRadius: 8,
-                    padding: "6px 8px",
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 12 }}>
-                      <b>{s.date}</b> — {s.title} — {rub(s.amount)}
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button
-                      title={"Edit salary"}
-                      aria-label={"Edit salary"}
-                      style={{ color: "#444", fontWeight: 700 }}
-                      onClick={async () => {
-                        const newDate = prompt("Date (YYYY-MM-DD):", s.date) ?? s.date;
-                        const newAmountStr = prompt("Amount (RUB):", String(s.amount / 100)) ?? String(s.amount / 100);
-                        const newTitle = prompt("Title:", s.title) ?? s.title;
-
-                        const updated = await api.upsertSalaryEvent({
-                          ...s,
-                          date: newDate,
-                          amount: toKop(newAmountStr),
-                          title: newTitle,
-                        });
-                        setData(updated);
-                      }}
-                    >
-                      ✎
-                    </button>
-
-                    <button
-                      title={"Delete salary"}
-                      aria-label={"Delete salary"}
-                      style={{ color: "#c51616", fontWeight: 700 }}
-                      onClick={async () => {
-                        if (!confirm("Delete salary date?")) return;
-                        const updated = await api.deleteSalaryEvent(s.id);
-                        setData(updated);
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <VacationsPanel
+          vacations={vacationsThisMonth}
+          avgDailyEarnings={avgDailyEarnings}
+          isPickingVacationStart={isPickingVacationStart}
+          isPickingVacationEnd={isPickingVacationEnd}
+          vacationTypeMenuOpen={vacationTypeMenuOpen}
+          onToggleVacationTypeMenu={() => setVacationTypeMenuOpen((v) => !v)}
+          onSelectVacationType={beginAddVacation}
+          onCancelVacationPicking={cancelVacationPicking}
+          onEditVacation={handleEditVacation}
+          onDeleteVacation={handleDeleteVacation}
+        />
+        <SalariesPanel
+          salaries={salaryThisMonth}
+          isPickingSalaryDate={isPickingSalaryDate}
+          onCancelPickingSalary={() => setIsPickingSalaryDate(false)}
+          onBeginAddSalary={beginAddSalary}
+          onEditSalary={handleEditSalary}
+          onDeleteSalary={handleDeleteSalary}
+        />
         <div style={{ flex: "0 0 auto", marginLeft: "auto", textAlign: "right" }}>
           <label style={{ opacity: 0.85 }}>
             <b>{"Work schedule:"}</b>{" "}
@@ -2380,3 +2044,4 @@ export default function App() {
     </div>
   );
 }
+
