@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap");
+
 :root {
   --bg: #f3f6fb;
   --bg-strong: #eaf0f8;
@@ -26,12 +28,16 @@ body,
 
 body {
   margin: 0;
-  font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+  font-family: "Sora", "Avenir Next", "Segoe UI", sans-serif;
   color: var(--text);
   background:
     radial-gradient(1100px 500px at -5% -20%, rgba(37, 99, 235, 0.18), transparent 55%),
     radial-gradient(900px 480px at 102% 2%, rgba(15, 118, 110, 0.16), transparent 58%),
     linear-gradient(180deg, #f8fbff 0%, var(--bg) 55%, #edf2f9 100%);
+}
+
+.app-shell *:not(.summary-title) {
+  font-size: 12px !important;
 }
 
 .app-shell {

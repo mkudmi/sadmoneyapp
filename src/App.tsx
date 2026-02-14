@@ -971,7 +971,6 @@ export default function App() {
           ) : null}
         </div>
       </div>
-
       <div
         style={{
           display: "grid",
@@ -1154,53 +1153,14 @@ export default function App() {
             gap: 12,
           }}
         >
-        <div className="surface" style={{ width: "100%", boxSizing: "border-box" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <b>{"Top categories this month"}</b>
-          </div>
-
-          {topExpenseCategoriesThisMonth.length > 0 ? (
-            <div className="panel-list"
-              style={{
-                marginTop: 8,
-                maxHeight: 120,
-                overflowY: "auto",
-                paddingRight: 4,
-              }}
-            >
-              {topExpenseCategoriesThisMonth.map((item, idx) => (
-                <div className="panel-item"
-                  key={item.category}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "6px 8px",
-                    fontSize: 12,
-                  }}
-                >
-                  <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    <b>{idx + 1}.</b> {item.category}
-                  </div>
-                  <div style={{ flexShrink: 0 }}>
-                    <b>{rub(item.amount)}</b>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
-              {"No category expenses yet this month."}
-            </div>
-          )}
-        </div>
         <div
           style={{
             padding: 12,
             border: "1px solid #ddd",
             borderRadius: 12,
             background: "#fff",
+            position: "relative",
+            zIndex: 1,
             width: "100%",
             flex: "1 1 auto",
             minHeight: 0,
@@ -1217,9 +1177,9 @@ export default function App() {
               fontSize: 12,
               padding: "2px 8px",
               borderRadius: 999,
-              border: "1px solid #cfcfcf",
-              color: "#333",
-              background: "#fff",
+              border: `1px solid ${vacationForSelectedDate ? "#a37500" : (selectedDateIsWorking ? "#1c7f4d" : "#bf3a3a")}`,
+              color: vacationForSelectedDate ? "#7a5200" : (selectedDateIsWorking ? "#1c7f4d" : "#bf3a3a"),
+              background: vacationForSelectedDate ? "#ffe07a" : (selectedDateIsWorking ? "#cfead8" : "#f2cfd3"),
             }}
           >
             {vacationForSelectedDate ? "Vacation" : (selectedDateIsWorking ? "Working" : "Day off")}
@@ -1264,12 +1224,12 @@ export default function App() {
                   gap: 10,
                   border: "1px solid #eee",
                   borderRadius: 10,
-                  padding: "8px 10px",
+                  padding: "6px 8px",
                   background: "#fff",
                 }}
               >
                 <div>
-                  <div style={{ fontSize: 13 }}>
+                  <div style={{ fontSize: 12 }}>
                     <b>+ </b> {salaryForSelectedDate.title}  -  {rub(salaryForSelectedDate.amount)}
                   </div>
                 </div>
@@ -1287,14 +1247,14 @@ export default function App() {
                   gap: 10,
                   border: "1px solid #eee",
                   borderRadius: 10,
-                  padding: "8px 10px",
+                  padding: "6px 8px",
                   background: "#fff",
                 }}
               >
-                <div style={{ fontSize: 13 }}>
+                <div style={{ fontSize: 12 }}>
                   <b>{"After planned expenses"}</b>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>
+                <div style={{ fontSize: 12, fontWeight: 700 }}>
                   {rub(plannedAfterExpensesForSelectedDate)}
                 </div>
               </div>
@@ -1310,17 +1270,17 @@ export default function App() {
                   gap: 10,
                   border: "1px solid #eee",
                   borderRadius: 10,
-                  padding: "8px 10px",
+                  padding: "6px 8px",
                   background: "#fff",
                 }}
               >
-                <div style={{ fontSize: 13 }}>
+                <div style={{ fontSize: 12 }}>
                   <b>{"After vacation"}</b>
                   <span style={{ marginLeft: 8, opacity: 0.75 }}>
                     {`(-${rub(afterVacationForSelectedDate.vacationDeduction)}, ${afterVacationForSelectedDate.vacationDays}d${afterVacationForSelectedDate.basedOnPlannedAfterExpenses ? ", incl. planned" : ""})`}
                   </span>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>
+                <div style={{ fontSize: 12, fontWeight: 700 }}>
                   {rub(afterVacationForSelectedDate.amount)}
                 </div>
               </div>
@@ -1338,11 +1298,11 @@ export default function App() {
                       gap: 10,
                       border: "1px solid #eee",
                       borderRadius: 10,
-                      padding: "8px 10px",
+                      padding: "6px 8px",
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: 13 }}>
+                      <div style={{ fontSize: 12 }}>
                         <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "P" : "-"}</b> {rub(t.amount)}  -  {t.category}
                         {t.debt_person ? (
                           <span style={{ marginLeft: 6, fontSize: 12, opacity: 0.75 }}>
@@ -1361,7 +1321,7 @@ export default function App() {
                         <button
                           title={"Paid"}
                           aria-label={"Paid"}
-                          style={{ color: "#138a36", fontWeight: 700 }}
+                          style={{ color: "#138a36", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 12 }}
                           onClick={async () => {
                             const updated = await api.updateTransaction({
                               ...t,
@@ -1377,6 +1337,7 @@ export default function App() {
                         className="edit-pencil-btn"
                         title={"Edit"}
                         aria-label={"Edit"}
+                        style={{ width: 26, minWidth: 26, minHeight: 26, borderRadius: 8 }}
                         onClick={async () => {
                           if (!data) return;
 
@@ -1401,7 +1362,7 @@ export default function App() {
                       <button
                         title={"Delete"}
                         aria-label={"Delete"}
-                        style={{ color: "var(--danger)", fontWeight: 700 }}
+                        style={{ color: "var(--danger)", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 12 }}
                         onClick={async () => {
                           const updated = await api.deleteTransaction(t.id);
                           setData(updated);
@@ -1414,9 +1375,51 @@ export default function App() {
               ))}
           </div>
         </div>
+        </div>
+
+        <div className="surface" style={{ width: "100%", boxSizing: "border-box" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <b>{"Top categories this month"}</b>
+          </div>
+
+          {topExpenseCategoriesThisMonth.length > 0 ? (
+            <div className="panel-list"
+              style={{
+                marginTop: 8,
+                maxHeight: 120,
+                overflowY: "auto",
+                paddingRight: 4,
+              }}
+            >
+              {topExpenseCategoriesThisMonth.map((item, idx) => (
+                <div className="panel-item"
+                  key={item.category}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "6px 8px",
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <b>{idx + 1}.</b> {item.category}
+                  </div>
+                  <div style={{ flexShrink: 0 }}>
+                    <b>{rub(item.amount)}</b>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
+              {"No category expenses yet this month."}
+            </div>
+          )}
+        </div>
 
 
-      </div>
       </div>
 
       <div
@@ -1564,8 +1567,19 @@ export default function App() {
                     setSelectedDate(d);
                     openDayMenu(d, e.currentTarget);
                   }}
+                  style={{
+                    minWidth: 28,
+                    minHeight: 28,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 0,
+                    textAlign: "center",
+                    fontSize: 14,
+                    lineHeight: 1,
+                  }}
                 >
-                  Menu
+                  ⋯
                 </button>
 
                 {dayMenuOpen === d ? (
@@ -1581,10 +1595,16 @@ export default function App() {
                       flexDirection: "column",
                       gap: 4,
                       width: 220,
-                      padding: 8,                    }}
+                      padding: 8,
+                      borderRadius: 10,
+                      border: "1px solid #ddd",
+                      background: "#fff",
+                      boxShadow: "0 8px 20px rgba(0,0,0,0.14)",
+                    }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
+                      style={{ fontSize: 12, padding: "4px 8px" }}
                       onClick={() => {
                         setSelectedDate(d);
                         openTxModal("income", d);
@@ -1595,6 +1615,7 @@ export default function App() {
                     </button>
                     {!isFutureDate ? (
                       <button
+                        style={{ fontSize: 12, padding: "4px 8px" }}
                         onClick={() => {
                           setSelectedDate(d);
                           openTxModal("expense", d);
@@ -1605,6 +1626,7 @@ export default function App() {
                       </button>
                     ) : null}
                     <button
+                      style={{ fontSize: 12, padding: "4px 8px" }}
                       onClick={() => {
                         setSelectedDate(d);
                         openTxModal("planned_expense", d);
@@ -1615,6 +1637,7 @@ export default function App() {
                     </button>
                     <div style={{ height: 1, background: "#eee", margin: "4px 0" }} />
                     <button
+                      style={{ fontSize: 12, padding: "4px 8px" }}
                       onClick={async () => {
                         try {
                           const makeWorking = !effectiveWorking;
