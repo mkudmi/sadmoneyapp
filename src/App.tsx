@@ -182,6 +182,7 @@ export default function App() {
     ...monthDays,
     ...Array(trailing).fill(null),
   ];
+  const calendarWeeks = gridCells.length / 7;
 
   const sumsByDate = useMemo(() => {
     const map = new Map<string, { inc: number; exp: number }>();
@@ -1421,6 +1422,7 @@ export default function App() {
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(7, 1fr)",
+          gridTemplateRows: `repeat(${calendarWeeks}, minmax(0, 1fr))`,
           gap: 8,
           padding: 12,
           border: "1px solid #ddd",
@@ -1431,7 +1433,7 @@ export default function App() {
           minHeight: 0,
           overflowY: "auto",
           boxSizing: "border-box",
-          alignContent: "start",
+          alignContent: "stretch",
           position: "relative",
           zIndex: isCalendarPickerFocus ? 4001 : 1,
           background: "#fff",
@@ -1447,7 +1449,8 @@ export default function App() {
                   border: "1px solid transparent",
                   borderRadius: 12,
                   padding: 8,
-                  minHeight: 68,
+                  minHeight: 0,
+                  height: "100%",
                   background: "transparent",
                 }}
               />
@@ -1546,7 +1549,8 @@ export default function App() {
                 background: tileBackground,
                 borderRadius: 12,
                 padding: 8,
-                minHeight: 68,
+                minHeight: 0,
+                height: "100%",
               }}
 
             >
