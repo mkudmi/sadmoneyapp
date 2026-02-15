@@ -938,6 +938,35 @@ export default function App() {
         </h2>
         <button onClick={nextMonth}>{">"}</button>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="metric-chip" style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 10px",
+            }}>
+            <span style={{ fontSize: 12, opacity: 0.9, whiteSpace: "nowrap" }}>{"Vacation days count"}</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={vacationDaysCount}
+              onChange={(e) => handleVacationDaysCountChange(e.target.value)}
+              onBlur={(e) => commitVacationDaysCount(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  commitVacationDaysCount((e.target as HTMLInputElement).value);
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              style={{
+                width: 56,
+                padding: "4px 6px",
+                borderRadius: 6,
+                border: "1px solid #ccc",
+                fontSize: 12,
+              }}
+            />
+          </div>
           <label style={{ opacity: 0.85, whiteSpace: "nowrap" }}>
             <b>{"Work schedule:"}</b>{" "}
             <select
@@ -1054,39 +1083,6 @@ export default function App() {
               {"Go to today"}
             </button>
           </div>
-          <div className="metric-chip" style={{
-              marginTop: 8,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "6px 10px",
-            }}>
-            <span style={{ fontSize: 12, opacity: 0.9 }}>{"Vacation days count"}</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={vacationDaysCount}
-              onChange={(e) => handleVacationDaysCountChange(e.target.value)}
-              onBlur={(e) => commitVacationDaysCount(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  commitVacationDaysCount((e.target as HTMLInputElement).value);
-                  (e.target as HTMLInputElement).blur();
-                }
-              }}
-              style={{
-                width: 56,
-                padding: "4px 6px",
-                borderRadius: 6,
-                border: "1px solid #ccc",
-                fontSize: 12,
-              }}
-            />
-            <span style={{ fontSize: 12, opacity: 0.9, whiteSpace: "nowrap" }}>
-              {"Days Left"}: <b>{vacationDaysLeft}</b>
-            </span>
-          </div>
         </div>
         <div className="surface" style={{ minWidth: 0, height: "100%" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -1166,6 +1162,7 @@ export default function App() {
         <VacationsPanel
           vacations={vacationsThisMonth}
           avgDailyEarnings={avgDailyEarnings}
+          vacationDaysLeft={vacationDaysLeft}
           isPickingVacationStart={isPickingVacationStart}
           isPickingVacationEnd={isPickingVacationEnd}
           vacationTypeMenuOpen={vacationTypeMenuOpen}

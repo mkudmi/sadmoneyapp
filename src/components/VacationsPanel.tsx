@@ -6,6 +6,7 @@ import { normalizeVacationType, VacationType, vacationTypeLabel } from "../lib/v
 type VacationsPanelProps = {
   vacations: Vacation[];
   avgDailyEarnings: number;
+  vacationDaysLeft: number;
   isPickingVacationStart: boolean;
   isPickingVacationEnd: boolean;
   vacationTypeMenuOpen: boolean;
@@ -20,6 +21,7 @@ export function VacationsPanel(props: VacationsPanelProps) {
   const {
     vacations,
     avgDailyEarnings,
+    vacationDaysLeft,
     isPickingVacationStart,
     isPickingVacationEnd,
     vacationTypeMenuOpen,
@@ -33,7 +35,7 @@ export function VacationsPanel(props: VacationsPanelProps) {
   return (
     <div className="surface" style={{ minWidth: 0, height: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <b>{"Vacations this month"}</b>
+        <b>{`Vacations this month (Days left: ${vacationDaysLeft})`}</b>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {isPickingVacationStart ? (
             <span style={{ fontSize: 12, opacity: 0.8 }}>{"Pick a start date in the calendar"}</span>
