@@ -1347,7 +1347,7 @@ export default function App() {
                         <button
                           title={"Paid"}
                           aria-label={"Paid"}
-                          style={{ color: "#138a36", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 12 }}
+                          style={{ color: "#138a36", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 16, lineHeight: 1 }}
                           onClick={async () => {
                             const updated = await api.updateTransaction({
                               ...t,
@@ -1356,7 +1356,7 @@ export default function App() {
                             setData(updated);
                           }}
                         >
-                          Save
+                          ✓
                         </button>
                       ) : null}
                       <button
