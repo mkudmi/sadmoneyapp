@@ -1092,6 +1092,8 @@ export default function App() {
                     justifyContent: "space-between",
                     alignItems: "center",
                     gap: 10,
+                    border: "1px solid #eee",
+                    borderRadius: 10,
                     padding: "6px 8px",
                     fontSize: 12,
                   }}
@@ -1107,6 +1109,7 @@ export default function App() {
                       className="edit-pencil-btn"
                       title={"Edit debt"}
                       aria-label={"Edit debt"}
+                      style={{ width: 26, minWidth: 26, minHeight: 26, borderRadius: 8 }}
                       onClick={() => openDebtModal(d)}
                     >
                       <span aria-hidden="true">✎</span>
@@ -1114,7 +1117,7 @@ export default function App() {
                     <button
                       title={"Delete debt"}
                       aria-label={"Delete debt"}
-                      style={{ color: "var(--danger)", fontWeight: 700 }}
+                      style={{ color: "var(--danger)", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 12 }}
                       onClick={async () => {
                         const updated = await api.deleteDebt(d.id);
                         setData(updated);

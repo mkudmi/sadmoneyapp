@@ -53,6 +53,8 @@ export function SalariesPanel(props: SalariesPanelProps) {
                 justifyContent: "space-between",
                 alignItems: "center",
                 gap: 10,
+                border: "1px solid #eee",
+                borderRadius: 10,
                 padding: "6px 8px",
               }}
             >
@@ -67,6 +69,7 @@ export function SalariesPanel(props: SalariesPanelProps) {
                   className="edit-pencil-btn"
                   title={"Edit salary"}
                   aria-label={"Edit salary"}
+                  style={{ width: 26, minWidth: 26, minHeight: 26, borderRadius: 8 }}
                   onClick={() => onEditSalary(s)}
                 >
                   <span aria-hidden="true">✎</span>
@@ -75,7 +78,7 @@ export function SalariesPanel(props: SalariesPanelProps) {
                 <button
                   title={"Delete salary"}
                   aria-label={"Delete salary"}
-                  style={{ color: "var(--danger)", fontWeight: 700 }}
+                  style={{ color: "var(--danger)", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 12 }}
                   onClick={() => onDeleteSalary(s.id)}
                 >
                   {"x"}

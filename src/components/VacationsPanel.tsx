@@ -92,6 +92,8 @@ export function VacationsPanel(props: VacationsPanelProps) {
                   justifyContent: "space-between",
                   alignItems: "center",
                   gap: 10,
+                  border: "1px solid #eee",
+                  borderRadius: 10,
                   padding: "6px 8px",
                 }}
               >
@@ -106,6 +108,7 @@ export function VacationsPanel(props: VacationsPanelProps) {
                     className="edit-pencil-btn"
                     title={"Edit vacation"}
                     aria-label={"Edit vacation"}
+                    style={{ width: 26, minWidth: 26, minHeight: 26, borderRadius: 8 }}
                     onClick={() => onEditVacation(v)}
                   >
                     <span aria-hidden="true">✎</span>
@@ -113,7 +116,7 @@ export function VacationsPanel(props: VacationsPanelProps) {
                   <button
                     title={"Delete vacation"}
                     aria-label={"Delete vacation"}
-                    style={{ color: "var(--danger)", fontWeight: 700 }}
+                    style={{ color: "var(--danger)", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 12 }}
                     onClick={() => onDeleteVacation(v.id)}
                   >
                     {"x"}
