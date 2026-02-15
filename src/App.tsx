@@ -937,6 +937,16 @@ export default function App() {
           {capitalizeFirst(new Date(year, month0, 1).toLocaleString(locale, { month: "long", year: "numeric" }))}
         </h2>
         <button onClick={nextMonth}>{">"}</button>
+        <button
+          onClick={() => {
+            const d = new Date();
+            setYear(d.getFullYear());
+            setMonth0(d.getMonth());
+            setSelectedDate(ymd(d));
+          }}
+        >
+          {"Go to today"}
+        </button>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           <div className="metric-chip" style={{
               display: "inline-flex",
@@ -1071,17 +1081,6 @@ export default function App() {
           <div style={{ opacity: 0.8 }}>
             <b>{"Today:"}</b>{" "}
             {new Date().toLocaleDateString(locale, { day: "2-digit", month: "long", year: "numeric" })}
-            <button
-              style={{ marginLeft: 12 }}
-              onClick={() => {
-                const d = new Date();
-                setYear(d.getFullYear());
-                setMonth0(d.getMonth());
-                setSelectedDate(ymd(d));
-              }}
-            >
-              {"Go to today"}
-            </button>
           </div>
         </div>
         <div className="surface" style={{ minWidth: 0, height: "100%" }}>
