@@ -517,17 +517,43 @@ export default function App() {
     if (shouldUseDebtPerson && !debtPerson) return;
 
     try {
+      const amount = toKop(txModalAmount);
+      if (amount <= 0) return;
+
       const tx: Transaction = {
         id: "",
         date: txModalDate,
         type: txModalType,
-        amount: toKop(txModalAmount),
+        amount,
         category,
         note: "",
         debt_person: shouldUseDebtPerson ? debtPerson : null,
       };
 
-      if (tx.amount <= 0) return;
+      const canMergeByCategory = tx.type === "income" || tx.type === "expense";
+      const categoryKey = normalizeCategoryInput(tx.category).toLowerCase();
+      const debtPersonKey = normalizeCategoryInput(tx.debt_person ?? "").toLowerCase();
+
+      const existingTx = canMergeByCategory
+        ? (data?.transactions ?? []).find((existing) => {
+            if (existing.date !== tx.date || existing.type !== tx.type) return false;
+            if (normalizeCategoryInput(existing.category).toLowerCase() !== categoryKey) return false;
+            if (shouldUseDebtPerson) {
+              return normalizeCategoryInput(existing.debt_person ?? "").toLowerCase() === debtPersonKey;
+            }
+            return true;
+          })
+        : null;
+
+      if (existingTx) {
+        const updated = await api.updateTransaction({
+          ...existingTx,
+          amount: existingTx.amount + tx.amount,
+        });
+        setData(updated);
+        closeTxModal();
+        return;
+      }
 
       const updated = await api.addTransaction(tx);
       setData(updated);
