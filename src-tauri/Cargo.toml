@@ -1,6 +1,6 @@
 [package]
 name = "sadmoneyapp"
-version = "0.2.0"
+version = "0.2.1"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -15,16 +15,17 @@ name = "sadmoneyapp_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "0.2.1", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "0.2.1", features = [] }
 tauri-plugin-opener = "2"
-serde = { version = "1", features = ["derive"] }
+serde = { version = "0.2.1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
-uuid = { version = "1", features = ["v4"] }
-chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "0.2.1", features = ["v4"] }
+chrono = { version = "0.2.1", features = ["serde"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-updater = "2.10.0"
 tauri-plugin-process = "2.3.1"
+
