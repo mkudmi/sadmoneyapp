@@ -903,7 +903,7 @@ export default function App() {
         boxSizing: "border-box",
               }}
     >
-      <div className="topbar" style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+      <div className="topbar" style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap", zIndex: 3000 }}>
         <button onClick={prevMonth}>{"<"}</button>
         <h2 className="summary-title">
           {capitalizeFirst(new Date(year, month0, 1).toLocaleString(locale, { month: "long", year: "numeric" }))}
