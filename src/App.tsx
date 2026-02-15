@@ -33,21 +33,48 @@ export default function App() {
     const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
     return (data?.vacations ?? []).filter(v => v.start_date <= monthEnd && v.end_date >= monthStart);
   }, [data?.vacations, month0, monthKey, year]);
-  const topExpenseCategoriesThisMonth = useMemo(() => {
-    if (!data) return [] as Array<{ category: string; amount: number }>;
+  const topCategoriesThisMonth = useMemo(() => {
+    if (!data) return [] as Array<{ category: string; amount: number; type: "income" | "expense" }>;
 
-    const byCategory = new Map<string, number>();
+    const byCategory = new Map<string, { amount: number; type: "income" | "expense" }>();
     for (const t of data.transactions) {
-      if (t.type !== "expense") continue;
       if (ymFromYmd(t.date) !== monthKey) continue;
+      if (t.type !== "income" && t.type !== "expense") continue;
       const category = (t.category || "").trim() || "No category";
-      byCategory.set(category, (byCategory.get(category) ?? 0) + t.amount);
+      const prev = byCategory.get(`${t.type}:${category}`);
+      byCategory.set(`${t.type}:${category}`, {
+        type: t.type,
+        amount: (prev?.amount ?? 0) + t.amount,
+      });
+    }
+
+    for (const s of data.salaryEvents ?? []) {
+      if (ymFromYmd(s.date) !== monthKey) continue;
+      const category = (s.title || "").trim() || "Salary";
+      const key = `income:${category}`;
+      const prev = byCategory.get(key);
+      byCategory.set(key, {
+        type: "income",
+        amount: (prev?.amount ?? 0) + s.amount,
+      });
     }
 
     return Array.from(byCategory.entries())
-      .map(([category, amount]) => ({ category, amount }))
+      .map(([key, value]) => ({
+        category: key.split(":").slice(1).join(":"),
+        amount: value.amount,
+        type: value.type,
+      }))
       .sort((a, b) => b.amount - a.amount);
   }, [data, monthKey]);
+  const topIncomeCategoriesThisMonth = useMemo(
+    () => topCategoriesThisMonth.filter((item) => item.type === "income"),
+    [topCategoriesThisMonth]
+  );
+  const topExpenseCategoriesThisMonth = useMemo(
+    () => topCategoriesThisMonth.filter((item) => item.type === "expense"),
+    [topCategoriesThisMonth]
+  );
 
   const [workSchedule, setWorkSchedule] = useState<'5/2' | 'custom'>('5/2');
   const { vacationDaysCount, handleVacationDaysCountChange, commitVacationDaysCount } =
@@ -320,6 +347,7 @@ export default function App() {
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const [txModalOpen, setTxModalOpen] = useState(false);
+  const [topCategoriesModalOpen, setTopCategoriesModalOpen] = useState(false);
   const [txModalType, setTxModalType] = useState<"income" | "expense" | "planned_expense">("expense");
   const [txModalDate, setTxModalDate] = useState<string>(today);
   const [txModalAmount, setTxModalAmount] = useState<string>("");
@@ -1409,9 +1437,20 @@ export default function App() {
         <div className="surface" style={{ width: "100%", boxSizing: "border-box" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <b>{"Top categories this month"}</b>
+            <button
+              onClick={() => setTopCategoriesModalOpen(true)}
+              title={"Expand"}
+              aria-label={"Expand"}
+              style={{ width: 28, minWidth: 28, minHeight: 28, padding: 0, display: "inline-grid", placeItems: "center", borderRadius: 8 }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path d="M5 1H1V5M9 1H13V5M13 9V13H9M1 9V13H5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M1.5 1.5L5 5M12.5 1.5L9 5M12.5 12.5L9 9M1.5 12.5L5 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           </div>
 
-          {topExpenseCategoriesThisMonth.length > 0 ? (
+          {topCategoriesThisMonth.length > 0 ? (
             <div className="panel-list"
               style={{
                 marginTop: 8,
@@ -1420,9 +1459,9 @@ export default function App() {
                 paddingRight: 4,
               }}
             >
-              {topExpenseCategoriesThisMonth.map((item, idx) => (
+              {topCategoriesThisMonth.map((item, idx) => (
                 <div className="panel-item"
-                  key={item.category}
+                  key={`${item.type}:${item.category}`}
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
@@ -1435,15 +1474,15 @@ export default function App() {
                   <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     <b>{idx + 1}.</b> {item.category}
                   </div>
-                  <div style={{ flexShrink: 0 }}>
-                    <b>{rub(item.amount)}</b>
+                  <div style={{ flexShrink: 0, color: item.type === "income" ? "#138a36" : "var(--danger)" }}>
+                    <b>{item.type === "income" ? "+" : "-"} {rub(item.amount)}</b>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
             <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
-              {"No category expenses yet this month."}
+              {"No category operations yet this month."}
             </div>
           )}
         </div>
@@ -1744,6 +1783,124 @@ export default function App() {
             }
           }}
         />
+      ) : null}
+
+      {topCategoriesModalOpen ? (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            zIndex: 5000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setTopCategoriesModalOpen(false);
+          }}
+        >
+          <div
+            className="modal-panel"
+            style={{
+              width: "min(860px, 100%)",
+              maxHeight: "min(70vh, 720px)",
+              padding: 12,
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <b style={{ fontSize: 14 }}>{"Top categories this month"}</b>
+              <button onClick={() => setTopCategoriesModalOpen(false)} aria-label={"Close"}>x</button>
+            </div>
+            {topCategoriesThisMonth.length > 0 ? (
+              <div
+                style={{
+                  marginTop: 10,
+                  minHeight: 0,
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                }}
+              >
+                <div style={{ minHeight: 0, display: "flex", flexDirection: "column" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: "#138a36" }}>
+                    {"Income"}
+                  </div>
+                  <div className="panel-list" style={{ overflowY: "auto", paddingRight: 4, minHeight: 0 }}>
+                    {topIncomeCategoriesThisMonth.length > 0 ? topIncomeCategoriesThisMonth.map((item, idx) => (
+                      <div
+                        className="panel-item"
+                        key={`modal:income:${item.category}`}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 10,
+                          border: "1px solid #eee",
+                          borderRadius: 10,
+                          padding: "6px 8px",
+                          fontSize: 12,
+                        }}
+                      >
+                        <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <b>{idx + 1}.</b> {item.category}
+                        </div>
+                        <div style={{ flexShrink: 0, color: "#138a36" }}>
+                          <b>{"+ "} {rub(item.amount)}</b>
+                        </div>
+                      </div>
+                    )) : (
+                      <div style={{ marginTop: 4, fontSize: 12, opacity: 0.7 }}>{"No income categories."}</div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ minHeight: 0, display: "flex", flexDirection: "column" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: "var(--danger)" }}>
+                    {"Expense"}
+                  </div>
+                  <div className="panel-list" style={{ overflowY: "auto", paddingRight: 4, minHeight: 0 }}>
+                    {topExpenseCategoriesThisMonth.length > 0 ? topExpenseCategoriesThisMonth.map((item, idx) => (
+                      <div
+                        className="panel-item"
+                        key={`modal:expense:${item.category}`}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 10,
+                          border: "1px solid #eee",
+                          borderRadius: 10,
+                          padding: "6px 8px",
+                          fontSize: 12,
+                        }}
+                      >
+                        <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <b>{idx + 1}.</b> {item.category}
+                        </div>
+                        <div style={{ flexShrink: 0, color: "var(--danger)" }}>
+                          <b>{"- "} {rub(item.amount)}</b>
+                        </div>
+                      </div>
+                    )) : (
+                      <div style={{ marginTop: 4, fontSize: 12, opacity: 0.7 }}>{"No expense categories."}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
+                {"No category operations yet this month."}
+              </div>
+            )}
+          </div>
+        </div>
       ) : null}
 
       {txModalOpen ? (
