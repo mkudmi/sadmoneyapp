@@ -36,9 +36,10 @@ export default function App() {
   const topCategoriesThisMonth = useMemo(() => {
     if (!data) return [] as Array<{ category: string; amount: number; type: "income" | "expense" }>;
 
+    const monthStart = `${monthKey}-01`;
     const byCategory = new Map<string, { amount: number; type: "income" | "expense" }>();
     for (const t of data.transactions) {
-      if (ymFromYmd(t.date) !== monthKey) continue;
+      if (t.date < monthStart || t.date > today) continue;
       if (t.type !== "income" && t.type !== "expense") continue;
       const category = (t.category || "").trim() || "No category";
       const prev = byCategory.get(`${t.type}:${category}`);
@@ -49,7 +50,7 @@ export default function App() {
     }
 
     for (const s of data.salaryEvents ?? []) {
-      if (ymFromYmd(s.date) !== monthKey) continue;
+      if (s.date < monthStart || s.date > today) continue;
       const category = (s.title || "").trim() || "Salary";
       const key = `income:${category}`;
       const prev = byCategory.get(key);
@@ -66,7 +67,7 @@ export default function App() {
         type: value.type,
       }))
       .sort((a, b) => b.amount - a.amount);
-  }, [data, monthKey]);
+  }, [data, monthKey, today]);
   const topIncomeCategoriesThisMonth = useMemo(
     () => topCategoriesThisMonth.filter((item) => item.type === "income"),
     [topCategoriesThisMonth]
