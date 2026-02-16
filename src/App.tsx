@@ -1270,7 +1270,7 @@ export default function App() {
               onClick={() => openDebtModal()}
               title={"Add debt"}
               aria-label={"Add debt"}
-              style={{ minWidth: 28, fontWeight: 700 }}
+              style={{ minWidth: 24, minHeight: 24, padding: "0 6px", fontWeight: 700, lineHeight: 1 }}
             >
               +
             </button>

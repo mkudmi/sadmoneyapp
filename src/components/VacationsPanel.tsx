@@ -51,7 +51,7 @@ export function VacationsPanel(props: VacationsPanelProps) {
               onClick={onToggleVacationTypeMenu}
               title={"Add vacation"}
               aria-label={"Add vacation"}
-              style={{ minWidth: 28, fontWeight: 700 }}
+              style={{ minWidth: 24, minHeight: 24, padding: "0 6px", fontWeight: 700, lineHeight: 1 }}
             >
               +
             </button>
