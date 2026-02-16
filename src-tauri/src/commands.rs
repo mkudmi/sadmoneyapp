@@ -191,6 +191,14 @@ pub fn delete_salary_event(app: AppHandle, id: String) -> Result<AppData, String
 }
 
 #[tauri::command]
+pub fn set_piggy_bank_amount(app: AppHandle, amount: i64) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    data.piggy_bank_amount = amount.max(0);
+    save(&app, &data)?;
+    Ok(data)
+}
+
+#[tauri::command]
 pub fn upsert_vacation(app: AppHandle, mut ev: Vacation) -> Result<AppData, String> {
     let mut data = load(&app)?;
 

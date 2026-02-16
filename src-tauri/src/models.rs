@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 pub struct AppData {
     pub version: i32,
     pub settings: Settings,
+    #[serde(rename = "piggyBankAmount")]
+    #[serde(default)]
+    pub piggy_bank_amount: i64,
     #[serde(rename = "salaryEvents")]
     pub salary_events: Vec<SalaryEvent>,
     pub vacations: Vec<Vacation>,
@@ -136,6 +139,7 @@ impl Default for AppData {
         Self {
             version: 1,
             settings: Settings::default(),
+            piggy_bank_amount: 0,
             salary_events: vec![],
             vacations: vec![],
             off_days: vec![],

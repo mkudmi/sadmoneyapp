@@ -49,6 +49,7 @@ export type AppData = {
     txCategories: string[];
     language?: "ru" | "en";
   };
+  piggyBankAmount?: number;
   salaryEvents: SalaryEvent[];
   vacations: Vacation[];
   offDays: OffDay[];
@@ -70,6 +71,7 @@ export const api = {
   deleteTransaction: (id: string) => invoke<AppData>("delete_transaction", { id }),
   upsertSalaryEvent: (ev: SalaryEvent) => invoke<AppData>("upsert_salary_event", { ev }),
   deleteSalaryEvent: (id: string) => invoke<AppData>("delete_salary_event", { id }),
+  setPiggyBankAmount: (amount: number) => invoke<AppData>("set_piggy_bank_amount", { amount }),
   upsertVacation: (vac: Vacation) => invoke<AppData>("upsert_vacation", { ev: vac }),
   deleteVacation: (id: string) => invoke<AppData>("delete_vacation", { id }),
   upsertOffDay: (od: OffDay) => invoke<AppData>("upsert_off_day", { ev: od }),

@@ -16,6 +16,7 @@ import { VacationsPanel } from "./components/VacationsPanel";
 import { SalariesPanel } from "./components/SalariesPanel";
 
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
+const LEGACY_PIGGY_BANK_STORAGE_KEY = "sadmoneyapp.piggy_bank_amount";
 
 export default function App() {
   const [data, setData] = useState<AppData | null>(null);
@@ -24,6 +25,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(ymd(new Date()));
   const today = ymd(new Date());
   const [budget, setBudget] = useState<{ per_day: number; days: number; next_salary_date: string | null; available: number } | null>(null);
+  const piggyBankAmount = Math.max(0, data?.piggyBankAmount ?? 0);
   const monthKey = `${year}-${String(month0 + 1).padStart(2, "0")}`; // "YYYY-MM"
   const salaryThisMonth = (data?.salaryEvents ?? [])
     .filter(s => ymFromYmd(s.date) === monthKey)
@@ -189,6 +191,11 @@ export default function App() {
   useEffect(() => {
     api.calcDailyBudget(today).then(setBudget);
   }, [today, data]);
+
+  const availableForSpending = Math.max(0, (budget?.available ?? 0) - piggyBankAmount);
+  const dailySpendLimitFromAvailable = budget && budget.days > 0
+    ? Math.floor(availableForSpending / budget.days)
+    : 0;
 
 
   const monthDays = useMemo(() => {
@@ -364,6 +371,9 @@ export default function App() {
   const [salaryModalDate, setSalaryModalDate] = useState<string>(today);
   const [salaryModalAmount, setSalaryModalAmount] = useState<string>("");
   const [salaryModalTitle, setSalaryModalTitle] = useState<string>("Salary");
+  const [piggyBankModalOpen, setPiggyBankModalOpen] = useState(false);
+  const [piggyBankModalAmount, setPiggyBankModalAmount] = useState<string>("");
+  const [piggyBankModalType, setPiggyBankModalType] = useState<"add" | "withdraw">("add");
   const [isPickingVacationStart, setIsPickingVacationStart] = useState(false);
   const [isPickingVacationEnd, setIsPickingVacationEnd] = useState(false);
   const [vacationStartDate, setVacationStartDate] = useState<string | null>(null);
@@ -417,6 +427,43 @@ export default function App() {
       .then(setAppVersion)
       .catch(() => setAppVersion("-"));
   }, []);
+
+  useEffect(() => {
+    if (!piggyBankModalOpen) return;
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closePiggyBankModal();
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        void submitPiggyBankModal();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [piggyBankModalOpen, piggyBankModalAmount, piggyBankModalType, data]);
+
+  useEffect(() => {
+    if (!data) return;
+    if ((data.piggyBankAmount ?? 0) > 0) return;
+    const raw = localStorage.getItem(LEGACY_PIGGY_BANK_STORAGE_KEY);
+    const parsed = raw ? Number.parseInt(raw, 10) : 0;
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    api.setPiggyBankAmount(parsed)
+      .then((updated) => {
+        setData(updated);
+        localStorage.removeItem(LEGACY_PIGGY_BANK_STORAGE_KEY);
+      })
+      .catch(() => {
+        // Keep legacy value untouched if migration fails.
+      });
+  }, [data]);
 
   function openDayMenu(date: string, anchor: HTMLElement) {
     const menuWidth = 220;
@@ -663,6 +710,49 @@ export default function App() {
     setSalaryModalOpen(false);
     setSalaryModalAmount("");
     setSalaryModalTitle("Salary");
+  }
+
+  function openPiggyBankModal(type: "add" | "withdraw") {
+    setPiggyBankModalType(type);
+    setPiggyBankModalAmount("");
+    setPiggyBankModalOpen(true);
+  }
+
+  function closePiggyBankModal() {
+    setPiggyBankModalOpen(false);
+    setPiggyBankModalAmount("");
+  }
+
+  async function submitPiggyBankModal() {
+    if (!data) return;
+    const amount = toKop(piggyBankModalAmount);
+    if (amount <= 0) return;
+
+    const current = Math.max(0, data.piggyBankAmount ?? 0);
+
+    if (piggyBankModalType === "add") {
+      try {
+        const updated = await api.setPiggyBankAmount(current + amount);
+        setData(updated);
+        closePiggyBankModal();
+      } catch (err) {
+        alert(String(err));
+      }
+      return;
+    }
+
+    if (amount > current) {
+      alert("Not enough money in piggy bank.");
+      return;
+    }
+
+    try {
+      const updated = await api.setPiggyBankAmount(current - amount);
+      setData(updated);
+      closePiggyBankModal();
+    } catch (err) {
+      alert(String(err));
+    }
   }
 
   async function submitSalaryModal() {
@@ -949,6 +1039,36 @@ export default function App() {
           {"Go to today"}
         </button>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <div
+            className="metric-chip"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 10px",
+            }}
+          >
+            <span style={{ fontSize: 12, opacity: 0.9, whiteSpace: "nowrap" }}>
+              {"Piggy bank"}
+            </span>
+            <b style={{ fontSize: 12, whiteSpace: "nowrap" }}>{rub(piggyBankAmount)}</b>
+            <button
+              title={"Add to piggy bank"}
+              aria-label={"Add to piggy bank"}
+              style={{ minWidth: 22, minHeight: 22, padding: 0, fontWeight: 700, lineHeight: 1 }}
+              onClick={() => openPiggyBankModal("add")}
+            >
+              {"+"}
+            </button>
+            <button
+              title={"Withdraw from piggy bank"}
+              aria-label={"Withdraw from piggy bank"}
+              style={{ minWidth: 22, minHeight: 22, padding: 0, fontWeight: 700, lineHeight: 1 }}
+              onClick={() => openPiggyBankModal("withdraw")}
+            >
+              {"-"}
+            </button>
+          </div>
           <div className="metric-chip" style={{
               display: "inline-flex",
               alignItems: "center",
@@ -1249,8 +1369,9 @@ export default function App() {
             const diff = Math.round((nd0.getTime() - td0.getTime()) / (1000 * 60 * 60 * 24));
             return diff >= 0 ? `${diff} ${"days"}` : `0 ${"days"}`;
           })() : "not set"}</div>
-            <div><b>{"Available:"}</b> {rub(budget.available)}</div>
-            <div><b>{"Daily spend limit:"}</b> {rub(budget.per_day)}</div>
+            <div><b>{"Available:"}</b> {rub(availableForSpending)}</div>
+            <div style={{ fontSize: 12, opacity: 0.8 }}><b>{"In piggy bank:"}</b> {rub(piggyBankAmount)}</div>
+            <div><b>{"Daily spend limit:"}</b> {rub(dailySpendLimitFromAvailable)}</div>
           </>
         )}
         <div style={{ marginTop: 12, flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
@@ -2216,6 +2337,66 @@ export default function App() {
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
               <button onClick={closeSalaryModal}>{"Cancel"}</button>
               <button onClick={submitSalaryModal}>{"Add salary"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {piggyBankModalOpen ? (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            zIndex: 5000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closePiggyBankModal();
+          }}
+        >
+          <div
+            className="modal-panel"
+            style={{
+              width: "min(420px, 100%)",
+              padding: 12,
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <b style={{ fontSize: 14 }}>
+                {piggyBankModalType === "add" ? "Add to piggy bank" : "Withdraw from piggy bank"}
+              </b>
+              <button onClick={closePiggyBankModal} aria-label={"Close"}>x</button>
+            </div>
+
+            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
+                <input
+                  value={piggyBankModalAmount}
+                  onChange={(e) => setPiggyBankModalAmount(e.target.value)}
+                  placeholder={"1000"}
+                  inputMode="decimal"
+                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                />
+                {piggyBankModalType === "withdraw" ? (
+                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+                    <b>{"Available in piggy bank:"}</b> {rub(piggyBankAmount)}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <button onClick={closePiggyBankModal}>{"Cancel"}</button>
+              <button onClick={submitPiggyBankModal}>
+                {piggyBankModalType === "add" ? "Add" : "Withdraw"}
+              </button>
             </div>
           </div>
         </div>
