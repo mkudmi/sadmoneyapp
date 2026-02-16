@@ -17,6 +17,7 @@ import { SalariesPanel } from "./components/SalariesPanel";
 import { PiggyBankChip } from "./components/PiggyBankChip";
 import { PiggyBankModal, PiggyBankModalType } from "./components/PiggyBankModal";
 import { SelectedDateBudgetSummary } from "./components/SelectedDateBudgetSummary";
+import { SelectedDateTransactionsList } from "./components/SelectedDateTransactionsList";
 import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
@@ -246,6 +247,7 @@ export default function App() {
   const salaryEventsForSelectedDate = (data?.salaryEvents ?? []).filter((s) => s.date === selectedDate);
   const salaryForSelectedDate = salaryEventsForSelectedDate[0] ?? null;
   const salaryAmountForSelectedDate = salaryEventsForSelectedDate.reduce((sum, s) => sum + s.amount, 0);
+  const transactionsForSelectedDate = (data?.transactions ?? []).filter((t) => t.date === selectedDate);
   const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
   const vacationForSelectedDate = (data?.vacations ?? []).find(v => v.start_date <= selectedDate && v.end_date >= selectedDate) ?? null;
   const plannedAfterExpensesForSelectedDate = useMemo(() => {
@@ -699,6 +701,37 @@ export default function App() {
     setSalaryModalOpen(false);
     setSalaryModalAmount("");
     setSalaryModalTitle("Salary");
+  }
+
+  async function handleMarkPlannedTransactionPaid(tx: Transaction) {
+    const updated = await api.updateTransaction({
+      ...tx,
+      type: "expense",
+    });
+    setData(updated);
+  }
+
+  async function handleEditTransaction(t: Transaction) {
+    if (!data) return;
+
+    const newAmountStr = prompt("New amount (RUB):", String(t.amount / 100));
+    if (!newAmountStr) return;
+
+    const newCategory = prompt("Category:", t.category) ?? t.category;
+    const newNote = prompt("Comment:", t.note) ?? t.note;
+
+    const updated = await api.updateTransaction({
+      ...t,
+      amount: toKop(newAmountStr),
+      category: newCategory,
+      note: newNote,
+    });
+    setData(updated);
+  }
+
+  async function handleDeleteTransaction(id: string) {
+    const updated = await api.deleteTransaction(id);
+    setData(updated);
   }
 
   function openPiggyBankModal(type: "add" | "withdraw") {
@@ -1328,184 +1361,17 @@ export default function App() {
           availableForSpending={availableForSpending}
           dailySpendLimit={dailySpendLimitFromAvailable}
         />
-        <div style={{ marginTop: 12, flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <b>{"Transactions for"} {selectedDate}:</b>
-
-          <div
-            style={{
-              marginTop: 8,
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-              flex: "1 1 auto",
-              minHeight: 0,
-              overflowY: "auto",
-              paddingRight: 6,
-            }}
-          >
-            {salaryForSelectedDate ? (
-              <div
-                key={"salary"}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  border: "1px solid #eee",
-                  borderRadius: 10,
-                  padding: "6px 8px",
-                  background: "#fff",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 12 }}>
-                    <b>+ </b> {salaryForSelectedDate.title}  -  {rub(salaryForSelectedDate.amount)}
-                  </div>
-                </div>
-
-              </div>
-            ) : null}
-
-            {plannedAfterExpensesForSelectedDate !== null ? (
-              <div
-                key={"planned-after-expenses"}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  border: "1px solid #eee",
-                  borderRadius: 10,
-                  padding: "6px 8px",
-                  background: "#fff",
-                }}
-              >
-                <div style={{ fontSize: 12 }}>
-                  <b>{"After planned expenses"}</b>
-                </div>
-                <div style={{ fontSize: 12, fontWeight: 700 }}>
-                  {rub(plannedAfterExpensesForSelectedDate)}
-                </div>
-              </div>
-            ) : null}
-
-            {afterVacationForSelectedDate !== null ? (
-              <div
-                key={"after-vacation"}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  border: "1px solid #eee",
-                  borderRadius: 10,
-                  padding: "6px 8px",
-                  background: "#fff",
-                }}
-              >
-                <div style={{ fontSize: 12 }}>
-                  <b>{"After vacation"}</b>
-                  <span style={{ marginLeft: 8, opacity: 0.75 }}>
-                    {`(-${rub(afterVacationForSelectedDate.vacationDeduction)}, ${afterVacationForSelectedDate.vacationDays}d${afterVacationForSelectedDate.basedOnPlannedAfterExpenses ? ", incl. planned" : ""})`}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, fontWeight: 700 }}>
-                  {rub(afterVacationForSelectedDate.amount)}
-                </div>
-              </div>
-            ) : null}
-
-            {(data?.transactions ?? [])
-              .filter((t) => t.date === selectedDate)
-              .map((t) => (
-                  <div
-                    key={t.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      border: "1px solid #eee",
-                      borderRadius: 10,
-                      padding: "6px 8px",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 12 }}>
-                        <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "P" : "-"}</b> {rub(t.amount)}  -  {t.category}
-                        {t.debt_person ? (
-                          <span style={{ marginLeft: 6, fontSize: 12, opacity: 0.75 }}>
-                            {"to"}: {t.debt_person}
-                          </span>
-                        ) : null}
-                        {t.type === "planned_expense" ? (
-                          <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>{"(planned)"}</span>
-                        ) : null}
-                      </div>
-                      {t.note ? <div style={{ fontSize: 12, opacity: 0.7 }}>{t.note}</div> : null}
-                    </div>
-
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {t.type === "planned_expense" ? (
-                        <button
-                          title={"Paid"}
-                          aria-label={"Paid"}
-                          style={{ color: "#138a36", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 16, lineHeight: 1 }}
-                          onClick={async () => {
-                            const updated = await api.updateTransaction({
-                              ...t,
-                              type: "expense",
-                            });
-                            setData(updated);
-                          }}
-                        >
-                          ✓
-                        </button>
-                      ) : null}
-                      <button
-                        className="edit-pencil-btn"
-                        title={"Edit"}
-                        aria-label={"Edit"}
-                        style={{ width: 26, minWidth: 26, minHeight: 26, borderRadius: 8 }}
-                        onClick={async () => {
-                          if (!data) return;
-
-                          const newAmountStr = prompt("New amount (RUB):", String(t.amount / 100));
-                          if (!newAmountStr) return;
-
-                          const newCategory = prompt("Category:", t.category) ?? t.category;
-                          const newNote = prompt("Comment:", t.note) ?? t.note;
-
-                          const updated = await api.updateTransaction({
-                            ...t,
-                            amount: toKop(newAmountStr),
-                            category: newCategory,
-                            note: newNote,
-                          });
-                          setData(updated);
-                        }}
-                      >
-                        <span aria-hidden="true">✎</span>
-                      </button>
-
-                      <button
-                        title={"Delete"}
-                        aria-label={"Delete"}
-                        style={{ color: "var(--danger)", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 12 }}
-                        onClick={async () => {
-                          const updated = await api.deleteTransaction(t.id);
-                          setData(updated);
-                        }}
-                      >
-                        x
-                      </button>
-                    </div>
-                  </div>
-              ))}
-          </div>
+        <SelectedDateTransactionsList
+          selectedDate={selectedDate}
+          salaryForSelectedDate={salaryForSelectedDate}
+          plannedAfterExpensesForSelectedDate={plannedAfterExpensesForSelectedDate}
+          afterVacationForSelectedDate={afterVacationForSelectedDate}
+          transactionsForSelectedDate={transactionsForSelectedDate}
+          onMarkPlannedAsPaid={(tx) => { void handleMarkPlannedTransactionPaid(tx); }}
+          onEditTransaction={(tx) => { void handleEditTransaction(tx); }}
+          onDeleteTransaction={(id) => { void handleDeleteTransaction(id); }}
+        />
         </div>
-        </div>
-
         <div className="surface" style={{ width: "100%", boxSizing: "border-box" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <b>{"Top categories this month"}</b>
@@ -2312,3 +2178,4 @@ export default function App() {
     </div>
   );
 }
+
