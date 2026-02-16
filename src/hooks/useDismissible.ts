@@ -18,10 +18,10 @@ export function useDismissible(
       if (e.key === "Escape") close();
     }
 
-    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("mousedown", onDocClick, true);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("mousedown", onDocClick, true);
       document.removeEventListener("keydown", onKey);
     };
   }, [allowSelector, close, isOpen]);

@@ -19,6 +19,7 @@ import { PiggyBankModal, PiggyBankModalType } from "./components/PiggyBankModal"
 import { SelectedDateBudgetSummary } from "./components/SelectedDateBudgetSummary";
 import { SelectedDateTransactionsList } from "./components/SelectedDateTransactionsList";
 import { TopCategoriesPanel } from "./components/TopCategoriesPanel";
+import { EditTransactionModal } from "./components/EditTransactionModal";
 import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
@@ -364,6 +365,11 @@ export default function App() {
   const [debtModalAmount, setDebtModalAmount] = useState<string>("");
   const [debtModalPerson, setDebtModalPerson] = useState<string>("");
   const [debtModalEditId, setDebtModalEditId] = useState<string | null>(null);
+  const [editTxModalOpen, setEditTxModalOpen] = useState(false);
+  const [editTxModalId, setEditTxModalId] = useState<string | null>(null);
+  const [editTxModalAmount, setEditTxModalAmount] = useState<string>("");
+  const [editTxModalCategory, setEditTxModalCategory] = useState<string>("");
+  const [editTxModalNote, setEditTxModalNote] = useState<string>("");
   const [isPickingSalaryDate, setIsPickingSalaryDate] = useState(false);
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const [salaryModalDate, setSalaryModalDate] = useState<string>(today);
@@ -523,6 +529,17 @@ export default function App() {
   }, [expenseCategories]);
 
   const activeTxCategories = txModalType === "income" ? incomeCategories : expenseCategoriesWithDebt;
+  const editTxOriginal = useMemo(
+    () => (data?.transactions ?? []).find((t) => t.id === editTxModalId) ?? null,
+    [data?.transactions, editTxModalId]
+  );
+  const editTxCategoryOptions = useMemo(() => {
+    if (!editTxOriginal) return [] as string[];
+    const base = editTxOriginal.type === "income" ? incomeCategories : expenseCategoriesWithDebt;
+    const current = normalizeCategoryInput(editTxModalCategory);
+    if (!current) return base;
+    return base.includes(current) ? base : [current, ...base];
+  }, [editTxOriginal, incomeCategories, expenseCategoriesWithDebt, editTxModalCategory]);
 
   const txCategoryOptions = useMemo(() => {
     const q = txModalCategory.trim().toLowerCase();
@@ -704,26 +721,47 @@ export default function App() {
   }
 
   async function handleEditTransaction(t: Transaction) {
-    if (!data) return;
-
-    const newAmountStr = prompt("New amount (RUB):", String(t.amount / 100));
-    if (!newAmountStr) return;
-
-    const newCategory = prompt("Category:", t.category) ?? t.category;
-    const newNote = prompt("Comment:", t.note) ?? t.note;
-
-    const updated = await api.updateTransaction({
-      ...t,
-      amount: toKop(newAmountStr),
-      category: newCategory,
-      note: newNote,
-    });
-    setData(updated);
+    setEditTxModalId(t.id);
+    setEditTxModalAmount(String(t.amount / 100));
+    setEditTxModalCategory(t.category);
+    setEditTxModalNote(t.note ?? "");
+    setEditTxModalOpen(true);
   }
 
   async function handleDeleteTransaction(id: string) {
     const updated = await api.deleteTransaction(id);
     setData(updated);
+  }
+
+  function closeEditTxModal() {
+    setEditTxModalOpen(false);
+    setEditTxModalId(null);
+    setEditTxModalAmount("");
+    setEditTxModalCategory("");
+    setEditTxModalNote("");
+  }
+
+  async function submitEditTxModal() {
+    if (!data || !editTxModalId) return;
+
+    const original = (data.transactions ?? []).find((t) => t.id === editTxModalId);
+    if (!original) return;
+
+    const amount = toKop(editTxModalAmount);
+    if (amount <= 0) return;
+
+    try {
+      const updated = await api.updateTransaction({
+        ...original,
+        amount,
+        category: editTxModalCategory,
+        note: editTxModalNote,
+      });
+      setData(updated);
+      closeEditTxModal();
+    } catch (err) {
+      alert(String(err));
+    }
   }
 
   function openPiggyBankModal(type: "add" | "withdraw") {
@@ -1861,6 +1899,19 @@ export default function App() {
           </div>
         </div>
       ) : null}
+
+      <EditTransactionModal
+        open={editTxModalOpen}
+        amount={editTxModalAmount}
+        category={editTxModalCategory}
+        note={editTxModalNote}
+        categoryOptions={editTxCategoryOptions}
+        onAmountChange={setEditTxModalAmount}
+        onCategoryChange={setEditTxModalCategory}
+        onNoteChange={setEditTxModalNote}
+        onClose={closeEditTxModal}
+        onSubmit={() => { void submitEditTxModal(); }}
+      />
 
       {vacationModalOpen ? (
         <div
