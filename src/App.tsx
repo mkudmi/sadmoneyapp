@@ -14,6 +14,9 @@ import { useDismissible } from "./hooks/useDismissible";
 import { useVacationDaysCount } from "./hooks/useVacationDaysCount";
 import { VacationsPanel } from "./components/VacationsPanel";
 import { SalariesPanel } from "./components/SalariesPanel";
+import { PiggyBankChip } from "./components/PiggyBankChip";
+import { PiggyBankModal, PiggyBankModalType } from "./components/PiggyBankModal";
+import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
 const LEGACY_PIGGY_BANK_STORAGE_KEY = "sadmoneyapp.piggy_bank_amount";
@@ -373,7 +376,7 @@ export default function App() {
   const [salaryModalTitle, setSalaryModalTitle] = useState<string>("Salary");
   const [piggyBankModalOpen, setPiggyBankModalOpen] = useState(false);
   const [piggyBankModalAmount, setPiggyBankModalAmount] = useState<string>("");
-  const [piggyBankModalType, setPiggyBankModalType] = useState<"add" | "withdraw">("add");
+  const [piggyBankModalType, setPiggyBankModalType] = useState<PiggyBankModalType>("add");
   const [isPickingVacationStart, setIsPickingVacationStart] = useState(false);
   const [isPickingVacationEnd, setIsPickingVacationEnd] = useState(false);
   const [vacationStartDate, setVacationStartDate] = useState<string | null>(null);
@@ -428,26 +431,11 @@ export default function App() {
       .catch(() => setAppVersion("-"));
   }, []);
 
-  useEffect(() => {
-    if (!piggyBankModalOpen) return;
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        closePiggyBankModal();
-        return;
-      }
-      if (e.key === "Enter") {
-        e.preventDefault();
-        void submitPiggyBankModal();
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [piggyBankModalOpen, piggyBankModalAmount, piggyBankModalType, data]);
+  usePiggyBankHotkeys({
+    open: piggyBankModalOpen,
+    onClose: closePiggyBankModal,
+    onSubmit: () => { void submitPiggyBankModal(); },
+  });
 
   useEffect(() => {
     if (!data) return;
@@ -1039,36 +1027,11 @@ export default function App() {
           {"Go to today"}
         </button>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-          <div
-            className="metric-chip"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "6px 10px",
-            }}
-          >
-            <span style={{ fontSize: 12, opacity: 0.9, whiteSpace: "nowrap" }}>
-              {"Piggy bank"}
-            </span>
-            <b style={{ fontSize: 12, whiteSpace: "nowrap" }}>{rub(piggyBankAmount)}</b>
-            <button
-              title={"Add to piggy bank"}
-              aria-label={"Add to piggy bank"}
-              style={{ minWidth: 22, minHeight: 22, padding: 0, fontWeight: 700, lineHeight: 1 }}
-              onClick={() => openPiggyBankModal("add")}
-            >
-              {"+"}
-            </button>
-            <button
-              title={"Withdraw from piggy bank"}
-              aria-label={"Withdraw from piggy bank"}
-              style={{ minWidth: 22, minHeight: 22, padding: 0, fontWeight: 700, lineHeight: 1 }}
-              onClick={() => openPiggyBankModal("withdraw")}
-            >
-              {"-"}
-            </button>
-          </div>
+          <PiggyBankChip
+            amount={piggyBankAmount}
+            onAdd={() => openPiggyBankModal("add")}
+            onWithdraw={() => openPiggyBankModal("withdraw")}
+          />
           <div className="metric-chip" style={{
               display: "inline-flex",
               alignItems: "center",
@@ -1370,7 +1333,6 @@ export default function App() {
             return diff >= 0 ? `${diff} ${"days"}` : `0 ${"days"}`;
           })() : "not set"}</div>
             <div><b>{"Available:"}</b> {rub(availableForSpending)}</div>
-            <div style={{ fontSize: 12, opacity: 0.8 }}><b>{"In piggy bank:"}</b> {rub(piggyBankAmount)}</div>
             <div><b>{"Daily spend limit:"}</b> {rub(dailySpendLimitFromAvailable)}</div>
           </>
         )}
@@ -2342,65 +2304,15 @@ export default function App() {
         </div>
       ) : null}
 
-      {piggyBankModalOpen ? (
-        <div
-          className="modal-backdrop"
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.35)",
-            zIndex: 5000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) closePiggyBankModal();
-          }}
-        >
-          <div
-            className="modal-panel"
-            style={{
-              width: "min(420px, 100%)",
-              padding: 12,
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-              <b style={{ fontSize: 14 }}>
-                {piggyBankModalType === "add" ? "Add to piggy bank" : "Withdraw from piggy bank"}
-              </b>
-              <button onClick={closePiggyBankModal} aria-label={"Close"}>x</button>
-            </div>
-
-            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
-                <input
-                  value={piggyBankModalAmount}
-                  onChange={(e) => setPiggyBankModalAmount(e.target.value)}
-                  placeholder={"1000"}
-                  inputMode="decimal"
-                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
-                />
-                {piggyBankModalType === "withdraw" ? (
-                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                    <b>{"Available in piggy bank:"}</b> {rub(piggyBankAmount)}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-              <button onClick={closePiggyBankModal}>{"Cancel"}</button>
-              <button onClick={submitPiggyBankModal}>
-                {piggyBankModalType === "add" ? "Add" : "Withdraw"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <PiggyBankModal
+        open={piggyBankModalOpen}
+        type={piggyBankModalType}
+        amountInput={piggyBankModalAmount}
+        balance={piggyBankAmount}
+        onClose={closePiggyBankModal}
+        onAmountInputChange={setPiggyBankModalAmount}
+        onSubmit={() => { void submitPiggyBankModal(); }}
+      />
 
 
 
