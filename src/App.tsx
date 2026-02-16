@@ -20,6 +20,7 @@ import { SelectedDateBudgetSummary } from "./components/SelectedDateBudgetSummar
 import { SelectedDateTransactionsList } from "./components/SelectedDateTransactionsList";
 import { TopCategoriesPanel } from "./components/TopCategoriesPanel";
 import { EditTransactionModal } from "./components/EditTransactionModal";
+import { EditSalaryModal } from "./components/EditSalaryModal";
 import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 
@@ -377,6 +378,11 @@ export default function App() {
   const [salaryModalDate, setSalaryModalDate] = useState<string>(today);
   const [salaryModalAmount, setSalaryModalAmount] = useState<string>("");
   const [salaryModalTitle, setSalaryModalTitle] = useState<string>("Salary");
+  const [editSalaryModalOpen, setEditSalaryModalOpen] = useState(false);
+  const [editSalaryModalId, setEditSalaryModalId] = useState<string | null>(null);
+  const [editSalaryModalDate, setEditSalaryModalDate] = useState<string>(today);
+  const [editSalaryModalAmount, setEditSalaryModalAmount] = useState<string>("");
+  const [editSalaryModalTitle, setEditSalaryModalTitle] = useState<string>("Salary");
   const [piggyBankModalOpen, setPiggyBankModalOpen] = useState(false);
   const [piggyBankModalAmount, setPiggyBankModalAmount] = useState<string>("");
   const [piggyBankModalType, setPiggyBankModalType] = useState<PiggyBankModalType>("add");
@@ -1045,23 +1051,45 @@ export default function App() {
   }
 
   async function handleEditSalary(s: SalaryEvent) {
-    const newDate = prompt("Date (YYYY-MM-DD):", s.date) ?? s.date;
-    const newAmountStr = prompt("Amount (RUB):", String(s.amount / 100)) ?? String(s.amount / 100);
-    const newTitle = prompt("Title:", s.title) ?? s.title;
-
-    const updated = await api.upsertSalaryEvent({
-      ...s,
-      date: newDate,
-      amount: toKop(newAmountStr),
-      title: newTitle,
-    });
-    setData(updated);
+    setEditSalaryModalId(s.id);
+    setEditSalaryModalDate(s.date);
+    setEditSalaryModalAmount(String(s.amount / 100));
+    setEditSalaryModalTitle(s.title);
+    setEditSalaryModalOpen(true);
   }
 
   async function handleDeleteSalary(id: string) {
     if (!(await confirmAction())) return;
     const updated = await api.deleteSalaryEvent(id);
     setData(updated);
+  }
+
+  function closeEditSalaryModal() {
+    setEditSalaryModalOpen(false);
+    setEditSalaryModalId(null);
+    setEditSalaryModalDate(today);
+    setEditSalaryModalAmount("");
+    setEditSalaryModalTitle("Salary");
+  }
+
+  async function submitEditSalaryModal() {
+    if (!editSalaryModalId) return;
+    const amount = toKop(editSalaryModalAmount);
+    const title = editSalaryModalTitle.trim() || "Salary";
+    if (amount <= 0) return;
+
+    try {
+      const updated = await api.upsertSalaryEvent({
+        id: editSalaryModalId,
+        date: editSalaryModalDate,
+        amount,
+        title,
+      });
+      setData(updated);
+      closeEditSalaryModal();
+    } catch (err) {
+      alert(String(err));
+    }
   }
 
   return (
@@ -2040,6 +2068,18 @@ export default function App() {
           </div>
         </div>
       ) : null}
+
+      <EditSalaryModal
+        open={editSalaryModalOpen}
+        date={editSalaryModalDate}
+        amount={editSalaryModalAmount}
+        title={editSalaryModalTitle}
+        onDateChange={setEditSalaryModalDate}
+        onAmountChange={setEditSalaryModalAmount}
+        onTitleChange={setEditSalaryModalTitle}
+        onClose={closeEditSalaryModal}
+        onSubmit={() => { void submitEditSalaryModal(); }}
+      />
 
       <PiggyBankModal
         open={piggyBankModalOpen}
