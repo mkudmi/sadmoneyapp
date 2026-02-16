@@ -16,6 +16,7 @@ import { VacationsPanel } from "./components/VacationsPanel";
 import { SalariesPanel } from "./components/SalariesPanel";
 import { PiggyBankChip } from "./components/PiggyBankChip";
 import { PiggyBankModal, PiggyBankModalType } from "./components/PiggyBankModal";
+import { SelectedDateBudgetSummary } from "./components/SelectedDateBudgetSummary";
 import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
@@ -1322,20 +1323,11 @@ export default function App() {
             {vacationForSelectedDate ? "Vacation" : (selectedDateIsWorking ? "Working" : "Day off")}
           </div>
         </div>
-        {budget && (
-          <>
-            <div><b>{"Until next salary:"}</b> {budget.next_salary_date ? (() => {
-            const nd = new Date(budget.next_salary_date);
-            const td = new Date();
-            const nd0 = new Date(nd.getFullYear(), nd.getMonth(), nd.getDate());
-            const td0 = new Date(td.getFullYear(), td.getMonth(), td.getDate());
-            const diff = Math.round((nd0.getTime() - td0.getTime()) / (1000 * 60 * 60 * 24));
-            return diff >= 0 ? `${diff} ${"days"}` : `0 ${"days"}`;
-          })() : "not set"}</div>
-            <div><b>{"Available:"}</b> {rub(availableForSpending)}</div>
-            <div><b>{"Daily spend limit:"}</b> {rub(dailySpendLimitFromAvailable)}</div>
-          </>
-        )}
+        <SelectedDateBudgetSummary
+          budget={budget}
+          availableForSpending={availableForSpending}
+          dailySpendLimit={dailySpendLimitFromAvailable}
+        />
         <div style={{ marginTop: 12, flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
           <b>{"Transactions for"} {selectedDate}:</b>
 
