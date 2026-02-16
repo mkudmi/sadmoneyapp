@@ -20,6 +20,7 @@ import { SelectedDateBudgetSummary } from "./components/SelectedDateBudgetSummar
 import { SelectedDateTransactionsList } from "./components/SelectedDateTransactionsList";
 import { TopCategoriesPanel } from "./components/TopCategoriesPanel";
 import { EditTransactionModal } from "./components/EditTransactionModal";
+import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
@@ -354,6 +355,7 @@ export default function App() {
   const [appVersion, setAppVersion] = useState<string>("-");
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
+  const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [txModalType, setTxModalType] = useState<"income" | "expense" | "planned_expense">("expense");
   const [txModalDate, setTxModalDate] = useState<string>(today);
@@ -729,6 +731,7 @@ export default function App() {
   }
 
   async function handleDeleteTransaction(id: string) {
+    if (!(await confirmAction())) return;
     const updated = await api.deleteTransaction(id);
     setData(updated);
   }
@@ -1036,6 +1039,7 @@ export default function App() {
   }
 
   async function handleDeleteVacation(id: string) {
+    if (!(await confirmAction())) return;
     const updated = await api.deleteVacation(id);
     setData(updated);
   }
@@ -1055,7 +1059,7 @@ export default function App() {
   }
 
   async function handleDeleteSalary(id: string) {
-    if (!confirm("Delete salary date?")) return;
+    if (!(await confirmAction())) return;
     const updated = await api.deleteSalaryEvent(id);
     setData(updated);
   }
@@ -1290,6 +1294,7 @@ export default function App() {
                       aria-label={"Delete debt"}
                       style={{ color: "var(--danger)", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 12 }}
                       onClick={async () => {
+                        if (!(await confirmAction())) return;
                         const updated = await api.deleteDebt(d.id);
                         setData(updated);
                       }}
@@ -2045,6 +2050,7 @@ export default function App() {
         onAmountInputChange={setPiggyBankModalAmount}
         onSubmit={() => { void submitPiggyBankModal(); }}
       />
+      {confirmDialog}
 
 
 
