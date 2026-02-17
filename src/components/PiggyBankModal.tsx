@@ -10,6 +10,7 @@ type PiggyBankModalProps = {
   onClose: () => void;
   onAmountInputChange: (value: string) => void;
   onSubmit: () => void;
+  onWithdrawAll: () => void;
 };
 
 export function PiggyBankModal(props: PiggyBankModalProps) {
@@ -21,6 +22,7 @@ export function PiggyBankModal(props: PiggyBankModalProps) {
     onClose,
     onAmountInputChange,
     onSubmit,
+    onWithdrawAll,
   } = props;
 
   if (!open) return null;
@@ -76,7 +78,11 @@ export function PiggyBankModal(props: PiggyBankModalProps) {
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-          <button onClick={onClose}>{"Cancel"}</button>
+          {type === "withdraw" ? (
+            <button onClick={onWithdrawAll} disabled={balance <= 0}>
+              {"Withdraw all"}
+            </button>
+          ) : null}
           <button onClick={onSubmit}>
             {type === "add" ? "Add" : "Withdraw"}
           </button>

@@ -880,6 +880,20 @@ export default function App() {
     }
   }
 
+  async function withdrawAllFromPiggyBank() {
+    if (!data) return;
+    const current = Math.max(0, data.piggyBankAmount ?? 0);
+    if (current <= 0) return;
+
+    try {
+      const updated = await api.setPiggyBankAmount(0);
+      setData(updated);
+      closePiggyBankModal();
+    } catch (err) {
+      alert(String(err));
+    }
+  }
+
   async function submitSalaryModal() {
     const amount = toKop(salaryModalAmount);
     const title = salaryModalTitle.trim() || "Salary";
@@ -1840,6 +1854,7 @@ export default function App() {
         onClose={closePiggyBankModal}
         onAmountInputChange={setPiggyBankModalAmount}
         onSubmit={() => { void submitPiggyBankModal(); }}
+        onWithdrawAll={() => { void withdrawAllFromPiggyBank(); }}
       />
       {confirmDialog}
 
