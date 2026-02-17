@@ -21,6 +21,7 @@ import { SelectedDateTransactionsList } from "./components/SelectedDateTransacti
 import { TopCategoriesPanel } from "./components/TopCategoriesPanel";
 import { EditTransactionModal } from "./components/EditTransactionModal";
 import { EditSalaryModal } from "./components/EditSalaryModal";
+import { GeneralStatsSurface } from "./components/GeneralStatsSurface";
 import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 
@@ -109,26 +110,6 @@ export default function App() {
 
     return Math.max(total - usedDays.size, 0);
   }, [data, vacationDaysCount, year]);
-
-  const monthTotals = useMemo(() => {
-    let inc = 0;
-    let exp = 0;
-    if (!data) return { inc, exp };
-
-    for (const t of data.transactions) {
-      if (ymFromYmd(t.date) !== monthKey) continue;
-      // count only operations up to today
-      if (t.date > today) continue;
-      if (t.type === "income") inc += t.amount;
-      if (t.type === "expense") exp += t.amount;
-    }
-
-    for (const s of data.salaryEvents ?? []) {
-      if (ymFromYmd(s.date) === monthKey && s.date <= today) inc += s.amount;
-    }
-
-    return { inc, exp };
-  }, [data, monthKey]);
 
   const avgDailyEarnings = useMemo(() => {
     // Salary/advance sum for the last 12 months divided by worked days
@@ -1254,15 +1235,14 @@ export default function App() {
           alignItems: "stretch",
         }}
       >
-        <div className="surface" style={{ minWidth: 0, height: "100%" }}>
-          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Received this month (as of today):"}</b> {rub(monthTotals.inc)}</div>
-          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Spent this month (as of today):"}</b> {rub(monthTotals.exp)}</div>
-          <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Average daily earnings:"}</b> {rub(avgDailyEarnings)}</div>
-          <div style={{ opacity: 0.8 }}>
-            <b>{"Today:"}</b>{" "}
-            {new Date().toLocaleDateString(locale, { day: "2-digit", month: "long", year: "numeric" })}
-          </div>
-        </div>
+        <GeneralStatsSurface
+          data={data}
+          monthKey={monthKey}
+          year={year}
+          today={today}
+          avgDailyEarnings={avgDailyEarnings}
+          locale={locale}
+        />
         <div className="surface" style={{ minWidth: 0, height: "100%" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <b>{"Debts"}</b>
