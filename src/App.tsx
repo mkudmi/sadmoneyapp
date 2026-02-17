@@ -3,8 +3,8 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
-import { api, AppData, Debt, SalaryEvent, Transaction, Vacation } from "./lib/api";
-import { rub, toKop } from "./lib/money";
+import { api, AppData, Debt, OffDay, SalaryEvent, Transaction, Vacation } from "./lib/api";
+import { toKop } from "./lib/money";
 import { capitalizeFirst } from "./lib/text";
 import { findFollowingSalaryDate } from "./lib/salary";
 import { daysInMonth, overlapInclusiveDays, parseYmdLocal, ymd, ymFromYmd } from "./lib/date";
@@ -23,6 +23,7 @@ import { EditTransactionModal } from "./components/EditTransactionModal";
 import { EditSalaryModal } from "./components/EditSalaryModal";
 import { GeneralStatsSurface } from "./components/GeneralStatsSurface";
 import { DebtsSurface } from "./components/DebtsSurface";
+import { CalendarSurface } from "./components/CalendarSurface";
 import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 
@@ -488,6 +489,57 @@ export default function App() {
     }
   }, [dayMenuOpen, dayMenuPos.top, dayMenuAnchorRect]);
 
+  async function handleToggleWorkingDay(params: {
+    date: string;
+    effectiveWorking: boolean;
+    isWeekend: boolean;
+    offForDay: OffDay | null;
+  }) {
+    const { date, effectiveWorking, isWeekend, offForDay } = params;
+
+    try {
+      const makeWorking = !effectiveWorking;
+      if (workSchedule === "custom") {
+        const updated = await api.upsertOffDay({
+          id: offForDay?.id ?? "",
+          date,
+          note: offForDay?.note ?? "",
+          is_working: makeWorking,
+        });
+        setData(updated);
+      } else if (isWeekend) {
+        if (makeWorking) {
+          const updated = await api.upsertOffDay({
+            id: offForDay?.id ?? "",
+            date,
+            note: offForDay?.note ?? "",
+            is_working: true,
+          });
+          setData(updated);
+        } else if (offForDay) {
+          const updated = await api.deleteOffDay(offForDay.id);
+          setData(updated);
+        }
+      } else {
+        if (!makeWorking) {
+          const updated = await api.upsertOffDay({
+            id: offForDay?.id ?? "",
+            date,
+            note: offForDay?.note ?? "",
+            is_working: false,
+          });
+          setData(updated);
+        } else if (offForDay) {
+          const updated = await api.deleteOffDay(offForDay.id);
+          setData(updated);
+        }
+      }
+    } catch (err) {
+      console.error("day menu update failed", err);
+      alert(String(err));
+    }
+  }
+
   const expenseCategories = useMemo(() => {
     const fromData = data?.settings?.txCategories ?? [];
     return fromData.length > 0
@@ -698,6 +750,38 @@ export default function App() {
     setSalaryModalOpen(false);
     setSalaryModalAmount("");
     setSalaryModalTitle("Salary");
+  }
+
+  function handleCalendarDayTileClick(date: string) {
+    setSelectedDate(date);
+
+    if (isPickingCustomWorkDays) {
+      toggleCustomWorkingDay(date);
+      return;
+    }
+
+    if (isPickingVacationStart) {
+      setIsPickingVacationStart(false);
+      setIsPickingVacationEnd(true);
+      setVacationStartDate(date);
+      return;
+    }
+
+    if (isPickingVacationEnd) {
+      if (!vacationStartDate) {
+        setIsPickingVacationEnd(false);
+        return;
+      }
+      setIsPickingVacationEnd(false);
+      setVacationStartDate(null);
+      openVacationModal(vacationStartDate, date);
+      return;
+    }
+
+    if (isPickingSalaryDate) {
+      setIsPickingSalaryDate(false);
+      openSalaryModal(date);
+    }
   }
 
   async function handleMarkPlannedTransactionPaid(tx: Transaction) {
@@ -1355,277 +1439,29 @@ export default function App() {
 
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(7, 1fr)",
-          gridTemplateRows: `repeat(${calendarWeeks}, minmax(0, 1fr))`,
-          gap: 8,
-          padding: 12,
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          flex: "2 1 520px",
-          minWidth: 320,
-          height: "100%",
-          minHeight: 0,
-          overflowY: "auto",
-          boxSizing: "border-box",
-          alignContent: "stretch",
-          position: "relative",
-          zIndex: isCalendarPickerFocus ? 4001 : 1,
-          background: "#fff",
-          boxShadow: isCalendarPickerFocus ? "0 12px 34px rgba(0,0,0,0.3)" : "none",
-        }}
-      >
-        {gridCells.map((d, idx) => {
-          if (!d) {
-            return (
-              <div
-                key={`empty-${idx}`}
-                style={{
-                  border: "1px solid transparent",
-                  borderRadius: 12,
-                  padding: 8,
-                  minHeight: 0,
-                  height: "100%",
-                  background: "transparent",
-                }}
-              />
-            );
-          }
-
-          const s = sumsByDate.get(d) ?? { inc: 0, exp: 0 };
-          const isToday = d === today;
-          const isFutureDate = d > today;
-          const isSel = d === selectedDate;
-          const vacForDay = (data?.vacations ?? []).find(v => v.start_date <= d && d <= v.end_date) ?? null;
-          const offForDay = (data?.offDays ?? []).find(o => o.date === d) ?? null;
-
-          const dayOfWeek = new Date(d).getDay(); // 0 = Sunday, 6 = Saturday
-          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-          const defaultWorking = workSchedule === "5/2" ? !isWeekend : false;
-          const effectiveWorking = offForDay ? !!offForDay.is_working : defaultWorking;
-          const weekendHighlight = workSchedule === "5/2" && isWeekend && !effectiveWorking;
-          const vacationHighlight = vacForDay !== null;
-          const offDayHighlight = !effectiveWorking && !weekendHighlight;
-          const isCustomMarkedWorking = isPickingCustomWorkDays && customWorkingDays.includes(d);
-          const isCustomMainView = workSchedule === "custom" && !isPickingCustomWorkDays;
-          const isCustomNonWorking = workSchedule === "custom" && !isPickingCustomWorkDays && !effectiveWorking;
-          const isManuallyMarkedWorking = !!offForDay?.is_working;
-          const tileBackground = isPickingCustomWorkDays
-            ? (isCustomMarkedWorking ? "rgba(30, 160, 90, 0.18)" : "transparent")
-            : vacationHighlight
-              ? "rgba(255, 223, 99, 0.25)"
-            : isCustomMainView
-              ? (isCustomNonWorking ? "rgba(210, 20, 20, 0.10)" : "#fff")
-            : isCustomNonWorking
-                ? "rgba(210, 20, 20, 0.10)"
-              : weekendHighlight
-                ? "rgba(255, 0, 0, 0.06)"
-              : isToday
-                ? (isManuallyMarkedWorking ? "#fff" : "rgba(0, 200, 120, 0.08)")
-                : offDayHighlight
-                  ? "rgba(255, 0, 0, 0.06)"
-                  : "transparent";
-          const dayLabelColor = isPickingCustomWorkDays
-            ? (isCustomMarkedWorking ? "#17653e" : undefined)
-            : vacationHighlight
-              ? "#7a5200"
-            : isCustomMainView
-              ? (isCustomNonWorking ? "#b10000" : undefined)
-            : isCustomNonWorking
-              ? "#b10000"
-            : weekendHighlight
-              ? "#c00"
-            : offDayHighlight
-              ? "#c00"
-            : undefined;
-
-          return (
-            <div
-              key={d}
-              onClick={() => {
-                setSelectedDate(d);
-                setDayMenuOpen(null);
-                setDayMenuAnchorRect(null);
-                if (isPickingCustomWorkDays) {
-                  toggleCustomWorkingDay(d);
-                  return;
-                }
-                if (isPickingVacationStart) {
-                  setIsPickingVacationStart(false);
-                  setIsPickingVacationEnd(true);
-                  setVacationStartDate(d);
-                  return;
-                }
-                if (isPickingVacationEnd) {
-                  if (!vacationStartDate) {
-                    setIsPickingVacationEnd(false);
-                    return;
-                  }
-                  setIsPickingVacationEnd(false);
-                  setVacationStartDate(null);
-                  openVacationModal(vacationStartDate, d);
-                  return;
-                }
-                if (isPickingSalaryDate) {
-                  setIsPickingSalaryDate(false);
-                  openSalaryModal(d);
-                }
-              }}
-              style={{
-                position: 'relative',
-                cursor: "pointer",
-                zIndex: dayMenuOpen === d ? 50 : 0,
-                border: isPickingCustomWorkDays
-                  ? (isCustomMarkedWorking ? "2px solid #1c7f4d" : "1px solid #ddd")
-                  : isSel
-                    ? "2px solid #333"
-                    : isToday
-                      ? "2px solid #1b7"
-                      : "1px solid #ddd",
-                background: tileBackground,
-                borderRadius: 12,
-                padding: 8,
-                minHeight: 0,
-                height: "100%",
-              }}
-
-            >
-              {!isCalendarPickerFocus ? (
-              <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 10 }} data-day-menu="true">
-                <button
-                  aria-label={"Menu"}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedDate(d);
-                    openDayMenu(d, e.currentTarget);
-                  }}
-                  style={{
-                    minWidth: 28,
-                    minHeight: 28,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: 0,
-                    textAlign: "center",
-                    fontSize: 14,
-                    lineHeight: 1,
-                  }}
-                >
-                  ⋯
-                </button>
-
-                {dayMenuOpen === d ? (
-                  <div
-                    ref={dayMenuRef}
-                    data-day-menu="true"
-                    style={{
-                      position: "fixed",
-                      top: dayMenuPos.top,
-                      left: dayMenuPos.left,
-                      zIndex: 2000,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 4,
-                      width: 220,
-                      padding: 8,
-                      borderRadius: 10,
-                      border: "1px solid #ddd",
-                      background: "#fff",
-                      boxShadow: "0 8px 20px rgba(0,0,0,0.14)",
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      style={{ fontSize: 12, padding: "4px 8px" }}
-                      onClick={() => {
-                        setSelectedDate(d);
-                        openTxModal("income", d);
-                        setDayMenuOpen(null);
-                      }}
-                    >
-                      {"Add income"}
-                    </button>
-                    {!isFutureDate ? (
-                      <button
-                        style={{ fontSize: 12, padding: "4px 8px" }}
-                        onClick={() => {
-                          setSelectedDate(d);
-                          openTxModal("expense", d);
-                          setDayMenuOpen(null);
-                        }}
-                      >
-                        {"Add expense"}
-                      </button>
-                    ) : null}
-                    <button
-                      style={{ fontSize: 12, padding: "4px 8px" }}
-                      onClick={() => {
-                        setSelectedDate(d);
-                        openTxModal("planned_expense", d);
-                        setDayMenuOpen(null);
-                      }}
-                    >
-                      {"Planned expense"}
-                    </button>
-                    <div style={{ height: 1, background: "#eee", margin: "4px 0" }} />
-                    <button
-                      style={{ fontSize: 12, padding: "4px 8px" }}
-                      onClick={async () => {
-                        try {
-                          const makeWorking = !effectiveWorking;
-                          if (workSchedule === "custom") {
-                            const updated = await api.upsertOffDay({
-                              id: offForDay?.id ?? "",
-                              date: d,
-                              note: offForDay?.note ?? "",
-                              is_working: makeWorking,
-                            });
-                            setData(updated);
-                          } else {
-                            if (isWeekend) {
-                              if (makeWorking) {
-                                const updated = await api.upsertOffDay({ id: offForDay?.id ?? "", date: d, note: offForDay?.note ?? "", is_working: true });
-                                setData(updated);
-                              } else if (offForDay) {
-                                const updated = await api.deleteOffDay(offForDay.id);
-                                setData(updated);
-                              }
-                            } else {
-                              if (!makeWorking) {
-                                const updated = await api.upsertOffDay({ id: offForDay?.id ?? "", date: d, note: offForDay?.note ?? "", is_working: false });
-                                setData(updated);
-                              } else if (offForDay) {
-                                const updated = await api.deleteOffDay(offForDay.id);
-                                setData(updated);
-                              }
-                            }
-                          }
-                        } catch (err) {
-                          console.error('day menu update failed', err);
-                          alert(String(err));
-                        }
-                        setDayMenuOpen(null);
-                      }}
-                    >
-                      {effectiveWorking ? "Mark as day off" : "Mark as working"}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              ) : null}
-
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: isCustomMarkedWorking ? 700 : 400, color: dayLabelColor }}>{d.slice(8, 10)}</div>
-                <div style={{ fontSize: 11, opacity: 0.7, color: dayLabelColor }}>{new Date(d).toLocaleDateString(locale, { weekday: "short" })}</div>
-              </div>
-              <div style={{ fontSize: 12 }}>+ {rub(s.inc)}</div>
-              <div style={{ fontSize: 12 }}>- {rub(s.exp)}</div>
-            </div>
-          );
-        })}
-      </div>
+      <CalendarSurface
+        calendarWeeks={calendarWeeks}
+        gridCells={gridCells}
+        sumsByDate={sumsByDate}
+        today={today}
+        selectedDate={selectedDate}
+        data={data}
+        workSchedule={workSchedule}
+        isPickingCustomWorkDays={isPickingCustomWorkDays}
+        customWorkingDays={customWorkingDays}
+        isCalendarPickerFocus={isCalendarPickerFocus}
+        locale={locale}
+        dayMenuOpen={dayMenuOpen}
+        dayMenuPos={dayMenuPos}
+        dayMenuRef={dayMenuRef}
+        setDayMenuOpen={setDayMenuOpen}
+        setDayMenuAnchorRect={setDayMenuAnchorRect}
+        openDayMenu={openDayMenu}
+        onDayTileClick={handleCalendarDayTileClick}
+        onSelectDate={setSelectedDate}
+        onOpenTx={openTxModal}
+        onToggleWorkingDay={handleToggleWorkingDay}
+      />
       </div>
       </div>
 
