@@ -63,6 +63,9 @@ pub struct Settings {
     #[serde(rename = "txCategories")]
     #[serde(default = "default_tx_categories")]
     pub tx_categories: Vec<String>,
+    #[serde(rename = "incomeCategories")]
+    #[serde(default = "default_income_categories")]
+    pub income_categories: Vec<String>,
     #[serde(default = "default_language")]
     pub language: String,
 }
@@ -87,6 +90,15 @@ fn default_language() -> String {
     "en".to_string()
 }
 
+fn default_income_categories() -> Vec<String> {
+    vec![
+        "Salary".to_string(),
+        "Advance".to_string(),
+        "Side Job".to_string(),
+        "Cashback".to_string(),
+    ]
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -94,6 +106,7 @@ impl Default for Settings {
             min_balance: 0,
             daily_calc_mode: DailyCalcMode::default(),
             tx_categories: default_tx_categories(),
+            income_categories: default_income_categories(),
             language: default_language(),
         }
     }

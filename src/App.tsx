@@ -335,10 +335,12 @@ export default function App() {
   const [dayMenuPos, setDayMenuPos] = useState<{ left: number; top: number }>({ left: 8, top: 8 });
   const [dayMenuAnchorRect, setDayMenuAnchorRect] = useState<{ top: number; bottom: number } | null>(null);
   const dayMenuRef = useRef<HTMLDivElement | null>(null);
-  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"general" | "categories">("general");
+  const [expenseCategoryDraft, setExpenseCategoryDraft] = useState<string>("");
+  const [incomeCategoryDraft, setIncomeCategoryDraft] = useState<string>("");
   const [appVersion, setAppVersion] = useState<string>("-");
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
-  const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [txModalType, setTxModalType] = useState<"income" | "expense" | "planned_expense">("expense");
@@ -415,13 +417,23 @@ export default function App() {
 
   useDismissible(txCategoryMenuOpen, () => setTxCategoryMenuOpen(false), "[data-tx-category]");
   useDismissible(vacationTypeMenuOpen, () => setVacationTypeMenuOpen(false), "[data-vacation-type-menu]");
-  useDismissible(settingsMenuOpen, () => setSettingsMenuOpen(false), "[data-settings-menu]");
 
   useEffect(() => {
     getVersion()
       .then(setAppVersion)
       .catch(() => setAppVersion("-"));
   }, []);
+
+  useEffect(() => {
+    if (!settingsModalOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setSettingsModalOpen(false);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [settingsModalOpen]);
 
   usePiggyBankHotkeys({
     open: piggyBankModalOpen,
@@ -547,20 +559,33 @@ export default function App() {
       : ["Groceries", "Fuel"];
   }, [data]);
 
-  const incomeCategories = useMemo(() => {
-    const defaults = [
+  const savedIncomeCategories = useMemo(() => {
+    const defaults = data?.settings?.incomeCategories ?? [
       "Salary",
       "Advance",
       "Side job",
       "Cashback",
     ];
+    return Array.from(new Set(defaults.map((c) => normalizeCategoryInput(c)).filter((c) => c.length > 0)));
+  }, [data]);
+
+  const incomeCategories = useMemo(() => {
     const fromTx = (data?.transactions ?? [])
       .filter((t) => t.type === "income")
       .map((t) => normalizeCategoryInput(t.category))
       .filter((c) => c.length > 0);
+    const fromSalaryTitles = (data?.salaryEvents ?? [])
+      .map((s) => normalizeCategoryInput(s.title))
+      .filter((c) => c.length > 0);
 
-    return Array.from(new Set([...defaults, ...fromTx]));
-  }, [data]);
+    return Array.from(new Set([...savedIncomeCategories, ...fromTx, ...fromSalaryTitles]));
+  }, [data, savedIncomeCategories]);
+
+  useEffect(() => {
+    if (!settingsModalOpen) return;
+    setExpenseCategoryDraft("");
+    setIncomeCategoryDraft("");
+  }, [settingsModalOpen]);
 
   const expenseCategoriesWithDebt = useMemo(() => {
     const debtCategory = "Debt";
@@ -1088,6 +1113,58 @@ export default function App() {
     }
   }
 
+  function openSettingsModal() {
+    setSettingsTab("general");
+    setExpenseCategoryDraft("");
+    setIncomeCategoryDraft("");
+    setSettingsModalOpen(true);
+  }
+
+  function closeSettingsModal() {
+    setSettingsModalOpen(false);
+  }
+
+  async function saveCategories(nextExpense: string[], nextIncome: string[]) {
+    try {
+      const updated = await api.setTxCategories(nextExpense, nextIncome);
+      setData(updated);
+    } catch (err) {
+      alert(String(err));
+    }
+  }
+
+  async function addExpenseCategory() {
+    const value = normalizeCategoryInput(expenseCategoryDraft);
+    if (!value) return;
+    if (expenseCategories.some((c) => normalizeCategoryInput(c).toLowerCase() === value.toLowerCase())) {
+      setExpenseCategoryDraft("");
+      return;
+    }
+    await saveCategories([...expenseCategories, value], savedIncomeCategories);
+    setExpenseCategoryDraft("");
+  }
+
+  async function addIncomeCategory() {
+    const value = normalizeCategoryInput(incomeCategoryDraft);
+    if (!value) return;
+    if (savedIncomeCategories.some((c) => normalizeCategoryInput(c).toLowerCase() === value.toLowerCase())) {
+      setIncomeCategoryDraft("");
+      return;
+    }
+    await saveCategories(expenseCategories, [...savedIncomeCategories, value]);
+    setIncomeCategoryDraft("");
+  }
+
+  async function removeExpenseCategory(category: string) {
+    const next = expenseCategories.filter((c) => normalizeCategoryInput(c).toLowerCase() !== normalizeCategoryInput(category).toLowerCase());
+    await saveCategories(next, savedIncomeCategories);
+  }
+
+  async function removeIncomeCategory(category: string) {
+    const next = savedIncomeCategories.filter((c) => normalizeCategoryInput(c).toLowerCase() !== normalizeCategoryInput(category).toLowerCase());
+    await saveCategories(expenseCategories, next);
+  }
+
   function prevMonth() {
     const d = new Date(year, month0, 1);
     d.setMonth(d.getMonth() - 1);
@@ -1266,61 +1343,13 @@ export default function App() {
             </div>
           ) : null}
         </div>
-        <div style={{ position: "relative" }} data-settings-menu="true">
-          <button
-            aria-label="Settings"
-            onClick={() => setSettingsMenuOpen((v) => !v)}
-            style={{ width: 36, height: 36, display: "grid", placeItems: "center" }}
-          >
-            {"\u2699"}
-          </button>
-          {settingsMenuOpen ? (
-            <div
-              className="menu-pop"
-              ref={settingsMenuRef}
-              data-settings-menu="true"
-              style={{
-                position: "absolute",
-                right: 0,
-                top: "calc(100% + 6px)",
-                zIndex: 2200,
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
-                minWidth: 180,
-                padding: 8,              }}
-            >
-              <button
-                onClick={async () => {
-                  await exportBackupFile();
-                  setSettingsMenuOpen(false);
-                }}
-              >
-                {"Export backup"}
-              </button>
-              <button
-                onClick={async () => {
-                  await importBackupFile();
-                  setSettingsMenuOpen(false);
-                }}
-              >
-                {"Import backup"}
-              </button>
-              <button
-                onClick={async () => {
-                  setSettingsMenuOpen(false);
-                  await checkForUpdates();
-                }}
-                disabled={isCheckingUpdates}
-              >
-                {isCheckingUpdates ? "Checking updates..." : "Check for updates"}
-              </button>
-              <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                {"Version"}: {appVersion}
-              </div>
-            </div>
-          ) : null}
-        </div>
+        <button
+          aria-label="Settings"
+          onClick={openSettingsModal}
+          style={{ width: 36, height: 36, display: "grid", placeItems: "center" }}
+        >
+          {"\u2699"}
+        </button>
       </div>
       <div
         style={{
@@ -1498,6 +1527,146 @@ export default function App() {
             }
           }}
         />
+      ) : null}
+
+      {settingsModalOpen ? (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            zIndex: 5000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeSettingsModal();
+          }}
+        >
+          <div
+            className="modal-panel"
+            style={{
+              width: "min(760px, 100%)",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: 12,
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <b style={{ fontSize: 14 }}>{"Settings"}</b>
+              <button onClick={closeSettingsModal} aria-label={"Close"}>x</button>
+            </div>
+
+            <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setSettingsTab("general")}
+                style={{ opacity: settingsTab === "general" ? 1 : 0.75 }}
+              >
+                {"General"}
+              </button>
+              <button
+                onClick={() => setSettingsTab("categories")}
+                style={{ opacity: settingsTab === "categories" ? 1 : 0.75 }}
+              >
+                {"Categories"}
+              </button>
+            </div>
+
+            {settingsTab === "general" ? (
+              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+                <button onClick={() => { void exportBackupFile(); }}>
+                  {"Export backup"}
+                </button>
+                <button onClick={() => { void importBackupFile(); }}>
+                  {"Import backup"}
+                </button>
+                <button
+                  onClick={() => { void checkForUpdates(); }}
+                  disabled={isCheckingUpdates}
+                >
+                  {isCheckingUpdates ? "Checking updates..." : "Check for updates"}
+                </button>
+                <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+                  {"Version"}: {appVersion}
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+                <div className="surface" style={{ padding: 10 }}>
+                  <div style={{ fontSize: 13, marginBottom: 8 }}><b>{"Expense categories"}</b></div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                    <input
+                      value={expenseCategoryDraft}
+                      onChange={(e) => setExpenseCategoryDraft(e.target.value)}
+                      placeholder={"e.g. Groceries"}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void addExpenseCategory();
+                        }
+                      }}
+                      style={{ width: "100%" }}
+                    />
+                    <button onClick={() => { void addExpenseCategory(); }}>{"Add"}</button>
+                  </div>
+                  <div className="panel-list">
+                    {expenseCategories.length > 0 ? expenseCategories.map((category) => (
+                      <div key={`expense:${category}`} className="panel-item" style={{ padding: "6px 8px", display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>{category}</div>
+                        <button
+                          onClick={() => { void removeExpenseCategory(category); }}
+                          aria-label={`Delete ${category}`}
+                        >
+                          {"Delete"}
+                        </button>
+                      </div>
+                    )) : (
+                      <div style={{ fontSize: 12, opacity: 0.7 }}>{"No expense categories."}</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="surface" style={{ padding: 10 }}>
+                  <div style={{ fontSize: 13, marginBottom: 8 }}><b>{"Income categories"}</b></div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                    <input
+                      value={incomeCategoryDraft}
+                      onChange={(e) => setIncomeCategoryDraft(e.target.value)}
+                      placeholder={"e.g. Salary"}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void addIncomeCategory();
+                        }
+                      }}
+                      style={{ width: "100%" }}
+                    />
+                    <button onClick={() => { void addIncomeCategory(); }}>{"Add"}</button>
+                  </div>
+                  <div className="panel-list">
+                    {savedIncomeCategories.length > 0 ? savedIncomeCategories.map((category) => (
+                      <div key={`income:${category}`} className="panel-item" style={{ padding: "6px 8px", display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>{category}</div>
+                        <button
+                          onClick={() => { void removeIncomeCategory(category); }}
+                          aria-label={`Delete ${category}`}
+                        >
+                          {"Delete"}
+                        </button>
+                      </div>
+                    )) : (
+                      <div style={{ fontSize: 12, opacity: 0.7 }}>{"No income categories."}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       ) : null}
 
       {txModalOpen ? (

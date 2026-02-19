@@ -10,43 +10,46 @@ fn parse_date(s: &str) -> Result<NaiveDate> {
 }
 
 fn normalize_category(s: &str) -> String {
-    fn cap_segment(seg: &str) -> String {
-        let seg = seg.trim();
-        if seg.is_empty() {
-            return String::new();
-        }
-        let mut chars = seg.chars();
-        let first = chars.next().unwrap();
-        let rest: String = chars.collect();
-        let mut out = String::new();
-        out.extend(first.to_uppercase());
-        out.push_str(&rest.to_lowercase());
-        out
-    }
-
-    let s = s.trim();
-    if s.is_empty() {
-        return String::new();
-    }
-
-    s.split_whitespace()
-        .map(|w| w.split('-').map(cap_segment).collect::<Vec<_>>().join("-"))
-        .collect::<Vec<_>>()
-        .join(" ")
+    s.trim().to_string()
 }
 
 fn normalize_person(s: &str) -> String {
     normalize_category(s)
 }
 
-fn remember_category(settings: &mut crate::models::Settings, category: &str) {
+fn remember_category(settings: &mut crate::models::Settings, tx_type: &TxType, category: &str) {
     if category.trim().is_empty() {
         return;
     }
-    if settings.tx_categories.iter().any(|c| c == category) {
-        return;
+    match tx_type {
+        TxType::Income => {
+            if settings.income_categories.iter().any(|c| c == category) {
+                return;
+            }
+            settings.income_categories.push(category.to_string());
+        }
+        TxType::Expense | TxType::PlannedExpense => {
+            if settings.tx_categories.iter().any(|c| c == category) {
+                return;
+            }
+            settings.tx_categories.push(category.to_string());
+        }
     }
-    settings.tx_categories.push(category.to_string());
+}
+
+fn normalize_category_list(items: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for raw in items {
+        let normalized = normalize_category(&raw);
+        if normalized.is_empty() {
+            continue;
+        }
+        if out.iter().any(|c| c.eq_ignore_ascii_case(&normalized)) {
+            continue;
+        }
+        out.push(normalized);
+    }
+    out
 }
 
 fn load(app: &AppHandle) -> Result<AppData, String> {
@@ -75,6 +78,19 @@ pub fn set_language(app: AppHandle, language: String) -> Result<AppData, String>
 }
 
 #[tauri::command]
+pub fn set_tx_categories(
+    app: AppHandle,
+    expense_categories: Vec<String>,
+    income_categories: Vec<String>,
+) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    data.settings.tx_categories = normalize_category_list(expense_categories);
+    data.settings.income_categories = normalize_category_list(income_categories);
+    save(&app, &data)?;
+    Ok(data)
+}
+
+#[tauri::command]
 pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, String> {
     let mut data = load(&app)?;
 
@@ -85,9 +101,7 @@ pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, S
     // простая нормализация: расход всегда положительный amount, тип решает знак
     tx.amount = tx.amount.saturating_abs();
     tx.category = normalize_category(&tx.category);
-    remember_category(&mut data.settings, &tx.category);
-    tx.category = normalize_category(&tx.category);
-    remember_category(&mut data.settings, &tx.category);
+    remember_category(&mut data.settings, &tx.r#type, &tx.category);
     tx.debt_person = tx
         .debt_person
         .as_ref()
@@ -124,6 +138,7 @@ pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData
 
     tx.amount = tx.amount.saturating_abs();
     tx.category = normalize_category(&tx.category);
+    remember_category(&mut data.settings, &tx.r#type, &tx.category);
     tx.debt_person = tx
         .debt_person
         .as_ref()

@@ -47,6 +47,7 @@ export type AppData = {
     minBalance: number;
     dailyCalcMode: "exclude_payday" | "include_payday";
     txCategories: string[];
+    incomeCategories?: string[];
     language?: "ru" | "en";
   };
   piggyBankAmount?: number;
@@ -85,5 +86,7 @@ export const api = {
   importBackup: (backupJson: string) => invoke<AppData>("import_backup", { backupJson }),
   importBackupFromPath: (path: string) => invoke<AppData>("import_backup_from_path", { path }),
   setLanguage: (language: "ru" | "en") => invoke<AppData>("set_language", { language }),
+  setTxCategories: (expenseCategories: string[], incomeCategories: string[]) =>
+    invoke<AppData>("set_tx_categories", { expenseCategories, incomeCategories }),
   calcDailyBudget: (fromDate: string) => invoke<DailyBudgetResult>("calc_daily_budget", { fromDate }),
 };
