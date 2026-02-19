@@ -4,7 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
 import { api, AppData, Debt, OffDay, SalaryEvent, Transaction, Vacation } from "./lib/api";
-import { toKop } from "./lib/money";
+import { rub, toKop } from "./lib/money";
 import { capitalizeFirst } from "./lib/text";
 import { findFollowingSalaryDate } from "./lib/salary";
 import { daysInMonth, overlapInclusiveDays, parseYmdLocal, ymd, ymFromYmd } from "./lib/date";
@@ -36,6 +36,7 @@ export default function App() {
   const [month0, setMonth0] = useState(new Date().getMonth()); // 0..11
   const [selectedDate, setSelectedDate] = useState(ymd(new Date()));
   const today = ymd(new Date());
+  const locale = "en-US";
   const [budget, setBudget] = useState<{ per_day: number; days: number; next_salary_date: string | null; available: number } | null>(null);
   const piggyBankAmount = Math.max(0, data?.piggyBankAmount ?? 0);
   const monthKey = `${year}-${String(month0 + 1).padStart(2, "0")}`; // "YYYY-MM"
@@ -82,11 +83,99 @@ export default function App() {
       }))
       .sort((a, b) => b.amount - a.amount);
   }, [data, monthKey, today]);
+  const trendsData = useMemo(() => {
+    if (!data) {
+      return {
+        currentLabel: "",
+        previousLabel: "",
+        currentIncome: 0,
+        previousIncome: 0,
+        currentExpense: 0,
+        previousExpense: 0,
+        currentAvgCheck: 0,
+        previousAvgCheck: 0,
+        topGrowth: [] as Array<{ category: string; delta: number; current: number; previous: number }>,
+      };
+    }
+
+    const currentMonthStart = `${monthKey}-01`;
+    const prevMonthDate = new Date(year, month0 - 1, 1);
+    const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, "0")}`;
+    const previousMonthStart = `${prevMonthKey}-01`;
+
+    const currentLabel = capitalizeFirst(new Date(year, month0, 1).toLocaleString(locale, { month: "long", year: "numeric" }));
+    const previousLabel = capitalizeFirst(prevMonthDate.toLocaleString(locale, { month: "long", year: "numeric" }));
+
+    let currentIncome = 0;
+    let previousIncome = 0;
+    let currentExpense = 0;
+    let previousExpense = 0;
+    let currentExpenseOps = 0;
+    let previousExpenseOps = 0;
+
+    const currentExpenseByCategory = new Map<string, number>();
+    const previousExpenseByCategory = new Map<string, number>();
+
+    for (const t of data.transactions ?? []) {
+      const ym = ymFromYmd(t.date);
+      if (t.type === "income") {
+        if (ym === monthKey) currentIncome += t.amount;
+        if (ym === prevMonthKey) previousIncome += t.amount;
+      }
+      if (t.type === "expense") {
+        if (ym === monthKey) {
+          currentExpense += t.amount;
+          currentExpenseOps += 1;
+          currentExpenseByCategory.set(t.category, (currentExpenseByCategory.get(t.category) ?? 0) + t.amount);
+        }
+        if (ym === prevMonthKey) {
+          previousExpense += t.amount;
+          previousExpenseOps += 1;
+          previousExpenseByCategory.set(t.category, (previousExpenseByCategory.get(t.category) ?? 0) + t.amount);
+        }
+      }
+    }
+
+    for (const s of data.salaryEvents ?? []) {
+      if (s.date >= currentMonthStart && s.date <= today) {
+        currentIncome += s.amount;
+      }
+      if (s.date >= previousMonthStart && s.date < currentMonthStart) {
+        previousIncome += s.amount;
+      }
+    }
+
+    const categories = new Set<string>([
+      ...Array.from(currentExpenseByCategory.keys()),
+      ...Array.from(previousExpenseByCategory.keys()),
+    ]);
+
+    const topGrowth = Array.from(categories)
+      .map((category) => {
+        const current = currentExpenseByCategory.get(category) ?? 0;
+        const previous = previousExpenseByCategory.get(category) ?? 0;
+        return { category, current, previous, delta: current - previous };
+      })
+      .filter((item) => item.delta > 0)
+      .sort((a, b) => b.delta - a.delta)
+      .slice(0, 5);
+
+    return {
+      currentLabel,
+      previousLabel,
+      currentIncome,
+      previousIncome,
+      currentExpense,
+      previousExpense,
+      currentAvgCheck: currentExpenseOps > 0 ? Math.round(currentExpense / currentExpenseOps) : 0,
+      previousAvgCheck: previousExpenseOps > 0 ? Math.round(previousExpense / previousExpenseOps) : 0,
+      topGrowth,
+    };
+  }, [data, locale, month0, monthKey, today, year]);
 
   const [workSchedule, setWorkSchedule] = useState<'5/2' | 'custom'>('5/2');
   const { vacationDaysCount, handleVacationDaysCountChange, commitVacationDaysCount } =
     useVacationDaysCount(VACATION_DAYS_COUNT_STORAGE_KEY);
-  const locale = "en-US";
   const vacationDaysLeft = useMemo(() => {
     const total = Number.parseInt(vacationDaysCount, 10);
     if (!Number.isFinite(total) || total <= 0) return 0;
@@ -336,6 +425,7 @@ export default function App() {
   const [dayMenuAnchorRect, setDayMenuAnchorRect] = useState<{ top: number; bottom: number } | null>(null);
   const dayMenuRef = useRef<HTMLDivElement | null>(null);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [trendsModalOpen, setTrendsModalOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"general" | "categories">("general");
   const [expenseCategoryDraft, setExpenseCategoryDraft] = useState<string>("");
   const [incomeCategoryDraft, setIncomeCategoryDraft] = useState<string>("");
@@ -434,6 +524,17 @@ export default function App() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [settingsModalOpen]);
+
+  useEffect(() => {
+    if (!trendsModalOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setTrendsModalOpen(false);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [trendsModalOpen]);
 
   usePiggyBankHotkeys({
     open: piggyBankModalOpen,
@@ -1343,6 +1444,9 @@ export default function App() {
             </div>
           ) : null}
         </div>
+        <button onClick={() => setTrendsModalOpen(true)}>
+          {"Trends"}
+        </button>
         <button
           aria-label="Settings"
           onClick={openSettingsModal}
@@ -1527,6 +1631,95 @@ export default function App() {
             }
           }}
         />
+      ) : null}
+
+      {trendsModalOpen ? (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            zIndex: 5000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setTrendsModalOpen(false);
+          }}
+        >
+          <div
+            className="modal-panel"
+            style={{
+              width: "min(820px, 100%)",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: 12,
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <b style={{ fontSize: 14 }}>{"Trends"}</b>
+              <button onClick={() => setTrendsModalOpen(false)} aria-label={"Close"}>x</button>
+            </div>
+
+            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
+              <div className="surface" style={{ padding: 10 }}>
+                <div style={{ marginBottom: 6, fontSize: 13 }}><b>{"Month comparison"}</b></div>
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
+                  {trendsData.currentLabel} {"vs"} {trendsData.previousLabel}
+                </div>
+                <div style={{ marginBottom: 4 }}><b>{"Income:"}</b> {rub(trendsData.currentIncome)} {" / "} {rub(trendsData.previousIncome)}</div>
+                <div style={{ marginBottom: 4 }}><b>{"Expense:"}</b> {rub(trendsData.currentExpense)} {" / "} {rub(trendsData.previousExpense)}</div>
+                <div>
+                  <b>{"Net:"}</b> {rub(trendsData.currentIncome - trendsData.currentExpense)} {" / "} {rub(trendsData.previousIncome - trendsData.previousExpense)}
+                </div>
+              </div>
+
+              <div className="surface" style={{ padding: 10 }}>
+                <div style={{ marginBottom: 6, fontSize: 13 }}><b>{"Average check"}</b></div>
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
+                  {trendsData.currentLabel} {"vs"} {trendsData.previousLabel}
+                </div>
+                <div style={{ marginBottom: 4 }}><b>{"Current:"}</b> {rub(trendsData.currentAvgCheck)}</div>
+                <div style={{ marginBottom: 4 }}><b>{"Previous:"}</b> {rub(trendsData.previousAvgCheck)}</div>
+                <div>
+                  <b>{"Delta:"}</b> {rub(trendsData.currentAvgCheck - trendsData.previousAvgCheck)}
+                </div>
+              </div>
+            </div>
+
+            <div className="surface" style={{ marginTop: 10, padding: 10 }}>
+              <div style={{ marginBottom: 8, fontSize: 13 }}><b>{"Top expense growth categories"}</b></div>
+              <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
+                {trendsData.currentLabel} {"vs"} {trendsData.previousLabel}
+              </div>
+              {trendsData.topGrowth.length > 0 ? (
+                <div className="panel-list">
+                  {trendsData.topGrowth.map((item, idx) => (
+                    <div key={`trend-growth:${item.category}`} className="panel-item" style={{ padding: "8px 10px", display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div><b>{idx + 1}.</b> {item.category}</div>
+                        <div style={{ fontSize: 11, opacity: 0.75 }}>
+                          {rub(item.current)} {" / "} {rub(item.previous)}
+                        </div>
+                      </div>
+                      <div style={{ flexShrink: 0, color: "var(--danger)" }}>
+                        <b>{"+ "} {rub(item.delta)}</b>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, opacity: 0.75 }}>
+                  {"No expense growth categories for this period."}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {settingsModalOpen ? (
