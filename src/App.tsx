@@ -445,6 +445,7 @@ export default function App() {
   const [debtModalEditId, setDebtModalEditId] = useState<string | null>(null);
   const [editTxModalOpen, setEditTxModalOpen] = useState(false);
   const [editTxModalId, setEditTxModalId] = useState<string | null>(null);
+  const [editTxModalDate, setEditTxModalDate] = useState<string>(today);
   const [editTxModalAmount, setEditTxModalAmount] = useState<string>("");
   const [editTxModalCategory, setEditTxModalCategory] = useState<string>("");
   const [editTxModalNote, setEditTxModalNote] = useState<string>("");
@@ -920,6 +921,7 @@ export default function App() {
 
   async function handleEditTransaction(t: Transaction) {
     setEditTxModalId(t.id);
+    setEditTxModalDate(t.date);
     setEditTxModalAmount(String(t.amount / 100));
     setEditTxModalCategory(t.category);
     setEditTxModalNote(t.note ?? "");
@@ -935,6 +937,7 @@ export default function App() {
   function closeEditTxModal() {
     setEditTxModalOpen(false);
     setEditTxModalId(null);
+    setEditTxModalDate(today);
     setEditTxModalAmount("");
     setEditTxModalCategory("");
     setEditTxModalNote("");
@@ -952,6 +955,7 @@ export default function App() {
     try {
       const updated = await api.updateTransaction({
         ...original,
+        date: editTxModalDate,
         amount,
         category: editTxModalCategory,
         note: editTxModalNote,
@@ -2062,10 +2066,13 @@ export default function App() {
 
       <EditTransactionModal
         open={editTxModalOpen}
+        date={editTxModalDate}
+        showDateField={Boolean(editTxOriginal)}
         amount={editTxModalAmount}
         category={editTxModalCategory}
         note={editTxModalNote}
         categoryOptions={editTxCategoryOptions}
+        onDateChange={setEditTxModalDate}
         onAmountChange={setEditTxModalAmount}
         onCategoryChange={setEditTxModalCategory}
         onNoteChange={setEditTxModalNote}
@@ -2226,5 +2233,3 @@ export default function App() {
     </div>
   );
 }
-
-

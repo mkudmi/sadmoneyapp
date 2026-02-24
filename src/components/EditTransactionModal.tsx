@@ -1,15 +1,19 @@
 import { useState } from "react";
 import { useDismissible } from "../hooks/useDismissible";
+import { DateInputWithCalendar } from "./DateInputWithCalendar";
 
 type EditTransactionModalProps = {
   open: boolean;
   amount: string;
   category: string;
   note: string;
+  date?: string;
+  showDateField?: boolean;
   categoryOptions: string[];
   onAmountChange: (value: string) => void;
   onCategoryChange: (value: string) => void;
   onNoteChange: (value: string) => void;
+  onDateChange?: (value: string) => void;
   onClose: () => void;
   onSubmit: () => void;
 };
@@ -20,10 +24,13 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
     amount,
     category,
     note,
+    date = "",
+    showDateField = false,
     categoryOptions,
     onAmountChange,
     onCategoryChange,
     onNoteChange,
+    onDateChange,
     onClose,
     onSubmit,
   } = props;
@@ -65,6 +72,13 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
         </div>
 
         <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+          {showDateField && onDateChange ? (
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Date"}</div>
+              <DateInputWithCalendar value={date} onChange={onDateChange} />
+            </div>
+          ) : null}
+
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
             <input
