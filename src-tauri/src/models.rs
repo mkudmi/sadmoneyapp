@@ -66,6 +66,15 @@ pub struct Settings {
     #[serde(rename = "incomeCategories")]
     #[serde(default = "default_income_categories")]
     pub income_categories: Vec<String>,
+    #[serde(rename = "workSchedule")]
+    #[serde(default)]
+    pub work_schedule: WorkSchedule,
+    #[serde(rename = "saveRemainingDailyLimitToPiggyBank")]
+    #[serde(default)]
+    pub save_remaining_daily_limit_to_piggy_bank: bool,
+    #[serde(rename = "lastDailyLimitCarryoverDate")]
+    #[serde(default)]
+    pub last_daily_limit_carryover_date: String,
     #[serde(default = "default_language")]
     pub language: String,
 }
@@ -76,6 +85,15 @@ pub enum DailyCalcMode {
     #[default]
     ExcludePayday,
     IncludePayday,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub enum WorkSchedule {
+    #[default]
+    #[serde(rename = "5/2")]
+    FiveTwo,
+    #[serde(rename = "custom")]
+    Custom,
 }
 
 fn default_tx_categories() -> Vec<String> {
@@ -107,6 +125,9 @@ impl Default for Settings {
             daily_calc_mode: DailyCalcMode::default(),
             tx_categories: default_tx_categories(),
             income_categories: default_income_categories(),
+            work_schedule: WorkSchedule::default(),
+            save_remaining_daily_limit_to_piggy_bank: false,
+            last_daily_limit_carryover_date: String::new(),
             language: default_language(),
         }
     }

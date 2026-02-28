@@ -30,7 +30,7 @@ import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
 const LEGACY_PIGGY_BANK_STORAGE_KEY = "sadmoneyapp.piggy_bank_amount";
 const DEBUG_USE_CUSTOM_TODAY = false;
-const DEBUG_CUSTOM_TODAY = "2026-02-28";
+const DEBUG_CUSTOM_TODAY = "2026-03-01";
 
 export default function App() {
   const today = DEBUG_USE_CUSTOM_TODAY ? DEBUG_CUSTOM_TODAY : ymd(new Date());
@@ -175,7 +175,10 @@ export default function App() {
     };
   }, [data, locale, month0, monthKey, today, year]);
 
+  const storedWorkSchedule = data?.settings.workSchedule === "custom" ? "custom" : "5/2";
   const [workSchedule, setWorkSchedule] = useState<'5/2' | 'custom'>('5/2');
+  const saveRemainingDailyLimitToPiggyBank = Boolean(data?.settings.saveRemainingDailyLimitToPiggyBank);
+  const lastDailyLimitCarryoverDate = data?.settings.lastDailyLimitCarryoverDate ?? "";
   const { vacationDaysCount, handleVacationDaysCountChange, commitVacationDaysCount } =
     useVacationDaysCount(VACATION_DAYS_COUNT_STORAGE_KEY);
   const vacationDaysLeft = useMemo(() => {
@@ -269,6 +272,54 @@ export default function App() {
   useEffect(() => {
     api.getData().then(setData);
   }, []);
+
+  useEffect(() => {
+    setWorkSchedule(storedWorkSchedule);
+  }, [storedWorkSchedule]);
+
+  useEffect(() => {
+    if (!data) return;
+    if (!saveRemainingDailyLimitToPiggyBank) return;
+
+    const currentDate = parseYmdLocal(today);
+    const processedDate = lastDailyLimitCarryoverDate ? parseYmdLocal(lastDailyLimitCarryoverDate) : null;
+
+    if (!processedDate) {
+      api.setUserPreferences(storedWorkSchedule, true, today).then(setData).catch((err) => {
+        console.error("user preferences init failed", err);
+      });
+      return;
+    }
+
+    const diffDays = Math.round((currentDate.getTime() - processedDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return;
+
+    if (diffDays > 1) {
+      api.applyDailyLimitCarryover(0, today).then(setData).catch((err) => {
+        console.error("daily limit carryover sync failed", err);
+      });
+      return;
+    }
+
+    api.calcDailyBudget(lastDailyLimitCarryoverDate)
+      .then((previousDayBudget) => {
+        const spentOnPreviousDay = (data.transactions ?? [])
+          .filter((t) => t.date === lastDailyLimitCarryoverDate && t.type === "expense")
+          .reduce((sum, t) => sum + t.amount, 0);
+        const carryoverAmount = Math.max(0, previousDayBudget.per_day - spentOnPreviousDay);
+        return api.applyDailyLimitCarryover(carryoverAmount, today);
+      })
+      .then(setData)
+      .catch((err) => {
+        console.error("daily limit carryover failed", err);
+      });
+  }, [
+    data,
+    lastDailyLimitCarryoverDate,
+    saveRemainingDailyLimitToPiggyBank,
+    storedWorkSchedule,
+    today,
+  ]);
 
   useEffect(() => {
     api.calcDailyBudget(today).then(setBudget);
@@ -442,7 +493,7 @@ export default function App() {
   const dayMenuRef = useRef<HTMLDivElement | null>(null);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [trendsModalOpen, setTrendsModalOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"general" | "categories">("general");
+  const [settingsTab, setSettingsTab] = useState<"general" | "preferences" | "categories">("general");
   const [expenseCategoryDraft, setExpenseCategoryDraft] = useState<string>("");
   const [incomeCategoryDraft, setIncomeCategoryDraft] = useState<string>("");
   const [appVersion, setAppVersion] = useState<string>("-");
@@ -1178,11 +1229,30 @@ export default function App() {
     });
   }
 
+  async function persistUserPreferences(
+    nextWorkSchedule: "5/2" | "custom",
+    nextSaveRemainingDailyLimitToPiggyBank: boolean,
+    nextLastDailyLimitCarryoverDate: string = lastDailyLimitCarryoverDate,
+  ) {
+    const updated = await api.setUserPreferences(
+      nextWorkSchedule,
+      nextSaveRemainingDailyLimitToPiggyBank,
+      nextLastDailyLimitCarryoverDate,
+    );
+    setData(updated);
+    return updated;
+  }
+
   async function handleWorkScheduleChange(next: "5/2" | "custom") {
     try {
       if (next === "5/2") {
         await saveFiveTwoSchedule();
       }
+      await persistUserPreferences(
+        next,
+        saveRemainingDailyLimitToPiggyBank,
+        saveRemainingDailyLimitToPiggyBank ? (lastDailyLimitCarryoverDate || today) : lastDailyLimitCarryoverDate,
+      );
       setWorkSchedule(next);
       if (next === "custom") {
         closeSettingsModal();
@@ -1190,6 +1260,14 @@ export default function App() {
       } else {
         cancelCustomSchedulePick();
       }
+    } catch (err) {
+      alert(String(err));
+    }
+  }
+
+  async function handleSaveRemainingDailyLimitToPiggyBankChange(checked: boolean) {
+    try {
+      await persistUserPreferences(workSchedule, checked, today);
     } catch (err) {
       alert(String(err));
     }
@@ -1787,6 +1865,12 @@ export default function App() {
                 {"General"}
               </button>
               <button
+                onClick={() => setSettingsTab("preferences")}
+                style={{ opacity: settingsTab === "preferences" ? 1 : 0.75 }}
+              >
+                {"User preferences"}
+              </button>
+              <button
                 onClick={() => setSettingsTab("categories")}
                 style={{ opacity: settingsTab === "categories" ? 1 : 0.75 }}
               >
@@ -1796,6 +1880,24 @@ export default function App() {
 
             {settingsTab === "general" ? (
               <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+                <button onClick={() => { void exportBackupFile(); }}>
+                  {"Export backup"}
+                </button>
+                <button onClick={() => { void importBackupFile(); }}>
+                  {"Import backup"}
+                </button>
+                <button
+                  onClick={() => { void checkForUpdates(); }}
+                  disabled={isCheckingUpdates}
+                >
+                  {isCheckingUpdates ? "Checking updates..." : "Check for updates"}
+                </button>
+                <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+                  {"Version"}: {appVersion}
+                </div>
+              </div>
+            ) : settingsTab === "preferences" ? (
+              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
                 <div className="surface" style={{ padding: 10 }}>
                   <div style={{ fontSize: 13, marginBottom: 8 }}><b>{"Work schedule"}</b></div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -1825,21 +1927,26 @@ export default function App() {
                       : "5/2 marks weekdays as working days automatically."}
                   </div>
                 </div>
-                <button onClick={() => { void exportBackupFile(); }}>
-                  {"Export backup"}
-                </button>
-                <button onClick={() => { void importBackupFile(); }}>
-                  {"Import backup"}
-                </button>
-                <button
-                  onClick={() => { void checkForUpdates(); }}
-                  disabled={isCheckingUpdates}
-                >
-                  {isCheckingUpdates ? "Checking updates..." : "Check for updates"}
-                </button>
-                <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                  {"Version"}: {appVersion}
-                </div>
+
+                <label className="surface" style={{ padding: 10, display: "block" }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <input
+                      type="checkbox"
+                      checked={saveRemainingDailyLimitToPiggyBank}
+                      onChange={(e) => {
+                        void handleSaveRemainingDailyLimitToPiggyBankChange(e.target.checked);
+                      }}
+                    />
+                    <div>
+                      <div style={{ fontSize: 13, marginBottom: 4 }}>
+                        <b>{"Save remaining daily spend limit to piggy bank"}</b>
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.75 }}>
+                        {"At the start of the next day, the unused part of yesterday's daily spend limit is added to the piggy bank."}
+                      </div>
+                    </div>
+                  </div>
+                </label>
               </div>
             ) : (
               <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>

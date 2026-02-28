@@ -1,4 +1,4 @@
-use crate::models::{AppData, Debt, OffDay, SalaryEvent, Transaction, TxType, Vacation};
+use crate::models::{AppData, Debt, OffDay, SalaryEvent, Transaction, TxType, Vacation, WorkSchedule};
 use crate::storage;
 use anyhow::Result;
 use chrono::NaiveDate;
@@ -86,6 +86,39 @@ pub fn set_tx_categories(
     let mut data = load(&app)?;
     data.settings.tx_categories = normalize_category_list(expense_categories);
     data.settings.income_categories = normalize_category_list(income_categories);
+    save(&app, &data)?;
+    Ok(data)
+}
+
+#[tauri::command]
+pub fn set_user_preferences(
+    app: AppHandle,
+    work_schedule: String,
+    save_remaining_daily_limit_to_piggy_bank: bool,
+    last_daily_limit_carryover_date: String,
+) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    let normalized = work_schedule.trim().to_lowercase();
+    data.settings.work_schedule = match normalized.as_str() {
+        "5/2" => WorkSchedule::FiveTwo,
+        "custom" => WorkSchedule::Custom,
+        _ => return Err("work_schedule must be '5/2' or 'custom'".to_string()),
+    };
+    data.settings.save_remaining_daily_limit_to_piggy_bank = save_remaining_daily_limit_to_piggy_bank;
+    data.settings.last_daily_limit_carryover_date = last_daily_limit_carryover_date.trim().to_string();
+    save(&app, &data)?;
+    Ok(data)
+}
+
+#[tauri::command]
+pub fn apply_daily_limit_carryover(
+    app: AppHandle,
+    amount: i64,
+    processed_date: String,
+) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    data.piggy_bank_amount = data.piggy_bank_amount.saturating_add(amount.max(0));
+    data.settings.last_daily_limit_carryover_date = processed_date.trim().to_string();
     save(&app, &data)?;
     Ok(data)
 }

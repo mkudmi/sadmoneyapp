@@ -48,6 +48,9 @@ export type AppData = {
     dailyCalcMode: "exclude_payday" | "include_payday";
     txCategories: string[];
     incomeCategories?: string[];
+    workSchedule?: "5/2" | "custom";
+    saveRemainingDailyLimitToPiggyBank?: boolean;
+    lastDailyLimitCarryoverDate?: string;
     language?: "ru" | "en";
   };
   piggyBankAmount?: number;
@@ -88,5 +91,17 @@ export const api = {
   setLanguage: (language: "ru" | "en") => invoke<AppData>("set_language", { language }),
   setTxCategories: (expenseCategories: string[], incomeCategories: string[]) =>
     invoke<AppData>("set_tx_categories", { expenseCategories, incomeCategories }),
+  setUserPreferences: (
+    workSchedule: "5/2" | "custom",
+    saveRemainingDailyLimitToPiggyBank: boolean,
+    lastDailyLimitCarryoverDate: string,
+  ) =>
+    invoke<AppData>("set_user_preferences", {
+      workSchedule,
+      saveRemainingDailyLimitToPiggyBank,
+      lastDailyLimitCarryoverDate,
+    }),
+  applyDailyLimitCarryover: (amount: number, processedDate: string) =>
+    invoke<AppData>("apply_daily_limit_carryover", { amount, processedDate }),
   calcDailyBudget: (fromDate: string) => invoke<DailyBudgetResult>("calc_daily_budget", { fromDate }),
 };
