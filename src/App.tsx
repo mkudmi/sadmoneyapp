@@ -1303,20 +1303,31 @@ export default function App() {
     await saveCategories(expenseCategories, next);
   }
 
+  function focusMonth(targetYear: number, targetMonth0: number) {
+    setYear(targetYear);
+    setMonth0(targetMonth0);
+
+    const todayDate = parseYmdLocal(today);
+    const isCurrentMonth = todayDate.getFullYear() === targetYear && todayDate.getMonth() === targetMonth0;
+
+    if (isCurrentMonth) {
+      setSelectedDate(today);
+      return;
+    }
+
+    setSelectedDate(ymd(new Date(targetYear, targetMonth0, 1)));
+  }
+
   function prevMonth() {
     const d = new Date(year, month0, 1);
     d.setMonth(d.getMonth() - 1);
-    setYear(d.getFullYear());
-    setMonth0(d.getMonth());
-    setSelectedDate(ymd(d));
+    focusMonth(d.getFullYear(), d.getMonth());
   }
 
   function nextMonth() {
     const d = new Date(year, month0, 1);
     d.setMonth(d.getMonth() + 1);
-    setYear(d.getFullYear());
-    setMonth0(d.getMonth());
-    setSelectedDate(ymd(d));
+    focusMonth(d.getFullYear(), d.getMonth());
   }
 
   async function handleEditVacation(v: Vacation) {
