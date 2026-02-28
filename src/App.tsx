@@ -1178,6 +1178,23 @@ export default function App() {
     });
   }
 
+  async function handleWorkScheduleChange(next: "5/2" | "custom") {
+    try {
+      if (next === "5/2") {
+        await saveFiveTwoSchedule();
+      }
+      setWorkSchedule(next);
+      if (next === "custom") {
+        closeSettingsModal();
+        beginCustomSchedulePick();
+      } else {
+        cancelCustomSchedulePick();
+      }
+    } catch (err) {
+      alert(String(err));
+    }
+  }
+
   async function exportBackupFile() {
     try {
       const ts = ymd(new Date());
@@ -1430,30 +1447,9 @@ export default function App() {
               }}
             />
           </div>
-          <label style={{ opacity: 0.85, whiteSpace: "nowrap" }}>
-            <b>{"Work schedule:"}</b>{" "}
-            <select
-              value={workSchedule}
-              onChange={async (e) => {
-                const next = e.target.value as "5/2" | "custom";
-                if (next === "5/2") {
-                  await saveFiveTwoSchedule();
-                }
-                setWorkSchedule(next);
-                if (next === "custom") {
-                  beginCustomSchedulePick();
-                } else {
-                  cancelCustomSchedulePick();
-                }
-              }}
-            >
-              <option value="5/2">5/2</option>
-              <option value="custom">{"Custom"}</option>
-            </select>
-          </label>
           {isPickingCustomWorkDays ? (
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button onClick={saveCustomSchedule}>{"Exit"}</button>
+              <button onClick={cancelCustomSchedulePick}>{"Cancel"}</button>
               <button onClick={saveCustomSchedule}>{"Save"}</button>
               <div style={{ fontSize: 12, opacity: 0.8, whiteSpace: "nowrap" }}>
                 {"Mark working days in the calendar"}
@@ -1789,6 +1785,35 @@ export default function App() {
 
             {settingsTab === "general" ? (
               <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+                <div className="surface" style={{ padding: 10 }}>
+                  <div style={{ fontSize: 13, marginBottom: 8 }}><b>{"Work schedule"}</b></div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <select
+                      value={workSchedule}
+                      onChange={(e) => {
+                        void handleWorkScheduleChange(e.target.value as "5/2" | "custom");
+                      }}
+                    >
+                      <option value="5/2">5/2</option>
+                      <option value="custom">{"Custom"}</option>
+                    </select>
+                    {workSchedule === "custom" ? (
+                      <button
+                        onClick={() => {
+                          closeSettingsModal();
+                          beginCustomSchedulePick();
+                        }}
+                      >
+                        {"Edit in calendar"}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
+                    {workSchedule === "custom"
+                      ? "Custom mode uses the days you mark in the calendar."
+                      : "5/2 marks weekdays as working days automatically."}
+                  </div>
+                </div>
                 <button onClick={() => { void exportBackupFile(); }}>
                   {"Export backup"}
                 </button>
