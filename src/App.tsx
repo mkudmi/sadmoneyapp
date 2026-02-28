@@ -29,13 +29,15 @@ import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
 const LEGACY_PIGGY_BANK_STORAGE_KEY = "sadmoneyapp.piggy_bank_amount";
+const DEBUG_USE_CUSTOM_TODAY = false;
+const DEBUG_CUSTOM_TODAY = "2026-02-28";
 
 export default function App() {
+  const today = DEBUG_USE_CUSTOM_TODAY ? DEBUG_CUSTOM_TODAY : ymd(new Date());
   const [data, setData] = useState<AppData | null>(null);
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [month0, setMonth0] = useState(new Date().getMonth()); // 0..11
-  const [selectedDate, setSelectedDate] = useState(ymd(new Date()));
-  const today = ymd(new Date());
+  const [year, setYear] = useState(() => parseYmdLocal(today).getFullYear());
+  const [month0, setMonth0] = useState(() => parseYmdLocal(today).getMonth()); // 0..11
+  const [selectedDate, setSelectedDate] = useState(today);
   const locale = "en-US";
   const [budget, setBudget] = useState<{ per_day: number; days: number; next_salary_date: string | null; available: number } | null>(null);
   const piggyBankAmount = Math.max(0, data?.piggyBankAmount ?? 0);
@@ -257,6 +259,13 @@ export default function App() {
     return Math.round(total / workedDays);
   }, [data, today]);
 
+  function focusOnDate(date: string) {
+    const parsed = parseYmdLocal(date);
+    setYear(parsed.getFullYear());
+    setMonth0(parsed.getMonth());
+    setSelectedDate(date);
+  }
+
   useEffect(() => {
     api.getData().then(setData);
   }, []);
@@ -265,9 +274,16 @@ export default function App() {
     api.calcDailyBudget(today).then(setBudget);
   }, [today, data]);
 
-  const availableForSpending = Math.max(0, (budget?.available ?? 0) - piggyBankAmount);
-  const dailySpendLimitFromAvailable = budget && budget.days > 0
-    ? Math.floor(availableForSpending / budget.days)
+  const availableForSpending = budget?.available ?? 0;
+  const spentToday = useMemo(
+    () =>
+      (data?.transactions ?? [])
+        .filter((t) => t.date === today && t.type === "expense")
+        .reduce((sum, t) => sum + t.amount, 0),
+    [data?.transactions, today],
+  );
+  const dailySpendLimitFromAvailable = budget
+    ? budget.per_day - spentToday
     : 0;
 
 
@@ -1374,10 +1390,7 @@ export default function App() {
         <button onClick={nextMonth}>{">"}</button>
         <button
           onClick={() => {
-            const d = new Date();
-            setYear(d.getFullYear());
-            setMonth0(d.getMonth());
-            setSelectedDate(ymd(d));
+            focusOnDate(today);
           }}
         >
           {"Go to today"}
@@ -1573,6 +1586,7 @@ export default function App() {
           budget={budget}
           availableForSpending={availableForSpending}
           dailySpendLimit={dailySpendLimitFromAvailable}
+          today={today}
         />
         <SelectedDateTransactionsList
           selectedDate={selectedDate}

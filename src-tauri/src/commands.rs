@@ -400,11 +400,13 @@ pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudge
 
     // Баланс на from_date: считаем все операции <= from_date и зарплаты <= from_date
     let mut balance: i64 = 0;
+    let mut balance_for_limit: i64 = 0;
 
     for s in &data.salary_events {
         if let Ok(d) = parse_date(&s.date) {
             if d <= from {
                 balance += s.amount;
+                balance_for_limit += s.amount;
             }
         }
     }
@@ -413,8 +415,16 @@ pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudge
         if let Ok(d) = parse_date(&t.date) {
             if d <= from {
                 match t.r#type {
-                    TxType::Income => balance += t.amount,
-                    TxType::Expense => balance -= t.amount,
+                    TxType::Income => {
+                        balance += t.amount;
+                        balance_for_limit += t.amount;
+                    }
+                    TxType::Expense => {
+                        balance -= t.amount;
+                        if d < from {
+                            balance_for_limit -= t.amount;
+                        }
+                    }
                     TxType::PlannedExpense => {}
                 }
             }
@@ -434,12 +444,19 @@ pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudge
     }
 
     // Подушка и резерв по запланированным расходам.
-    let mut available = balance - data.settings.min_balance - planned_reserve;
+    let blocked_amount = data.settings.min_balance + data.piggy_bank_amount + planned_reserve;
+
+    let mut available = balance - blocked_amount;
     if available < 0 {
         available = 0;
     }
 
-    let per_day = if days > 0 { available / days } else { 0 };
+    let mut available_for_limit = balance_for_limit - blocked_amount;
+    if available_for_limit < 0 {
+        available_for_limit = 0;
+    }
+
+    let per_day = if days > 0 { available_for_limit / days } else { 0 };
 
     Ok(DailyBudgetResult {
         next_salary_date: Some(next_date.format("%Y-%m-%d").to_string()),
