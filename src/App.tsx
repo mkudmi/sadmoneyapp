@@ -347,6 +347,44 @@ export default function App() {
     return out;
   }, [year, month0]);
 
+  const workDaysInMonth = useMemo(() => {
+    const vacations = data?.vacations ?? [];
+    const offDays = data?.offDays ?? [];
+    let total = 0;
+
+    for (const date of monthDays) {
+      if (vacations.some((v) => v.start_date <= date && date <= v.end_date)) {
+        continue;
+      }
+
+      const offForDay = offDays.find((o) => o.date === date) ?? null;
+      const dayOfWeek = new Date(date).getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+      if (workSchedule === "custom") {
+        if (offForDay?.is_working) {
+          total++;
+        }
+        continue;
+      }
+
+      if (isWeekend) {
+        if (offForDay?.is_working) {
+          total++;
+        }
+        continue;
+      }
+
+      if (offForDay && !offForDay.is_working) {
+        continue;
+      }
+
+      total++;
+    }
+
+    return total;
+  }, [data?.offDays, data?.vacations, monthDays, workSchedule]);
+
   // Build calendar grid cells so weeks start on Monday and end on Sunday
   const firstDayJs = new Date(year, month0, 1).getDay(); // 0 = Sun .. 6 = Sat
   const leadingEmpty = (firstDayJs + 6) % 7; // convert to Mon=0..Sun=6
@@ -1501,6 +1539,9 @@ export default function App() {
         >
           {"Go to today"}
         </button>
+        <div className="metric-chip" style={{ padding: "6px 10px", fontSize: 12 }}>
+          {`Work days: ${workDaysInMonth}`}
+        </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           <PiggyBankChip
             amount={piggyBankAmount}
