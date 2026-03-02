@@ -1512,6 +1512,25 @@ export default function App() {
     }
   }
 
+  const topbarControlStyle = {
+    minHeight: 40,
+    padding: "0 12px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxSizing: "border-box" as const,
+  };
+
+  const topbarChipStyle = {
+    height: 40,
+    padding: "0 10px",
+    fontSize: 12,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    boxSizing: "border-box" as const,
+  };
+
   return (
 
 
@@ -1527,19 +1546,20 @@ export default function App() {
               }}
     >
       <div className="topbar" style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap", zIndex: 3000 }}>
-        <button onClick={prevMonth}>{"<"}</button>
+        <button onClick={prevMonth} style={topbarControlStyle}>{"<"}</button>
         <h2 className="summary-title">
           {capitalizeFirst(new Date(year, month0, 1).toLocaleString(locale, { month: "long", year: "numeric" }))}
         </h2>
-        <button onClick={nextMonth}>{">"}</button>
+        <button onClick={nextMonth} style={topbarControlStyle}>{">"}</button>
         <button
           onClick={() => {
             focusOnDate(today);
           }}
+          style={topbarControlStyle}
         >
           {"Go to today"}
         </button>
-        <div className="metric-chip" style={{ padding: "6px 10px", fontSize: 12 }}>
+        <div className="metric-chip" style={topbarChipStyle}>
           {`Work days: ${workDaysInMonth}`}
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
@@ -1548,12 +1568,7 @@ export default function App() {
             onAdd={() => openPiggyBankModal("add")}
             onWithdraw={() => openPiggyBankModal("withdraw")}
           />
-          <div className="metric-chip" style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "6px 10px",
-            }}>
+          <div className="metric-chip" style={topbarChipStyle}>
             <span style={{ fontSize: 12, opacity: 0.9, whiteSpace: "nowrap" }}>{"Vacation days count"}</span>
             <input
               type="text"
@@ -1569,31 +1584,41 @@ export default function App() {
                 }
               }}
               style={{
-                width: 56,
-                padding: "4px 6px",
-                borderRadius: 6,
+                width: 44,
+                height: 20,
+                padding: "0 6px",
+                margin: 0,
+                minHeight: 0,
+                borderRadius: 4,
                 border: "1px solid #ccc",
                 fontSize: 12,
+                lineHeight: "18px",
+                display: "block",
+                alignSelf: "center",
+                appearance: "none",
+                background: "#fff",
+                fontFamily: "inherit",
+                boxSizing: "border-box",
               }}
             />
           </div>
           {isPickingCustomWorkDays ? (
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button onClick={cancelCustomSchedulePick}>{"Cancel"}</button>
-              <button onClick={saveCustomSchedule}>{"Save"}</button>
+              <button onClick={cancelCustomSchedulePick} style={topbarControlStyle}>{"Cancel"}</button>
+              <button onClick={saveCustomSchedule} style={topbarControlStyle}>{"Save"}</button>
               <div style={{ fontSize: 12, opacity: 0.8, whiteSpace: "nowrap" }}>
                 {"Mark working days in the calendar"}
               </div>
             </div>
           ) : null}
         </div>
-        <button onClick={() => setTrendsModalOpen(true)}>
+        <button onClick={() => setTrendsModalOpen(true)} style={topbarControlStyle}>
           {"Trends"}
         </button>
         <button
           aria-label="Settings"
           onClick={openSettingsModal}
-          style={{ width: 36, height: 36, display: "grid", placeItems: "center" }}
+          style={{ width: 40, height: 40, display: "grid", placeItems: "center", boxSizing: "border-box" }}
         >
           {"\u2699"}
         </button>

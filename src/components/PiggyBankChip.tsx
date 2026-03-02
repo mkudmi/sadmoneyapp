@@ -14,7 +14,9 @@ export function PiggyBankChip({ amount, onAdd, onWithdraw }: PiggyBankChipProps)
         display: "inline-flex",
         alignItems: "center",
         gap: 8,
+        minHeight: 36,
         padding: "6px 10px",
+        boxSizing: "border-box",
       }}
     >
       <span style={{ fontSize: 12, opacity: 0.9, whiteSpace: "nowrap" }}>
@@ -24,7 +26,7 @@ export function PiggyBankChip({ amount, onAdd, onWithdraw }: PiggyBankChipProps)
       <button
         title={"Add to piggy bank"}
         aria-label={"Add to piggy bank"}
-        style={{ minWidth: 22, minHeight: 22, padding: 0, fontWeight: 700, lineHeight: 1 }}
+        style={{ minWidth: 24, minHeight: 24, padding: 0, fontWeight: 700, lineHeight: 1 }}
         onClick={onAdd}
       >
         {"+"}
@@ -32,7 +34,7 @@ export function PiggyBankChip({ amount, onAdd, onWithdraw }: PiggyBankChipProps)
       <button
         title={"Withdraw from piggy bank"}
         aria-label={"Withdraw from piggy bank"}
-        style={{ minWidth: 22, minHeight: 22, padding: 0, fontWeight: 700, lineHeight: 1 }}
+        style={{ minWidth: 24, minHeight: 24, padding: 0, fontWeight: 700, lineHeight: 1 }}
         onClick={onWithdraw}
       >
         {"-"}
