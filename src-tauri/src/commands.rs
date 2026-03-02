@@ -60,6 +60,59 @@ fn save(app: &AppHandle, data: &AppData) -> Result<(), String> {
     storage::save(app, data).map_err(|e| e.to_string())
 }
 
+fn reduce_debt(data: &mut AppData, person: &str, amount: i64) {
+    let normalized_person = normalize_person(person);
+    if normalized_person.is_empty() || amount <= 0 {
+        return;
+    }
+
+    if let Some(index) = data
+        .debts
+        .iter()
+        .position(|d| d.person.eq_ignore_ascii_case(&normalized_person))
+    {
+        let remaining = data.debts[index].amount.saturating_sub(amount);
+        if remaining <= 0 {
+            data.debts.remove(index);
+        } else {
+            data.debts[index].amount = remaining;
+        }
+    }
+}
+
+fn restore_debt(data: &mut AppData, person: &str, amount: i64) {
+    let normalized_person = normalize_person(person);
+    if normalized_person.is_empty() || amount <= 0 {
+        return;
+    }
+
+    if let Some(debt) = data
+        .debts
+        .iter_mut()
+        .find(|d| d.person.eq_ignore_ascii_case(&normalized_person))
+    {
+        debt.amount = debt.amount.saturating_add(amount);
+    } else {
+        data.debts.push(Debt {
+            id: format!("debt_{}", Uuid::new_v4()),
+            person: normalized_person,
+            amount,
+        });
+    }
+}
+
+fn apply_debt_payment(data: &mut AppData, tx: &Transaction) {
+    if let (TxType::Expense, Some(person)) = (&tx.r#type, tx.debt_person.as_deref()) {
+        reduce_debt(data, person, tx.amount.saturating_abs());
+    }
+}
+
+fn rollback_debt_payment(data: &mut AppData, tx: &Transaction) {
+    if let (TxType::Expense, Some(person)) = (&tx.r#type, tx.debt_person.as_deref()) {
+        restore_debt(data, person, tx.amount.saturating_abs());
+    }
+}
+
 #[tauri::command]
 pub fn get_data(app: AppHandle) -> Result<AppData, String> {
     load(&app)
@@ -141,16 +194,7 @@ pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, S
         .map(|p| normalize_person(p))
         .filter(|p| !p.is_empty());
 
-    if let (TxType::Expense, Some(person)) = (&tx.r#type, tx.debt_person.as_ref()) {
-        if let Some(d) = data
-            .debts
-            .iter_mut()
-            .find(|d| d.person.eq_ignore_ascii_case(person))
-        {
-            d.amount = (d.amount - tx.amount).max(0);
-        }
-    }
-
+    apply_debt_payment(&mut data, &tx);
     data.transactions.push(tx);
     save(&app, &data)?;
     Ok(data)
@@ -169,6 +213,8 @@ pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData
         return Err("transaction not found".to_string());
     };
 
+    let previous_tx = data.transactions[i].clone();
+
     tx.amount = tx.amount.saturating_abs();
     tx.category = normalize_category(&tx.category);
     remember_category(&mut data.settings, &tx.r#type, &tx.category);
@@ -178,6 +224,8 @@ pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData
         .map(|p| normalize_person(p))
         .filter(|p| !p.is_empty());
 
+    rollback_debt_payment(&mut data, &previous_tx);
+    apply_debt_payment(&mut data, &tx);
     data.transactions[i] = tx;
     save(&app, &data)?;
     Ok(data)
@@ -187,23 +235,8 @@ pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData
 pub fn delete_transaction(app: AppHandle, id: String) -> Result<AppData, String> {
     let mut data = load(&app)?;
 
-    // If we delete an expense linked to a debt person, restore that amount back to the debt.
     if let Some(tx) = data.transactions.iter().find(|t| t.id == id).cloned() {
-        if let (TxType::Expense, Some(person)) = (tx.r#type, tx.debt_person.as_ref()) {
-            if let Some(d) = data
-                .debts
-                .iter_mut()
-                .find(|d| d.person.eq_ignore_ascii_case(person))
-            {
-                d.amount = d.amount.saturating_add(tx.amount);
-            } else {
-                data.debts.push(Debt {
-                    id: format!("debt_{}", Uuid::new_v4()),
-                    person: normalize_person(person),
-                    amount: tx.amount.saturating_abs(),
-                });
-            }
-        }
+        rollback_debt_payment(&mut data, &tx);
     }
 
     data.transactions.retain(|t| t.id != id);

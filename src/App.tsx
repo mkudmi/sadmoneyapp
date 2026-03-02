@@ -30,7 +30,7 @@ import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
 const LEGACY_PIGGY_BANK_STORAGE_KEY = "sadmoneyapp.piggy_bank_amount";
 const DEBUG_USE_CUSTOM_TODAY = false;
-const DEBUG_CUSTOM_TODAY = "2026-03-01";
+const DEBUG_CUSTOM_TODAY = "2026-03-03";
 
 export default function App() {
   const today = DEBUG_USE_CUSTOM_TODAY ? DEBUG_CUSTOM_TODAY : ymd(new Date());
