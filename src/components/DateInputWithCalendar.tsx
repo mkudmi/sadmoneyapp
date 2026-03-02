@@ -1,14 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
-import { daysInMonth, parseYmdLocal, ymd } from "../lib/date";
+import {
+  dateFormatPattern,
+  daysInMonth,
+  formatDateForDisplay,
+  normalizeDateFormat,
+  parseYmdLocal,
+  ymd,
+} from "../lib/date";
+import type { DateFormat } from "../lib/date";
 import { useDismissible } from "../hooks/useDismissible";
 
 type DateInputWithCalendarProps = {
   value: string;
   placeholder?: string;
+  dateFormat?: DateFormat;
   onChange: (value: string) => void;
 };
 
-export function DateInputWithCalendar({ value, placeholder = "DD-MM-YYYY", onChange }: DateInputWithCalendarProps) {
+export function DateInputWithCalendar({
+  value,
+  placeholder,
+  dateFormat = "dd-mm-yyyy",
+  onChange,
+}: DateInputWithCalendarProps) {
+  const normalizedFormat = normalizeDateFormat(dateFormat);
   const [open, setOpen] = useState(false);
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
   const [viewMonth0, setViewMonth0] = useState(new Date().getMonth());
@@ -55,9 +70,9 @@ export function DateInputWithCalendar({ value, placeholder = "DD-MM-YYYY", onCha
   return (
     <div style={{ position: "relative" }} data-date-picker="true">
       <input
-        value={formatYmdToDmy(value)}
+        value={formatDateForDisplay(value, normalizedFormat)}
         readOnly
-        placeholder={placeholder}
+        placeholder={placeholder ?? dateFormatPattern(normalizedFormat)}
         onClick={() => setOpen(true)}
         onFocus={() => setOpen(true)}
         style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd", cursor: "pointer" }}
@@ -138,10 +153,4 @@ function parseYmdSafe(value: string) {
   const d = parseYmdLocal(value);
   if (Number.isNaN(d.getTime())) return null;
   return d;
-}
-
-function formatYmdToDmy(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  const [y, m, d] = value.split("-");
-  return `${d}-${m}-${y}`;
 }

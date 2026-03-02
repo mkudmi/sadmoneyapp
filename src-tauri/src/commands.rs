@@ -17,6 +17,15 @@ fn normalize_person(s: &str) -> String {
     normalize_category(s)
 }
 
+fn normalize_date_format(s: &str) -> Option<String> {
+    match s.trim().to_lowercase().as_str() {
+        "dd-mm-yyyy" => Some("dd-mm-yyyy".to_string()),
+        "mm-dd-yyyy" => Some("mm-dd-yyyy".to_string()),
+        "yyyy-mm-dd" => Some("yyyy-mm-dd".to_string()),
+        _ => None,
+    }
+}
+
 fn remember_category(settings: &mut crate::models::Settings, tx_type: &TxType, category: &str) {
     if category.trim().is_empty() {
         return;
@@ -126,6 +135,17 @@ pub fn set_language(app: AppHandle, language: String) -> Result<AppData, String>
         return Err("language must be 'en' or 'ru'".to_string());
     }
     data.settings.language = normalized;
+    save(&app, &data)?;
+    Ok(data)
+}
+
+#[tauri::command]
+pub fn set_date_format(app: AppHandle, date_format: String) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    let Some(normalized) = normalize_date_format(&date_format) else {
+        return Err("date_format must be 'dd-mm-yyyy', 'mm-dd-yyyy', or 'yyyy-mm-dd'".to_string());
+    };
+    data.settings.date_format = normalized;
     save(&app, &data)?;
     Ok(data)
 }

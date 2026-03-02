@@ -1,8 +1,11 @@
 import { SalaryEvent } from "../lib/api";
+import { formatDateForDisplay } from "../lib/date";
+import type { DateFormat } from "../lib/date";
 import { rub } from "../lib/money";
 
 type SalariesPanelProps = {
   salaries: SalaryEvent[];
+  dateFormat: DateFormat;
   isPickingSalaryDate: boolean;
   onCancelPickingSalary: () => void;
   onBeginAddSalary: () => void;
@@ -13,6 +16,7 @@ type SalariesPanelProps = {
 export function SalariesPanel(props: SalariesPanelProps) {
   const {
     salaries,
+    dateFormat,
     isPickingSalaryDate,
     onCancelPickingSalary,
     onBeginAddSalary,
@@ -60,7 +64,7 @@ export function SalariesPanel(props: SalariesPanelProps) {
             >
               <div>
                 <div style={{ fontSize: 12 }}>
-                  <b>{s.date}</b> - {s.title} - {rub(s.amount)}
+                  <b>{formatDateForDisplay(s.date, dateFormat)}</b> - {s.title} - {rub(s.amount)}
                 </div>
               </div>
 

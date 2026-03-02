@@ -1,10 +1,12 @@
 import { Vacation } from "../lib/api";
 import { rub } from "../lib/money";
-import { inclusiveDays } from "../lib/date";
+import { formatDateForDisplay, inclusiveDays } from "../lib/date";
+import type { DateFormat } from "../lib/date";
 import { normalizeVacationType, VacationType, vacationTypeLabel } from "../lib/vacation";
 
 type VacationsPanelProps = {
   vacations: Vacation[];
+  dateFormat: DateFormat;
   avgDailyEarnings: number;
   vacationDaysLeft: number;
   isPickingVacationStart: boolean;
@@ -20,6 +22,7 @@ type VacationsPanelProps = {
 export function VacationsPanel(props: VacationsPanelProps) {
   const {
     vacations,
+    dateFormat,
     avgDailyEarnings,
     vacationDaysLeft,
     isPickingVacationStart,
@@ -101,7 +104,7 @@ export function VacationsPanel(props: VacationsPanelProps) {
               >
                 <div>
                   <div style={{ fontSize: 12 }}>
-                    <b>{v.start_date}</b> - <b>{v.end_date}</b> - {v.title} - {vacationTypeLabel(normalizeVacationType(v.vacation_type))} - {normalizeVacationType(v.vacation_type) === "paid" ? rub(avgDailyEarnings * inclusiveDays(v.start_date, v.end_date)) : "No vacation payout"}
+                    <b>{formatDateForDisplay(v.start_date, dateFormat)}</b> - <b>{formatDateForDisplay(v.end_date, dateFormat)}</b> - {v.title} - {vacationTypeLabel(normalizeVacationType(v.vacation_type))} - {normalizeVacationType(v.vacation_type) === "paid" ? rub(avgDailyEarnings * inclusiveDays(v.start_date, v.end_date)) : "No vacation payout"}
                   </div>
                 </div>
 

@@ -77,6 +77,9 @@ pub struct Settings {
     pub last_daily_limit_carryover_date: String,
     #[serde(default = "default_language")]
     pub language: String,
+    #[serde(rename = "dateFormat")]
+    #[serde(default = "default_date_format")]
+    pub date_format: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -108,6 +111,10 @@ fn default_language() -> String {
     "en".to_string()
 }
 
+fn default_date_format() -> String {
+    "dd-mm-yyyy".to_string()
+}
+
 fn default_income_categories() -> Vec<String> {
     vec![
         "Salary".to_string(),
@@ -129,6 +136,7 @@ impl Default for Settings {
             save_remaining_daily_limit_to_piggy_bank: false,
             last_daily_limit_carryover_date: String::new(),
             language: default_language(),
+            date_format: default_date_format(),
         }
     }
 }

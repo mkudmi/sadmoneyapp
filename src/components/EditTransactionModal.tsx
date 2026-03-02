@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDismissible } from "../hooks/useDismissible";
 import { DateInputWithCalendar } from "./DateInputWithCalendar";
+import type { DateFormat } from "../lib/date";
 
 type EditTransactionModalProps = {
   open: boolean;
@@ -8,6 +9,7 @@ type EditTransactionModalProps = {
   category: string;
   note: string;
   date?: string;
+  dateFormat?: DateFormat;
   showDateField?: boolean;
   categoryOptions: string[];
   onAmountChange: (value: string) => void;
@@ -25,6 +27,7 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
     category,
     note,
     date = "",
+    dateFormat = "dd-mm-yyyy",
     showDateField = false,
     categoryOptions,
     onAmountChange,
@@ -75,7 +78,7 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
           {showDateField && onDateChange ? (
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Date"}</div>
-              <DateInputWithCalendar value={date} onChange={onDateChange} />
+              <DateInputWithCalendar value={date} dateFormat={dateFormat} onChange={onDateChange} />
             </div>
           ) : null}
 

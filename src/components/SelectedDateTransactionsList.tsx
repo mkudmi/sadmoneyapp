@@ -1,4 +1,6 @@
 import { SalaryEvent, Transaction } from "../lib/api";
+import { formatDateForDisplay } from "../lib/date";
+import type { DateFormat } from "../lib/date";
 import { rub } from "../lib/money";
 
 type AfterVacationSummary = {
@@ -10,6 +12,7 @@ type AfterVacationSummary = {
 
 type SelectedDateTransactionsListProps = {
   selectedDate: string;
+  dateFormat: DateFormat;
   salaryForSelectedDate: SalaryEvent | null;
   plannedAfterExpensesForSelectedDate: number | null;
   afterVacationForSelectedDate: AfterVacationSummary | null;
@@ -22,6 +25,7 @@ type SelectedDateTransactionsListProps = {
 export function SelectedDateTransactionsList(props: SelectedDateTransactionsListProps) {
   const {
     selectedDate,
+    dateFormat,
     salaryForSelectedDate,
     plannedAfterExpensesForSelectedDate,
     afterVacationForSelectedDate,
@@ -33,7 +37,7 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
 
   return (
     <div style={{ marginTop: 12, flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
-      <b>{"Transactions for"} {selectedDate}:</b>
+      <b>{"Transactions for"} {formatDateForDisplay(selectedDate, dateFormat)}:</b>
 
       <div
         style={{

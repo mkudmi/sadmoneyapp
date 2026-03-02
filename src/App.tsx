@@ -7,7 +7,18 @@ import { api, AppData, Debt, OffDay, SalaryEvent, Transaction, Vacation } from "
 import { rub, toKop } from "./lib/money";
 import { capitalizeFirst } from "./lib/text";
 import { findFollowingSalaryDate } from "./lib/salary";
-import { daysInMonth, overlapInclusiveDays, parseYmdLocal, ymd, ymFromYmd } from "./lib/date";
+import {
+  dateFormatPattern,
+  daysInMonth,
+  formatDateForDisplay,
+  normalizeDateFormat,
+  overlapInclusiveDays,
+  parseDisplayDate,
+  parseYmdLocal,
+  ymd,
+  ymFromYmd,
+} from "./lib/date";
+import type { DateFormat } from "./lib/date";
 import { isDebtCategory, normalizeCategoryInput } from "./lib/category";
 import { normalizeVacationType, vacationTypeLabel, VacationType } from "./lib/vacation";
 import { useDismissible } from "./hooks/useDismissible";
@@ -179,6 +190,7 @@ export default function App() {
   const [workSchedule, setWorkSchedule] = useState<'5/2' | 'custom'>('5/2');
   const saveRemainingDailyLimitToPiggyBank = Boolean(data?.settings.saveRemainingDailyLimitToPiggyBank);
   const lastDailyLimitCarryoverDate = data?.settings.lastDailyLimitCarryoverDate ?? "";
+  const dateFormat = normalizeDateFormat(data?.settings.dateFormat);
   const { vacationDaysCount, handleVacationDaysCountChange, commitVacationDaysCount } =
     useVacationDaysCount(VACATION_DAYS_COUNT_STORAGE_KEY);
   const vacationDaysLeft = useMemo(() => {
@@ -1311,6 +1323,15 @@ export default function App() {
     }
   }
 
+  async function handleDateFormatChange(next: DateFormat) {
+    try {
+      const updated = await api.setDateFormat(next);
+      setData(updated);
+    } catch (err) {
+      alert(String(err));
+    }
+  }
+
   async function exportBackupFile() {
     try {
       const ts = ymd(new Date());
@@ -1447,8 +1468,16 @@ export default function App() {
   }
 
   async function handleEditVacation(v: Vacation) {
-    const newStart = prompt("Start date (YYYY-MM-DD):", v.start_date) ?? v.start_date;
-    const newEnd = prompt("End date (YYYY-MM-DD):", v.end_date) ?? v.end_date;
+    const startInput = prompt(`Start date (${dateFormatPattern(dateFormat)}):`, formatDateForDisplay(v.start_date, dateFormat));
+    if (startInput === null) return;
+    const endInput = prompt(`End date (${dateFormatPattern(dateFormat)}):`, formatDateForDisplay(v.end_date, dateFormat));
+    if (endInput === null) return;
+    const newStart = parseDisplayDate(startInput, dateFormat);
+    const newEnd = parseDisplayDate(endInput, dateFormat);
+    if (!newStart || !newEnd) {
+      alert(`Use ${dateFormatPattern(dateFormat)}.`);
+      return;
+    }
     const newTitle = prompt("Title:", v.title) ?? v.title;
     const currentType = normalizeVacationType(v.vacation_type);
     const newTypeRaw = prompt('Type ("paid" | "unpaid"):', currentType) ?? currentType;
@@ -1639,7 +1668,7 @@ export default function App() {
           year={year}
           today={today}
           avgDailyEarnings={avgDailyEarnings}
-          locale={locale}
+          dateFormat={dateFormat}
         />
         <DebtsSurface
           debts={debts}
@@ -1655,6 +1684,7 @@ export default function App() {
         />
         <VacationsPanel
           vacations={vacationsThisMonth}
+          dateFormat={dateFormat}
           avgDailyEarnings={avgDailyEarnings}
           vacationDaysLeft={vacationDaysLeft}
           isPickingVacationStart={isPickingVacationStart}
@@ -1668,6 +1698,7 @@ export default function App() {
         />
         <SalariesPanel
           salaries={salaryThisMonth}
+          dateFormat={dateFormat}
           isPickingSalaryDate={isPickingSalaryDate}
           onCancelPickingSalary={() => setIsPickingSalaryDate(false)}
           onBeginAddSalary={beginAddSalary}
@@ -1719,7 +1750,7 @@ export default function App() {
           }}
         >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div><b>{"Selected date:"}</b> {selectedDate}</div>
+          <div><b>{"Selected date:"}</b> {formatDateForDisplay(selectedDate, dateFormat)}</div>
           <div
             style={{
               fontSize: 12,
@@ -1741,6 +1772,7 @@ export default function App() {
         />
         <SelectedDateTransactionsList
           selectedDate={selectedDate}
+          dateFormat={dateFormat}
           salaryForSelectedDate={salaryForSelectedDate}
           plannedAfterExpensesForSelectedDate={plannedAfterExpensesForSelectedDate}
           afterVacationForSelectedDate={afterVacationForSelectedDate}
@@ -1994,6 +2026,23 @@ export default function App() {
                   </div>
                 </div>
 
+                <div className="surface" style={{ padding: 10 }}>
+                  <div style={{ fontSize: 13, marginBottom: 8 }}><b>{"Date format"}</b></div>
+                  <select
+                    value={dateFormat}
+                    onChange={(e) => {
+                      void handleDateFormatChange(e.target.value as DateFormat);
+                    }}
+                  >
+                    <option value="dd-mm-yyyy">{"DD-MM-YYYY"}</option>
+                    <option value="mm-dd-yyyy">{"MM-DD-YYYY"}</option>
+                    <option value="yyyy-mm-dd">{"YYYY-MM-DD"}</option>
+                  </select>
+                  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
+                    {"Applies to all displayed dates. Internal storage stays in YYYY-MM-DD."}
+                  </div>
+                </div>
+
                 <label className="surface" style={{ padding: 10, display: "block" }}>
                   <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                     <input
@@ -2116,7 +2165,7 @@ export default function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>
-                {txModalTitle(txModalType)}  -  {txModalDate}
+                {txModalTitle(txModalType)}  -  {formatDateForDisplay(txModalDate, dateFormat)}
               </b>
               <button onClick={closeTxModal} aria-label={"Close"}>x</button>
             </div>
@@ -2290,6 +2339,7 @@ export default function App() {
       <EditTransactionModal
         open={editTxModalOpen}
         date={editTxModalDate}
+        dateFormat={dateFormat}
         showDateField={Boolean(editTxOriginal)}
         amount={editTxModalAmount}
         category={editTxModalCategory}
@@ -2330,7 +2380,7 @@ export default function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>
-                {"Add vacation"} - {vacationModalStart} {"->"} {vacationModalEnd}
+                {"Add vacation"} - {formatDateForDisplay(vacationModalStart, dateFormat)} {"->"} {formatDateForDisplay(vacationModalEnd, dateFormat)}
               </b>
               <button onClick={closeVacationModal} aria-label={"Close"}>x</button>
             </div>
@@ -2390,7 +2440,7 @@ export default function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>
-                {"Add salary"} - {salaryModalDate}
+                {"Add salary"} - {formatDateForDisplay(salaryModalDate, dateFormat)}
               </b>
               <button onClick={closeSalaryModal} aria-label={"Close"}>x</button>
             </div>
@@ -2429,6 +2479,7 @@ export default function App() {
       <EditSalaryModal
         open={editSalaryModalOpen}
         date={editSalaryModalDate}
+        dateFormat={dateFormat}
         amount={editSalaryModalAmount}
         title={editSalaryModalTitle}
         onDateChange={setEditSalaryModalDate}

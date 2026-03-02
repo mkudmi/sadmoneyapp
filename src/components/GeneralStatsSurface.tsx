@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { AppData } from "../lib/api";
-import { parseYmdLocal, ymFromYmd } from "../lib/date";
+import { formatDateForDisplay, ymFromYmd } from "../lib/date";
+import type { DateFormat } from "../lib/date";
 import { rub } from "../lib/money";
 
 type GeneralStatsSurfaceProps = {
@@ -9,11 +10,11 @@ type GeneralStatsSurfaceProps = {
   year: number;
   today: string;
   avgDailyEarnings: number;
-  locale: string;
+  dateFormat: DateFormat;
 };
 
 export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
-  const { data, monthKey, year, today, avgDailyEarnings, locale } = props;
+  const { data, monthKey, year, today, avgDailyEarnings, dateFormat } = props;
 
   const monthTotals = useMemo(() => {
     let inc = 0;
@@ -72,7 +73,7 @@ export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
       <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Average daily earnings:"}</b> {rub(avgDailyEarnings)}</div>
       <div style={{ opacity: 0.8 }}>
         <b>{"Today:"}</b>{" "}
-        {parseYmdLocal(today).toLocaleDateString(locale, { day: "2-digit", month: "long", year: "numeric" })}
+        {formatDateForDisplay(today, dateFormat)}
       </div>
     </div>
   );

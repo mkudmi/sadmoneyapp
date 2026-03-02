@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { DateFormat } from "./date";
 
 export type TxType = "income" | "expense" | "planned_expense";
 
@@ -52,6 +53,7 @@ export type AppData = {
     saveRemainingDailyLimitToPiggyBank?: boolean;
     lastDailyLimitCarryoverDate?: string;
     language?: "ru" | "en";
+    dateFormat?: DateFormat;
   };
   piggyBankAmount?: number;
   salaryEvents: SalaryEvent[];
@@ -89,6 +91,7 @@ export const api = {
   importBackup: (backupJson: string) => invoke<AppData>("import_backup", { backupJson }),
   importBackupFromPath: (path: string) => invoke<AppData>("import_backup_from_path", { path }),
   setLanguage: (language: "ru" | "en") => invoke<AppData>("set_language", { language }),
+  setDateFormat: (dateFormat: DateFormat) => invoke<AppData>("set_date_format", { dateFormat }),
   setTxCategories: (expenseCategories: string[], incomeCategories: string[]) =>
     invoke<AppData>("set_tx_categories", { expenseCategories, incomeCategories }),
   setUserPreferences: (

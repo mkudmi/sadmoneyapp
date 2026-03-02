@@ -12,6 +12,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_data,
             commands::set_language,
+            commands::set_date_format,
             commands::set_tx_categories,
             commands::set_user_preferences,
             commands::add_transaction,

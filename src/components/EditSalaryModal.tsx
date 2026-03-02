@@ -1,8 +1,11 @@
 import { DateInputWithCalendar } from "./DateInputWithCalendar";
+import { dateFormatPattern } from "../lib/date";
+import type { DateFormat } from "../lib/date";
 
 type EditSalaryModalProps = {
   open: boolean;
   date: string;
+  dateFormat: DateFormat;
   amount: string;
   title: string;
   onDateChange: (value: string) => void;
@@ -16,6 +19,7 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
   const {
     open,
     date,
+    dateFormat,
     amount,
     title,
     onDateChange,
@@ -59,8 +63,8 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
 
         <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Date (DD-MM-YYYY)"}</div>
-            <DateInputWithCalendar value={date} onChange={onDateChange} />
+            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{`Date (${dateFormatPattern(dateFormat)})`}</div>
+            <DateInputWithCalendar value={date} dateFormat={dateFormat} onChange={onDateChange} />
           </div>
 
           <div style={{ minWidth: 0 }}>
