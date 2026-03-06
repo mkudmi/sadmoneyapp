@@ -41,7 +41,7 @@ import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
 const LEGACY_PIGGY_BANK_STORAGE_KEY = "sadmoneyapp.piggy_bank_amount";
 const DEBUG_USE_CUSTOM_TODAY = false;
-const DEBUG_CUSTOM_TODAY = "2026-03-03";
+const DEBUG_CUSTOM_TODAY = "2026-03-06";
 
 export default function App() {
   const today = DEBUG_USE_CUSTOM_TODAY ? DEBUG_CUSTOM_TODAY : ymd(new Date());
@@ -107,7 +107,7 @@ export default function App() {
         previousExpense: 0,
         currentAvgCheck: 0,
         previousAvgCheck: 0,
-        topGrowth: [] as Array<{ category: string; delta: number; current: number; previous: number }>,
+        categoryComparison: [] as Array<{ category: string; delta: number; current: number; previous: number }>,
       };
     }
 
@@ -123,8 +123,6 @@ export default function App() {
     let previousIncome = 0;
     let currentExpense = 0;
     let previousExpense = 0;
-    let currentExpenseOps = 0;
-    let previousExpenseOps = 0;
 
     const currentExpenseByCategory = new Map<string, number>();
     const previousExpenseByCategory = new Map<string, number>();
@@ -138,12 +136,10 @@ export default function App() {
       if (t.type === "expense") {
         if (ym === monthKey) {
           currentExpense += t.amount;
-          currentExpenseOps += 1;
           currentExpenseByCategory.set(t.category, (currentExpenseByCategory.get(t.category) ?? 0) + t.amount);
         }
         if (ym === prevMonthKey) {
           previousExpense += t.amount;
-          previousExpenseOps += 1;
           previousExpenseByCategory.set(t.category, (previousExpenseByCategory.get(t.category) ?? 0) + t.amount);
         }
       }
@@ -158,20 +154,27 @@ export default function App() {
       }
     }
 
-    const categories = new Set<string>([
-      ...Array.from(currentExpenseByCategory.keys()),
-      ...Array.from(previousExpenseByCategory.keys()),
-    ]);
+    const categoryNames = new Set<string>(
+      (data.settings?.txCategories ?? [])
+        .map((c) => normalizeCategoryInput(c))
+        .filter((c) => c.length > 0)
+    );
+    for (const category of currentExpenseByCategory.keys()) categoryNames.add(category);
+    for (const category of previousExpenseByCategory.keys()) categoryNames.add(category);
 
-    const topGrowth = Array.from(categories)
+    const categoryComparison = Array.from(categoryNames)
       .map((category) => {
         const current = currentExpenseByCategory.get(category) ?? 0;
         const previous = previousExpenseByCategory.get(category) ?? 0;
         return { category, current, previous, delta: current - previous };
       })
-      .filter((item) => item.delta > 0)
-      .sort((a, b) => b.delta - a.delta)
-      .slice(0, 5);
+      .sort((a, b) => {
+        if (Math.abs(b.delta) !== Math.abs(a.delta)) return Math.abs(b.delta) - Math.abs(a.delta);
+        if (b.current !== a.current) return b.current - a.current;
+        return a.category.localeCompare(b.category, locale);
+      });
+    const currentMonthDays = daysInMonth(year, month0);
+    const previousMonthDays = daysInMonth(prevMonthDate.getFullYear(), prevMonthDate.getMonth());
 
     return {
       currentLabel,
@@ -180,9 +183,9 @@ export default function App() {
       previousIncome,
       currentExpense,
       previousExpense,
-      currentAvgCheck: currentExpenseOps > 0 ? Math.round(currentExpense / currentExpenseOps) : 0,
-      previousAvgCheck: previousExpenseOps > 0 ? Math.round(previousExpense / previousExpenseOps) : 0,
-      topGrowth,
+      currentAvgCheck: currentMonthDays > 0 ? Math.round(currentExpense / currentMonthDays) : 0,
+      previousAvgCheck: previousMonthDays > 0 ? Math.round(previousExpense / previousMonthDays) : 0,
+      categoryComparison,
     };
   }, [data, locale, month0, monthKey, today, year]);
 
@@ -543,6 +546,7 @@ export default function App() {
   const dayMenuRef = useRef<HTMLDivElement | null>(null);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [trendsModalOpen, setTrendsModalOpen] = useState(false);
+  const [trendsCategoryQuery, setTrendsCategoryQuery] = useState("");
   const [settingsTab, setSettingsTab] = useState<"general" | "preferences" | "categories">("general");
   const [expenseCategoryDraft, setExpenseCategoryDraft] = useState<string>("");
   const [incomeCategoryDraft, setIncomeCategoryDraft] = useState<string>("");
@@ -652,6 +656,11 @@ export default function App() {
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
+  }, [trendsModalOpen]);
+
+  useEffect(() => {
+    if (trendsModalOpen) return;
+    setTrendsCategoryQuery("");
   }, [trendsModalOpen]);
 
   usePiggyBankHotkeys({
@@ -1560,6 +1569,12 @@ export default function App() {
     boxSizing: "border-box" as const,
   };
 
+  const filteredTrendCategories = useMemo(() => {
+    const q = trendsCategoryQuery.trim().toLowerCase();
+    if (!q) return trendsData.categoryComparison;
+    return trendsData.categoryComparison.filter((item) => item.category.toLowerCase().includes(q));
+  }, [trendsCategoryQuery, trendsData.categoryComparison]);
+
   return (
 
 
@@ -1893,29 +1908,57 @@ export default function App() {
             </div>
 
             <div className="surface" style={{ marginTop: 10, padding: 10 }}>
-              <div style={{ marginBottom: 8, fontSize: 13 }}><b>{"Top expense growth categories"}</b></div>
+              <div style={{ marginBottom: 8, fontSize: 13 }}><b>{"All expense categories"}</b></div>
               <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
                 {trendsData.currentLabel} {"vs"} {trendsData.previousLabel}
               </div>
-              {trendsData.topGrowth.length > 0 ? (
+              <div style={{ marginBottom: 8 }}>
+                <input
+                  value={trendsCategoryQuery}
+                  onChange={(e) => setTrendsCategoryQuery(e.target.value)}
+                  placeholder={"Search category"}
+                  aria-label={"Search category"}
+                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                />
+              </div>
+              {filteredTrendCategories.length > 0 ? (
                 <div className="panel-list">
-                  {trendsData.topGrowth.map((item, idx) => (
+                  {filteredTrendCategories.map((item) => (
                     <div key={`trend-growth:${item.category}`} className="panel-item" style={{ padding: "8px 10px", display: "flex", justifyContent: "space-between", gap: 10 }}>
                       <div style={{ minWidth: 0 }}>
-                        <div><b>{idx + 1}.</b> {item.category}</div>
+                        <div><b>{item.category}</b></div>
                         <div style={{ fontSize: 11, opacity: 0.75 }}>
-                          {rub(item.current)} {" / "} {rub(item.previous)}
+                          <span style={{ color: item.delta < 0 ? "#15803d" : "inherit" }}>
+                            {rub(item.current)}
+                          </span>
+                          {" / "}
+                          <span>{rub(item.previous)}</span>
                         </div>
                       </div>
-                      <div style={{ flexShrink: 0, color: "var(--danger)" }}>
-                        <b>{"+ "} {rub(item.delta)}</b>
+                      <div
+                        style={{
+                          flexShrink: 0,
+                          color:
+                            item.delta > 0
+                              ? "var(--danger)"
+                              : item.delta < 0
+                                ? "#15803d"
+                                : "inherit",
+                        }}
+                      >
+                        <b>
+                          {item.delta > 0 ? "+" : item.delta < 0 ? "-" : ""}
+                          {rub(Math.abs(item.delta))}
+                        </b>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div style={{ fontSize: 12, opacity: 0.75 }}>
-                  {"No expense growth categories for this period."}
+                  {trendsData.categoryComparison.length > 0
+                    ? "No categories found."
+                    : "No expense categories for this period."}
                 </div>
               )}
             </div>
