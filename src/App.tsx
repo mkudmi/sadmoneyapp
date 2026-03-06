@@ -35,8 +35,10 @@ import { EditSalaryModal } from "./components/EditSalaryModal";
 import { GeneralStatsSurface } from "./components/GeneralStatsSurface";
 import { DebtsSurface } from "./components/DebtsSurface";
 import { CalendarSurface } from "./components/CalendarSurface";
+import { TrendsCategoryComparisonPanel } from "./components/TrendsCategoryComparisonPanel";
 import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
+import { buildTrendsData } from "./lib/trends";
 
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
 const LEGACY_PIGGY_BANK_STORAGE_KEY = "sadmoneyapp.piggy_bank_amount";
@@ -96,98 +98,10 @@ export default function App() {
       }))
       .sort((a, b) => b.amount - a.amount);
   }, [data, monthKey, today]);
-  const trendsData = useMemo(() => {
-    if (!data) {
-      return {
-        currentLabel: "",
-        previousLabel: "",
-        currentIncome: 0,
-        previousIncome: 0,
-        currentExpense: 0,
-        previousExpense: 0,
-        currentAvgCheck: 0,
-        previousAvgCheck: 0,
-        categoryComparison: [] as Array<{ category: string; delta: number; current: number; previous: number }>,
-      };
-    }
-
-    const currentMonthStart = `${monthKey}-01`;
-    const prevMonthDate = new Date(year, month0 - 1, 1);
-    const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, "0")}`;
-    const previousMonthStart = `${prevMonthKey}-01`;
-
-    const currentLabel = capitalizeFirst(new Date(year, month0, 1).toLocaleString(locale, { month: "long", year: "numeric" }));
-    const previousLabel = capitalizeFirst(prevMonthDate.toLocaleString(locale, { month: "long", year: "numeric" }));
-
-    let currentIncome = 0;
-    let previousIncome = 0;
-    let currentExpense = 0;
-    let previousExpense = 0;
-
-    const currentExpenseByCategory = new Map<string, number>();
-    const previousExpenseByCategory = new Map<string, number>();
-
-    for (const t of data.transactions ?? []) {
-      const ym = ymFromYmd(t.date);
-      if (t.type === "income") {
-        if (ym === monthKey) currentIncome += t.amount;
-        if (ym === prevMonthKey) previousIncome += t.amount;
-      }
-      if (t.type === "expense") {
-        if (ym === monthKey) {
-          currentExpense += t.amount;
-          currentExpenseByCategory.set(t.category, (currentExpenseByCategory.get(t.category) ?? 0) + t.amount);
-        }
-        if (ym === prevMonthKey) {
-          previousExpense += t.amount;
-          previousExpenseByCategory.set(t.category, (previousExpenseByCategory.get(t.category) ?? 0) + t.amount);
-        }
-      }
-    }
-
-    for (const s of data.salaryEvents ?? []) {
-      if (s.date >= currentMonthStart && s.date <= today) {
-        currentIncome += s.amount;
-      }
-      if (s.date >= previousMonthStart && s.date < currentMonthStart) {
-        previousIncome += s.amount;
-      }
-    }
-
-    const categoryNames = new Set<string>(
-      (data.settings?.txCategories ?? [])
-        .map((c) => normalizeCategoryInput(c))
-        .filter((c) => c.length > 0)
-    );
-    for (const category of currentExpenseByCategory.keys()) categoryNames.add(category);
-    for (const category of previousExpenseByCategory.keys()) categoryNames.add(category);
-
-    const categoryComparison = Array.from(categoryNames)
-      .map((category) => {
-        const current = currentExpenseByCategory.get(category) ?? 0;
-        const previous = previousExpenseByCategory.get(category) ?? 0;
-        return { category, current, previous, delta: current - previous };
-      })
-      .sort((a, b) => {
-        if (Math.abs(b.delta) !== Math.abs(a.delta)) return Math.abs(b.delta) - Math.abs(a.delta);
-        if (b.current !== a.current) return b.current - a.current;
-        return a.category.localeCompare(b.category, locale);
-      });
-    const currentMonthDays = daysInMonth(year, month0);
-    const previousMonthDays = daysInMonth(prevMonthDate.getFullYear(), prevMonthDate.getMonth());
-
-    return {
-      currentLabel,
-      previousLabel,
-      currentIncome,
-      previousIncome,
-      currentExpense,
-      previousExpense,
-      currentAvgCheck: currentMonthDays > 0 ? Math.round(currentExpense / currentMonthDays) : 0,
-      previousAvgCheck: previousMonthDays > 0 ? Math.round(previousExpense / previousMonthDays) : 0,
-      categoryComparison,
-    };
-  }, [data, locale, month0, monthKey, today, year]);
+  const trendsData = useMemo(
+    () => buildTrendsData({ data, monthKey, year, month0, today, locale }),
+    [data, locale, month0, monthKey, today, year]
+  );
 
   const storedWorkSchedule = data?.settings.workSchedule === "custom" ? "custom" : "5/2";
   const [workSchedule, setWorkSchedule] = useState<'5/2' | 'custom'>('5/2');
@@ -547,6 +461,7 @@ export default function App() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [trendsModalOpen, setTrendsModalOpen] = useState(false);
   const [trendsCategoryQuery, setTrendsCategoryQuery] = useState("");
+  const [trendsIncomeCategoryQuery, setTrendsIncomeCategoryQuery] = useState("");
   const [settingsTab, setSettingsTab] = useState<"general" | "preferences" | "categories">("general");
   const [expenseCategoryDraft, setExpenseCategoryDraft] = useState<string>("");
   const [incomeCategoryDraft, setIncomeCategoryDraft] = useState<string>("");
@@ -661,6 +576,7 @@ export default function App() {
   useEffect(() => {
     if (trendsModalOpen) return;
     setTrendsCategoryQuery("");
+    setTrendsIncomeCategoryQuery("");
   }, [trendsModalOpen]);
 
   usePiggyBankHotkeys({
@@ -1574,6 +1490,11 @@ export default function App() {
     if (!q) return trendsData.categoryComparison;
     return trendsData.categoryComparison.filter((item) => item.category.toLowerCase().includes(q));
   }, [trendsCategoryQuery, trendsData.categoryComparison]);
+  const filteredIncomeTrendCategories = useMemo(() => {
+    const q = trendsIncomeCategoryQuery.trim().toLowerCase();
+    if (!q) return trendsData.incomeCategoryComparison;
+    return trendsData.incomeCategoryComparison.filter((item) => item.category.toLowerCase().includes(q));
+  }, [trendsIncomeCategoryQuery, trendsData.incomeCategoryComparison]);
 
   return (
 
@@ -1907,60 +1828,32 @@ export default function App() {
               </div>
             </div>
 
-            <div className="surface" style={{ marginTop: 10, padding: 10 }}>
-              <div style={{ marginBottom: 8, fontSize: 13 }}><b>{"All expense categories"}</b></div>
-              <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
-                {trendsData.currentLabel} {"vs"} {trendsData.previousLabel}
-              </div>
-              <div style={{ marginBottom: 8 }}>
-                <input
-                  value={trendsCategoryQuery}
-                  onChange={(e) => setTrendsCategoryQuery(e.target.value)}
-                  placeholder={"Search category"}
-                  aria-label={"Search category"}
-                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
-                />
-              </div>
-              {filteredTrendCategories.length > 0 ? (
-                <div className="panel-list">
-                  {filteredTrendCategories.map((item) => (
-                    <div key={`trend-growth:${item.category}`} className="panel-item" style={{ padding: "8px 10px", display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div><b>{item.category}</b></div>
-                        <div style={{ fontSize: 11, opacity: 0.75 }}>
-                          <span style={{ color: item.delta < 0 ? "#15803d" : "inherit" }}>
-                            {rub(item.current)}
-                          </span>
-                          {" / "}
-                          <span>{rub(item.previous)}</span>
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          flexShrink: 0,
-                          color:
-                            item.delta > 0
-                              ? "var(--danger)"
-                              : item.delta < 0
-                                ? "#15803d"
-                                : "inherit",
-                        }}
-                      >
-                        <b>
-                          {item.delta > 0 ? "+" : item.delta < 0 ? "-" : ""}
-                          {rub(Math.abs(item.delta))}
-                        </b>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ fontSize: 12, opacity: 0.75 }}>
-                  {trendsData.categoryComparison.length > 0
-                    ? "No categories found."
-                    : "No expense categories for this period."}
-                </div>
-              )}
+            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
+              <TrendsCategoryComparisonPanel
+                title={"All expense categories"}
+                currentLabel={trendsData.currentLabel}
+                previousLabel={trendsData.previousLabel}
+                items={filteredTrendCategories}
+                hasAnyItems={trendsData.categoryComparison.length > 0}
+                searchQuery={trendsCategoryQuery}
+                onSearchQueryChange={setTrendsCategoryQuery}
+                searchPlaceholder={"Search category"}
+                emptyForPeriodMessage={"No expense categories for this period."}
+                variant="expense"
+              />
+
+              <TrendsCategoryComparisonPanel
+                title={"All income categories"}
+                currentLabel={trendsData.currentLabel}
+                previousLabel={trendsData.previousLabel}
+                items={filteredIncomeTrendCategories}
+                hasAnyItems={trendsData.incomeCategoryComparison.length > 0}
+                searchQuery={trendsIncomeCategoryQuery}
+                onSearchQueryChange={setTrendsIncomeCategoryQuery}
+                searchPlaceholder={"Search income category"}
+                emptyForPeriodMessage={"No income categories for this period."}
+                variant="income"
+              />
             </div>
           </div>
         </div>
