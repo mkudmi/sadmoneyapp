@@ -1,6 +1,8 @@
 import type { CSSProperties } from "react";
 import {
   IconArrowsMaximize,
+  IconBeach,
+  IconChartDots,
   IconChevronLeft,
   IconChevronRight,
   IconChevronDown,
@@ -8,14 +10,18 @@ import {
   IconDots,
   IconMinus,
   IconPencil,
+  IconPigMoney,
   IconPlus,
   IconSettings,
   IconTrash,
+  IconWallet,
   IconX,
 } from "@tabler/icons-react";
 
 export type AppIconName =
   | "add"
+  | "beach"
+  | "chart"
   | "check"
   | "chevronDown"
   | "chevronLeft"
@@ -25,8 +31,10 @@ export type AppIconName =
   | "dots"
   | "edit"
   | "expand"
+  | "piggyBank"
   | "remove"
-  | "settings";
+  | "settings"
+  | "wallet";
 
 type AppIconProps = {
   name: AppIconName;
@@ -46,6 +54,10 @@ export function AppIcon({ name, size = 16, stroke = 1.8, style }: AppIconProps) 
   switch (name) {
     case "add":
       return <IconPlus {...commonProps} />;
+    case "beach":
+      return <IconBeach {...commonProps} />;
+    case "chart":
+      return <IconChartDots {...commonProps} />;
     case "check":
       return <IconCheck {...commonProps} />;
     case "chevronDown":
@@ -64,10 +76,14 @@ export function AppIcon({ name, size = 16, stroke = 1.8, style }: AppIconProps) 
       return <IconPencil {...commonProps} />;
     case "expand":
       return <IconArrowsMaximize {...commonProps} />;
+    case "piggyBank":
+      return <IconPigMoney {...commonProps} />;
     case "remove":
       return <IconMinus {...commonProps} />;
     case "settings":
       return <IconSettings {...commonProps} />;
+    case "wallet":
+      return <IconWallet {...commonProps} />;
     default:
       return null;
   }

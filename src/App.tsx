@@ -25,7 +25,6 @@ import { useDismissible } from "./hooks/useDismissible";
 import { useVacationDaysCount } from "./hooks/useVacationDaysCount";
 import { VacationsPanel } from "./components/VacationsPanel";
 import { SalariesPanel } from "./components/SalariesPanel";
-import { PiggyBankChip } from "./components/PiggyBankChip";
 import { PiggyBankModal, PiggyBankModalType } from "./components/PiggyBankModal";
 import { SelectedDateBudgetSummary } from "./components/SelectedDateBudgetSummary";
 import { SelectedDateTransactionsList } from "./components/SelectedDateTransactionsList";
@@ -460,6 +459,8 @@ export default function App() {
   const [dayMenuAnchorRect, setDayMenuAnchorRect] = useState<{ top: number; bottom: number } | null>(null);
   const dayMenuRef = useRef<HTMLDivElement | null>(null);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [debtsPanelOpen, setDebtsPanelOpen] = useState(false);
+  const [vacationsPanelOpen, setVacationsPanelOpen] = useState(false);
   const [trendsModalOpen, setTrendsModalOpen] = useState(false);
   const [trendsCategoryQuery, setTrendsCategoryQuery] = useState("");
   const [trendsIncomeCategoryQuery, setTrendsIncomeCategoryQuery] = useState("");
@@ -765,6 +766,8 @@ export default function App() {
       return a.person.localeCompare(b.person, locale);
     });
   }, [data?.debts, locale]);
+  const totalDebt = useMemo(() => debts.reduce((sum, debt) => sum + debt.amount, 0), [debts]);
+  const hasDebts = totalDebt > 0;
 
   const debtPeople = useMemo(() => {
     return Array.from(new Set(debts.map((d) => normalizeCategoryInput(d.person)).filter((p) => p.length > 0)));
@@ -1476,16 +1479,6 @@ export default function App() {
     boxSizing: "border-box" as const,
   };
 
-  const topbarChipStyle = {
-    height: 40,
-    padding: "0 10px",
-    fontSize: 12,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    boxSizing: "border-box" as const,
-  };
-
   const filteredTrendCategories = useMemo(() => {
     const q = trendsCategoryQuery.trim().toLowerCase();
     if (!q) return trendsData.categoryComparison;
@@ -1511,87 +1504,89 @@ export default function App() {
         boxSizing: "border-box",
               }}
     >
-      <div className="topbar" style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap", zIndex: 3000 }}>
-        <button onClick={prevMonth} style={topbarControlStyle} aria-label="Previous month">
-          <AppIcon name="chevronLeft" />
-        </button>
-        <h2 className="summary-title">
-          {capitalizeFirst(new Date(year, month0, 1).toLocaleString(locale, { month: "long", year: "numeric" }))}
-        </h2>
-        <button onClick={nextMonth} style={topbarControlStyle} aria-label="Next month">
-          <AppIcon name="chevronRight" />
-        </button>
-        <button
-          onClick={() => {
-            focusOnDate(today);
-          }}
-          style={topbarControlStyle}
-        >
-          {"Go to today"}
-        </button>
-        <div className="metric-chip" style={topbarChipStyle}>
-          {`Work days: ${workDaysInMonth}`}
-        </div>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-          <PiggyBankChip
-            amount={piggyBankAmount}
-            onAdd={() => openPiggyBankModal("add")}
-            onWithdraw={() => openPiggyBankModal("withdraw")}
-          />
-          <div className="metric-chip" style={topbarChipStyle}>
-            <span style={{ fontSize: 12, opacity: 0.9, whiteSpace: "nowrap" }}>{"Vacation days count"}</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={vacationDaysCount}
-              onChange={(e) => handleVacationDaysCountChange(e.target.value)}
-              onBlur={(e) => commitVacationDaysCount(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  commitVacationDaysCount((e.target as HTMLInputElement).value);
-                  (e.target as HTMLInputElement).blur();
-                }
+      <div className="topbar topbar-layout" style={{ marginBottom: 12, zIndex: 3000 }}>
+        <div className="topbar-main-row">
+          <div className="topbar-nav-group">
+            <button onClick={prevMonth} style={topbarControlStyle} aria-label="Previous month">
+              <AppIcon name="chevronLeft" />
+            </button>
+            <h2 className="summary-title">
+              {capitalizeFirst(new Date(year, month0, 1).toLocaleString(locale, { month: "long", year: "numeric" }))}
+            </h2>
+            <button onClick={nextMonth} style={topbarControlStyle} aria-label="Next month">
+              <AppIcon name="chevronRight" />
+            </button>
+            <button
+              onClick={() => {
+                focusOnDate(today);
               }}
-              style={{
-                width: 44,
-                height: 20,
-                padding: "0 6px",
-                margin: 0,
-                minHeight: 0,
-                borderRadius: 4,
-                border: "1px solid #ccc",
-                fontSize: 12,
-                lineHeight: "18px",
-                display: "block",
-                alignSelf: "center",
-                appearance: "none",
-                background: "#fff",
-                fontFamily: "inherit",
-                boxSizing: "border-box",
-              }}
-            />
-          </div>
-          {isPickingCustomWorkDays ? (
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button onClick={cancelCustomSchedulePick} style={topbarControlStyle}>{"Cancel"}</button>
-              <button onClick={saveCustomSchedule} style={topbarControlStyle}>{"Save"}</button>
-              <div style={{ fontSize: 12, opacity: 0.8, whiteSpace: "nowrap" }}>
-                {"Mark working days in the calendar"}
-              </div>
+              style={topbarControlStyle}
+            >
+              {"Go to today"}
+            </button>
+            <div className="topbar-workdays-chip">
+              <span className="topbar-workdays-label">{"Work days"}</span>
+              <span className="topbar-workdays-value">{workDaysInMonth}</span>
             </div>
-          ) : null}
+          </div>
+
+          <div className="topbar-action-group">
+            {isPickingCustomWorkDays ? (
+              <div className="topbar-inline-notice">
+                <div style={{ fontSize: 12, opacity: 0.8, whiteSpace: "nowrap" }}>
+                  {"Mark working days in the calendar"}
+                </div>
+                <button onClick={cancelCustomSchedulePick} style={topbarControlStyle}>{"Cancel"}</button>
+                <button onClick={saveCustomSchedule} style={topbarControlStyle}>{"Save"}</button>
+              </div>
+            ) : null}
+
+            <button onClick={() => openPiggyBankModal("add")} className="topbar-action-button">
+              <AppIcon name="piggyBank" />
+              <span className="topbar-action-copy">
+                <span>{"Piggy bank"}</span>
+                <span className="topbar-action-meta">{rub(piggyBankAmount)}</span>
+              </span>
+            </button>
+
+            <button
+              onClick={() => setDebtsPanelOpen(true)}
+              className={hasDebts ? "topbar-action-button topbar-action-button-danger" : "topbar-action-button"}
+            >
+              <AppIcon name="wallet" />
+              <span className="topbar-action-copy">
+                <span>{"Debts"}</span>
+                <span className="topbar-action-meta">{hasDebts ? rub(totalDebt) : "No debts"}</span>
+              </span>
+            </button>
+
+            <button onClick={() => setVacationsPanelOpen(true)} className="topbar-action-button">
+              <AppIcon name="beach" />
+              <span className="topbar-action-copy">
+                <span>{"Vacations"}</span>
+                <span className="topbar-action-meta">
+                  {vacationsThisMonth.length > 0 ? `${vacationsThisMonth.length} this month` : `${vacationDaysLeft} days left`}
+                </span>
+              </span>
+            </button>
+
+            <button onClick={() => setTrendsModalOpen(true)} className="topbar-action-button">
+              <AppIcon name="chart" />
+              <span className="topbar-action-copy">
+                <span>{"Trends"}</span>
+                <span className="topbar-action-meta">{"Month comparison"}</span>
+              </span>
+            </button>
+
+            <button
+              aria-label="Settings"
+              onClick={openSettingsModal}
+              style={{ width: 40, height: 40, display: "grid", placeItems: "center", boxSizing: "border-box" }}
+            >
+              <AppIcon name="settings" />
+            </button>
+          </div>
         </div>
-        <button onClick={() => setTrendsModalOpen(true)} style={topbarControlStyle}>
-          {"Trends"}
-        </button>
-        <button
-          aria-label="Settings"
-          onClick={openSettingsModal}
-          style={{ width: 40, height: 40, display: "grid", placeItems: "center", boxSizing: "border-box" }}
-        >
-          <AppIcon name="settings" />
-        </button>
       </div>
       <div
         style={{
@@ -1610,32 +1605,6 @@ export default function App() {
           today={today}
           avgDailyEarnings={avgDailyEarnings}
           dateFormat={dateFormat}
-        />
-        <DebtsSurface
-          debts={debts}
-          onAddDebt={() => openDebtModal()}
-          onEditDebt={(debt) => openDebtModal(debt)}
-          onDeleteDebt={(debtId) => {
-            void (async () => {
-              if (!(await confirmAction())) return;
-              const updated = await api.deleteDebt(debtId);
-              setData(updated);
-            })();
-          }}
-        />
-        <VacationsPanel
-          vacations={vacationsThisMonth}
-          dateFormat={dateFormat}
-          avgDailyEarnings={avgDailyEarnings}
-          vacationDaysLeft={vacationDaysLeft}
-          isPickingVacationStart={isPickingVacationStart}
-          isPickingVacationEnd={isPickingVacationEnd}
-          vacationTypeMenuOpen={vacationTypeMenuOpen}
-          onToggleVacationTypeMenu={() => setVacationTypeMenuOpen((v) => !v)}
-          onSelectVacationType={beginAddVacation}
-          onCancelVacationPicking={cancelVacationPicking}
-          onEditVacation={handleEditVacation}
-          onDeleteVacation={handleDeleteVacation}
         />
         <SalariesPanel
           salaries={salaryThisMonth}
@@ -1753,6 +1722,107 @@ export default function App() {
       />
       </div>
       </div>
+
+      {debtsPanelOpen ? (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            zIndex: 5000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setDebtsPanelOpen(false);
+          }}
+        >
+          <div
+            className="modal-panel"
+            style={{
+              width: "min(720px, 100%)",
+              maxHeight: "80vh",
+              overflowY: "auto",
+              padding: 12,
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+              <button onClick={() => setDebtsPanelOpen(false)} aria-label={"Close"} className="icon-button">
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <DebtsSurface
+              debts={debts}
+              onAddDebt={() => openDebtModal()}
+              onEditDebt={(debt) => openDebtModal(debt)}
+              onDeleteDebt={(debtId) => {
+                void (async () => {
+                  if (!(await confirmAction())) return;
+                  const updated = await api.deleteDebt(debtId);
+                  setData(updated);
+                })();
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {vacationsPanelOpen ? (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            zIndex: 5000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setVacationsPanelOpen(false);
+          }}
+        >
+          <div
+            className="modal-panel"
+            style={{
+              width: "min(860px, 100%)",
+              maxHeight: "80vh",
+              overflowY: "auto",
+              padding: 12,
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+              <button onClick={() => setVacationsPanelOpen(false)} aria-label={"Close"} className="icon-button">
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <VacationsPanel
+              vacations={vacationsThisMonth}
+              dateFormat={dateFormat}
+              avgDailyEarnings={avgDailyEarnings}
+              vacationDaysCount={vacationDaysCount}
+              vacationDaysLeft={vacationDaysLeft}
+              isPickingVacationStart={isPickingVacationStart}
+              isPickingVacationEnd={isPickingVacationEnd}
+              vacationTypeMenuOpen={vacationTypeMenuOpen}
+              onVacationDaysCountChange={handleVacationDaysCountChange}
+              onVacationDaysCountCommit={commitVacationDaysCount}
+              onToggleVacationTypeMenu={() => setVacationTypeMenuOpen((v) => !v)}
+              onSelectVacationType={beginAddVacation}
+              onCancelVacationPicking={cancelVacationPicking}
+              onEditVacation={handleEditVacation}
+              onDeleteVacation={handleDeleteVacation}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {isCalendarPickerFocus ? (
         <div
@@ -2452,6 +2522,7 @@ export default function App() {
         amountInput={piggyBankModalAmount}
         balance={piggyBankAmount}
         onClose={closePiggyBankModal}
+        onTypeChange={setPiggyBankModalType}
         onAmountInputChange={setPiggyBankModalAmount}
         onSubmit={() => { void submitPiggyBankModal(); }}
         onWithdrawAll={() => { void withdrawAllFromPiggyBank(); }}

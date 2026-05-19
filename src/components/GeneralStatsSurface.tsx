@@ -15,6 +15,16 @@ type GeneralStatsSurfaceProps = {
 
 export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
   const { data, monthKey, year, today, avgDailyEarnings, dateFormat } = props;
+  const monthLabel = useMemo(
+    () =>
+      capitalizeMonth(
+        new Date(`${monthKey}-01`).toLocaleString("en-US", {
+          month: "long",
+          year: "numeric",
+        })
+      ),
+    [monthKey]
+  );
 
   const monthTotals = useMemo(() => {
     let inc = 0;
@@ -65,16 +75,48 @@ export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
   }, [data, today, year]);
 
   return (
-    <div className="surface" style={{ minWidth: 0, height: "100%" }}>
-      <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Received this month (as of today):"}</b> {rub(monthTotals.inc)}</div>
-      <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Received this year (salary + vacation):"}</b> {rub(yearTotals.salaryAndVacationIncome)}</div>
-      <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Received this year (total):"}</b> {rub(yearTotals.incomeTotal)}</div>
-      <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Spent this month (as of today):"}</b> {rub(monthTotals.exp)}</div>
-      <div style={{ opacity: 0.9, marginBottom: 6 }}><b>{"Average daily earnings:"}</b> {rub(avgDailyEarnings)}</div>
-      <div style={{ opacity: 0.8 }}>
-        <b>{"Today:"}</b>{" "}
-        {formatDateForDisplay(today, dateFormat)}
+    <div className="surface general-stats-surface" style={{ minWidth: 0, height: "100%" }}>
+      <div className="general-stats-header">
+        <div>
+          <div className="general-stats-eyebrow">{"Overview"}</div>
+          <b className="general-stats-title">{monthLabel}</b>
+        </div>
+        <div className="general-stats-date">
+          <span className="general-stats-date-label">{"As of today"}</span>
+          <b>{formatDateForDisplay(today, dateFormat)}</b>
+        </div>
+      </div>
+
+      <div className="general-stats-highlight-grid">
+        <div className="general-stats-highlight-card general-stats-highlight-card-income">
+          <div className="general-stats-metric-label">{"Received this month"}</div>
+          <div className="general-stats-metric-value">{rub(monthTotals.inc)}</div>
+        </div>
+        <div className="general-stats-highlight-card general-stats-highlight-card-expense">
+          <div className="general-stats-metric-label">{"Spent this month"}</div>
+          <div className="general-stats-metric-value">{rub(monthTotals.exp)}</div>
+        </div>
+      </div>
+
+      <div className="general-stats-secondary-grid">
+        <div className="general-stats-secondary-card">
+          <div className="general-stats-secondary-label">{"Year salary + vacation"}</div>
+          <div className="general-stats-secondary-value">{rub(yearTotals.salaryAndVacationIncome)}</div>
+        </div>
+        <div className="general-stats-secondary-card">
+          <div className="general-stats-secondary-label">{"Year total income"}</div>
+          <div className="general-stats-secondary-value">{rub(yearTotals.incomeTotal)}</div>
+        </div>
+        <div className="general-stats-secondary-card">
+          <div className="general-stats-secondary-label">{"Average daily earnings"}</div>
+          <div className="general-stats-secondary-value">{rub(avgDailyEarnings)}</div>
+        </div>
       </div>
     </div>
   );
+}
+
+function capitalizeMonth(value: string) {
+  if (!value) return value;
+  return value[0].toUpperCase() + value.slice(1);
 }

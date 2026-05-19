@@ -9,10 +9,13 @@ type VacationsPanelProps = {
   vacations: Vacation[];
   dateFormat: DateFormat;
   avgDailyEarnings: number;
+  vacationDaysCount: string;
   vacationDaysLeft: number;
   isPickingVacationStart: boolean;
   isPickingVacationEnd: boolean;
   vacationTypeMenuOpen: boolean;
+  onVacationDaysCountChange: (value: string) => void;
+  onVacationDaysCountCommit: (value: string) => void;
   onToggleVacationTypeMenu: () => void;
   onSelectVacationType: (vacationType: VacationType) => void;
   onCancelVacationPicking: () => void;
@@ -25,10 +28,13 @@ export function VacationsPanel(props: VacationsPanelProps) {
     vacations,
     dateFormat,
     avgDailyEarnings,
+    vacationDaysCount,
     vacationDaysLeft,
     isPickingVacationStart,
     isPickingVacationEnd,
     vacationTypeMenuOpen,
+    onVacationDaysCountChange,
+    onVacationDaysCountCommit,
     onToggleVacationTypeMenu,
     onSelectVacationType,
     onCancelVacationPicking,
@@ -38,8 +44,51 @@ export function VacationsPanel(props: VacationsPanelProps) {
 
   return (
     <div className="surface" style={{ minWidth: 0, height: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <b>{`Vacations this month (Days left: ${vacationDaysLeft})`}</b>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <b>{"Vacations this month"}</b>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <div className="metric-chip" style={{ minHeight: 34 }}>
+              <span style={{ fontSize: 12, opacity: 0.9, whiteSpace: "nowrap" }}>{"Vacation days count"}</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={vacationDaysCount}
+                onChange={(e) => onVacationDaysCountChange(e.target.value)}
+                onBlur={(e) => onVacationDaysCountCommit(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    onVacationDaysCountCommit((e.target as HTMLInputElement).value);
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                style={{
+                  width: 44,
+                  height: 20,
+                  padding: "0 6px",
+                  margin: 0,
+                  minHeight: 0,
+                  borderRadius: 4,
+                  border: "1px solid #ccc",
+                  fontSize: 12,
+                  lineHeight: "18px",
+                  display: "block",
+                  alignSelf: "center",
+                  appearance: "none",
+                  background: "#fff",
+                  fontFamily: "inherit",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div className="metric-chip" style={{ minHeight: 34 }}>
+              <span style={{ fontSize: 12, opacity: 0.9, whiteSpace: "nowrap" }}>
+                {`Days left: ${vacationDaysLeft}`}
+              </span>
+            </div>
+          </div>
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {isPickingVacationStart ? (
             <span style={{ fontSize: 12, opacity: 0.8 }}>{"Pick a start date in the calendar"}</span>

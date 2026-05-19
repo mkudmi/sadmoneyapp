@@ -9,6 +9,7 @@ type PiggyBankModalProps = {
   amountInput: string;
   balance: number;
   onClose: () => void;
+  onTypeChange: (type: PiggyBankModalType) => void;
   onAmountInputChange: (value: string) => void;
   onSubmit: () => void;
   onWithdrawAll: () => void;
@@ -21,6 +22,7 @@ export function PiggyBankModal(props: PiggyBankModalProps) {
     amountInput,
     balance,
     onClose,
+    onTypeChange,
     onAmountInputChange,
     onSubmit,
     onWithdrawAll,
@@ -59,6 +61,23 @@ export function PiggyBankModal(props: PiggyBankModalProps) {
           </b>
           <button onClick={onClose} aria-label={"Close"} className="icon-button">
             <AppIcon name="close" />
+          </button>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={() => onTypeChange("add")}
+            style={{ opacity: type === "add" ? 1 : 0.72 }}
+          >
+            {"Add"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onTypeChange("withdraw")}
+            style={{ opacity: type === "withdraw" ? 1 : 0.72 }}
+          >
+            {"Withdraw"}
           </button>
         </div>
 
