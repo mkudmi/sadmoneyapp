@@ -39,6 +39,7 @@ import { TrendsCategoryComparisonPanel } from "./components/TrendsCategoryCompar
 import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 import { buildTrendsData } from "./lib/trends";
+import { AppIcon } from "./components/AppIcon";
 
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
 const LEGACY_PIGGY_BANK_STORAGE_KEY = "sadmoneyapp.piggy_bank_amount";
@@ -1511,11 +1512,15 @@ export default function App() {
               }}
     >
       <div className="topbar" style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap", zIndex: 3000 }}>
-        <button onClick={prevMonth} style={topbarControlStyle}>{"<"}</button>
+        <button onClick={prevMonth} style={topbarControlStyle} aria-label="Previous month">
+          <AppIcon name="chevronLeft" />
+        </button>
         <h2 className="summary-title">
           {capitalizeFirst(new Date(year, month0, 1).toLocaleString(locale, { month: "long", year: "numeric" }))}
         </h2>
-        <button onClick={nextMonth} style={topbarControlStyle}>{">"}</button>
+        <button onClick={nextMonth} style={topbarControlStyle} aria-label="Next month">
+          <AppIcon name="chevronRight" />
+        </button>
         <button
           onClick={() => {
             focusOnDate(today);
@@ -1585,7 +1590,7 @@ export default function App() {
           onClick={openSettingsModal}
           style={{ width: 40, height: 40, display: "grid", placeItems: "center", boxSizing: "border-box" }}
         >
-          {"\u2699"}
+          <AppIcon name="settings" />
         </button>
       </div>
       <div
@@ -1799,7 +1804,9 @@ export default function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>{"Trends"}</b>
-              <button onClick={() => setTrendsModalOpen(false)} aria-label={"Close"}>x</button>
+              <button onClick={() => setTrendsModalOpen(false)} aria-label={"Close"} className="icon-button">
+                <AppIcon name="close" />
+              </button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
@@ -1888,7 +1895,9 @@ export default function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>{"Settings"}</b>
-              <button onClick={closeSettingsModal} aria-label={"Close"}>x</button>
+              <button onClick={closeSettingsModal} aria-label={"Close"} className="icon-button">
+                <AppIcon name="close" />
+              </button>
             </div>
 
             <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
@@ -2103,7 +2112,9 @@ export default function App() {
               <b style={{ fontSize: 14 }}>
                 {txModalTitle(txModalType)}  -  {formatDateForDisplay(txModalDate, dateFormat)}
               </b>
-              <button onClick={closeTxModal} aria-label={"Close"}>x</button>
+              <button onClick={closeTxModal} aria-label={"Close"} className="icon-button">
+                <AppIcon name="close" />
+              </button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -2133,7 +2144,11 @@ export default function App() {
                       type="button"
                       onClick={() => setTxCategoryMenuOpen((v) => !v)}
                       aria-label={"Show category list"}
-                    >v</button>
+                      className="icon-button"
+                      style={{ minWidth: 34, padding: 0 }}
+                    >
+                      <AppIcon name="chevronDown" />
+                    </button>
                   </div>
 
                   {txCategoryMenuOpen && txCategoryOptions.length > 0 ? (
@@ -2237,7 +2252,9 @@ export default function App() {
               <b style={{ fontSize: 14 }}>
                 {debtModalEditId ? "Edit debt" : "Add debt"}
               </b>
-              <button onClick={closeDebtModal} aria-label={"Close"}>x</button>
+              <button onClick={closeDebtModal} aria-label={"Close"} className="icon-button">
+                <AppIcon name="close" />
+              </button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -2318,7 +2335,9 @@ export default function App() {
               <b style={{ fontSize: 14 }}>
                 {"Add vacation"} - {formatDateForDisplay(vacationModalStart, dateFormat)} {"->"} {formatDateForDisplay(vacationModalEnd, dateFormat)}
               </b>
-              <button onClick={closeVacationModal} aria-label={"Close"}>x</button>
+              <button onClick={closeVacationModal} aria-label={"Close"} className="icon-button">
+                <AppIcon name="close" />
+              </button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -2378,7 +2397,9 @@ export default function App() {
               <b style={{ fontSize: 14 }}>
                 {"Add salary"} - {formatDateForDisplay(salaryModalDate, dateFormat)}
               </b>
-              <button onClick={closeSalaryModal} aria-label={"Close"}>x</button>
+              <button onClick={closeSalaryModal} aria-label={"Close"} className="icon-button">
+                <AppIcon name="close" />
+              </button>
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>

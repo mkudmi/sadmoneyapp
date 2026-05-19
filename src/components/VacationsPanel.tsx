@@ -3,6 +3,7 @@ import { rub } from "../lib/money";
 import { formatDateForDisplay, inclusiveDays } from "../lib/date";
 import type { DateFormat } from "../lib/date";
 import { normalizeVacationType, VacationType, vacationTypeLabel } from "../lib/vacation";
+import { AppIcon } from "./AppIcon";
 
 type VacationsPanelProps = {
   vacations: Vacation[];
@@ -54,9 +55,10 @@ export function VacationsPanel(props: VacationsPanelProps) {
               onClick={onToggleVacationTypeMenu}
               title={"Add vacation"}
               aria-label={"Add vacation"}
-              style={{ minWidth: 24, minHeight: 24, padding: "0 6px", fontWeight: 700, lineHeight: 1 }}
+              className="icon-button"
+              style={{ minWidth: 24, minHeight: 24, padding: 0 }}
             >
-              +
+              <AppIcon name="add" />
             </button>
             {vacationTypeMenuOpen ? (
               <div
@@ -116,15 +118,16 @@ export function VacationsPanel(props: VacationsPanelProps) {
                     style={{ width: 26, minWidth: 26, minHeight: 26, borderRadius: 8 }}
                     onClick={() => onEditVacation(v)}
                   >
-                    <span aria-hidden="true">✎</span>
+                    <AppIcon name="edit" />
                   </button>
                   <button
                     title={"Delete vacation"}
                     aria-label={"Delete vacation"}
-                    style={{ color: "var(--danger)", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 12 }}
+                    className="icon-button"
+                    style={{ color: "var(--danger)", minHeight: 26, padding: 0, width: 26, minWidth: 26 }}
                     onClick={() => onDeleteVacation(v.id)}
                   >
-                    {"x"}
+                    <AppIcon name="delete" />
                   </button>
                 </div>
               </div>

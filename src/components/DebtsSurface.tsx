@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Debt } from "../lib/api";
 import { rub } from "../lib/money";
+import { AppIcon } from "./AppIcon";
 
 type DebtsSurfaceProps = {
   debts: Debt[];
@@ -21,9 +22,10 @@ export function DebtsSurface(props: DebtsSurfaceProps) {
           onClick={onAddDebt}
           title={"Add debt"}
           aria-label={"Add debt"}
-          style={{ minWidth: 24, minHeight: 24, padding: "0 6px", fontWeight: 700, lineHeight: 1 }}
+          className="icon-button"
+          style={{ minWidth: 24, minHeight: 24, padding: 0 }}
         >
-          +
+          <AppIcon name="add" />
         </button>
       </div>
       <div style={{ fontSize: 12, marginBottom: 6 }}>
@@ -66,15 +68,16 @@ export function DebtsSurface(props: DebtsSurfaceProps) {
                   style={{ width: 26, minWidth: 26, minHeight: 26, borderRadius: 8 }}
                   onClick={() => onEditDebt(d)}
                 >
-                  <span aria-hidden="true">{"\u270E"}</span>
+                  <AppIcon name="edit" />
                 </button>
                 <button
                   title={"Delete debt"}
                   aria-label={"Delete debt"}
-                  style={{ color: "var(--danger)", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 12 }}
+                  className="icon-button"
+                  style={{ color: "var(--danger)", minHeight: 26, padding: 0, width: 26, minWidth: 26 }}
                   onClick={() => onDeleteDebt(d.id)}
                 >
-                  {"x"}
+                  <AppIcon name="delete" />
                 </button>
               </div>
             </div>

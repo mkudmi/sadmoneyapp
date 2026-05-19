@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useDismissible } from "../hooks/useDismissible";
 import { DateInputWithCalendar } from "./DateInputWithCalendar";
 import type { DateFormat } from "../lib/date";
+import { AppIcon } from "./AppIcon";
 
 type EditTransactionModalProps = {
   open: boolean;
@@ -71,7 +72,9 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <b style={{ fontSize: 14 }}>{"Edit transaction"}</b>
-          <button onClick={onClose} aria-label={"Close"}>x</button>
+          <button onClick={onClose} aria-label={"Close"} className="icon-button">
+            <AppIcon name="close" />
+          </button>
         </div>
 
         <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -128,7 +131,11 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
                   type="button"
                   onClick={() => setCategoryMenuOpen((v) => !v)}
                   aria-label={"Show category list"}
-                >v</button>
+                  className="icon-button"
+                  style={{ minWidth: 34, padding: 0 }}
+                >
+                  <AppIcon name="chevronDown" />
+                </button>
               </div>
 
               {categoryMenuOpen && categoryOptions.length > 0 ? (

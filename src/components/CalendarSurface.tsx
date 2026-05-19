@@ -1,6 +1,7 @@
 import { Dispatch, RefObject, SetStateAction } from "react";
 import { AppData, OffDay, TxType } from "../lib/api";
 import { rub } from "../lib/money";
+import { AppIcon } from "./AppIcon";
 
 type CalendarSurfaceProps = {
   calendarWeeks: number;
@@ -190,7 +191,7 @@ export function CalendarSurface(props: CalendarSurfaceProps) {
                     lineHeight: 1,
                   }}
                 >
-                  {"\u22EF"}
+                  <AppIcon name="dots" size={16} />
                 </button>
 
                 {dayMenuOpen === d ? (

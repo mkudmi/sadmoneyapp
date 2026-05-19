@@ -1,4 +1,5 @@
 import { rub } from "../lib/money";
+import { AppIcon } from "./AppIcon";
 
 type PiggyBankChipProps = {
   amount: number;
@@ -26,18 +27,20 @@ export function PiggyBankChip({ amount, onAdd, onWithdraw }: PiggyBankChipProps)
       <button
         title={"Add to piggy bank"}
         aria-label={"Add to piggy bank"}
-        style={{ minWidth: 24, minHeight: 24, padding: 0, fontWeight: 700, lineHeight: 1 }}
+        className="icon-button"
+        style={{ minWidth: 24, minHeight: 24, padding: 0 }}
         onClick={onAdd}
       >
-        {"+"}
+        <AppIcon name="add" />
       </button>
       <button
         title={"Withdraw from piggy bank"}
         aria-label={"Withdraw from piggy bank"}
-        style={{ minWidth: 24, minHeight: 24, padding: 0, fontWeight: 700, lineHeight: 1 }}
+        className="icon-button"
+        style={{ minWidth: 24, minHeight: 24, padding: 0 }}
         onClick={onWithdraw}
       >
-        {"-"}
+        <AppIcon name="remove" />
       </button>
     </div>
   );

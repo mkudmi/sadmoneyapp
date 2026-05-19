@@ -10,6 +10,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@tabler/icons-react": "^3.44.0",
     "@tauri-apps/api": "2.10.1",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-opener": "^2",
@@ -23,8 +24,8 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "playwright": "^1.60.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
   }
 }
-

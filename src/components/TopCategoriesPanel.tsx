@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { rub } from "../lib/money";
+import { AppIcon } from "./AppIcon";
 
 export type TopCategoryItem = {
   category: string;
@@ -34,10 +35,7 @@ export function TopCategoriesPanel({ categories }: TopCategoriesPanelProps) {
             aria-label={"Expand"}
             style={{ width: 28, minWidth: 28, minHeight: 28, padding: 0, display: "inline-grid", placeItems: "center", borderRadius: 8 }}
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M5 1H1V5M9 1H13V5M13 9V13H9M1 9V13H5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M1.5 1.5L5 5M12.5 1.5L9 5M12.5 12.5L9 9M1.5 12.5L5 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <AppIcon name="expand" size={14} />
           </button>
         </div>
 
@@ -109,7 +107,9 @@ export function TopCategoriesPanel({ categories }: TopCategoriesPanelProps) {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <b style={{ fontSize: 14 }}>{"Top categories this month"}</b>
-              <button onClick={() => setModalOpen(false)} aria-label={"Close"}>x</button>
+              <button onClick={() => setModalOpen(false)} aria-label={"Close"} className="icon-button">
+                <AppIcon name="close" />
+              </button>
             </div>
             {categories.length > 0 ? (
               <div

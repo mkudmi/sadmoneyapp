@@ -1,6 +1,7 @@
 import { DateInputWithCalendar } from "./DateInputWithCalendar";
 import { dateFormatPattern } from "../lib/date";
 import type { DateFormat } from "../lib/date";
+import { AppIcon } from "./AppIcon";
 
 type EditSalaryModalProps = {
   open: boolean;
@@ -58,7 +59,9 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <b style={{ fontSize: 14 }}>{"Edit salary"}</b>
-          <button onClick={onClose} aria-label={"Close"}>x</button>
+          <button onClick={onClose} aria-label={"Close"} className="icon-button">
+            <AppIcon name="close" />
+          </button>
         </div>
 
         <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>

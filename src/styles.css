@@ -210,10 +210,18 @@ select {
   background: linear-gradient(180deg, #ffffff 0%, #eef3fb 100%);
 }
 
-.edit-pencil-btn > span {
-  font-size: 14px;
-  line-height: 1;
+.edit-pencil-btn :is(svg, span),
+.icon-button :is(svg, span) {
+  display: block;
+}
+
+.edit-pencil-btn svg {
   color: #2d4364;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
 }
 
 @keyframes rise-in {

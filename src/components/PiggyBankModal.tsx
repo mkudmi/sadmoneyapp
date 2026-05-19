@@ -1,4 +1,5 @@
 import { rub } from "../lib/money";
+import { AppIcon } from "./AppIcon";
 
 export type PiggyBankModalType = "add" | "withdraw";
 
@@ -56,7 +57,9 @@ export function PiggyBankModal(props: PiggyBankModalProps) {
           <b style={{ fontSize: 14 }}>
             {type === "add" ? "Add to piggy bank" : "Withdraw from piggy bank"}
           </b>
-          <button onClick={onClose} aria-label={"Close"}>x</button>
+          <button onClick={onClose} aria-label={"Close"} className="icon-button">
+            <AppIcon name="close" />
+          </button>
         </div>
 
         <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>

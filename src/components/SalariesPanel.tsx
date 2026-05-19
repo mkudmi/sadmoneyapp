@@ -2,6 +2,7 @@ import { SalaryEvent } from "../lib/api";
 import { formatDateForDisplay } from "../lib/date";
 import type { DateFormat } from "../lib/date";
 import { rub } from "../lib/money";
+import { AppIcon } from "./AppIcon";
 
 type SalariesPanelProps = {
   salaries: SalaryEvent[];
@@ -39,9 +40,10 @@ export function SalariesPanel(props: SalariesPanelProps) {
             onClick={onBeginAddSalary}
             title={"Add salary"}
             aria-label={"Add salary"}
-            style={{ minWidth: 24, minHeight: 24, padding: "0 6px", fontWeight: 700, lineHeight: 1 }}
+            className="icon-button"
+            style={{ minWidth: 24, minHeight: 24, padding: 0 }}
           >
-            +
+            <AppIcon name="add" />
           </button>
         </div>
       </div>
@@ -76,16 +78,17 @@ export function SalariesPanel(props: SalariesPanelProps) {
                   style={{ width: 26, minWidth: 26, minHeight: 26, borderRadius: 8 }}
                   onClick={() => onEditSalary(s)}
                 >
-                  <span aria-hidden="true">✎</span>
+                  <AppIcon name="edit" />
                 </button>
 
                 <button
                   title={"Delete salary"}
                   aria-label={"Delete salary"}
-                  style={{ color: "var(--danger)", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 12 }}
+                  className="icon-button"
+                  style={{ color: "var(--danger)", minHeight: 26, padding: 0, width: 26, minWidth: 26 }}
                   onClick={() => onDeleteSalary(s.id)}
                 >
-                  {"x"}
+                  <AppIcon name="delete" />
                 </button>
               </div>
             </div>

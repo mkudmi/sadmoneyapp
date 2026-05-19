@@ -2,6 +2,7 @@ import { SalaryEvent, Transaction } from "../lib/api";
 import { formatDateForDisplay } from "../lib/date";
 import type { DateFormat } from "../lib/date";
 import { rub } from "../lib/money";
+import { AppIcon } from "./AppIcon";
 
 type AfterVacationSummary = {
   vacationDays: number;
@@ -155,10 +156,11 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
                 <button
                   title={"Paid"}
                   aria-label={"Paid"}
-                  style={{ color: "#138a36", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 16, lineHeight: 1 }}
+                  className="icon-button"
+                  style={{ color: "#138a36", minHeight: 26, padding: 0, width: 26, minWidth: 26 }}
                   onClick={() => onMarkPlannedAsPaid(t)}
                 >
-                  {"\u2713"}
+                  <AppIcon name="check" />
                 </button>
               ) : null}
               <button
@@ -168,16 +170,17 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
                 style={{ width: 26, minWidth: 26, minHeight: 26, borderRadius: 8 }}
                 onClick={() => onEditTransaction(t)}
               >
-                <span aria-hidden="true">{"\u270E"}</span>
+                <AppIcon name="edit" />
               </button>
 
               <button
                 title={"Delete"}
                 aria-label={"Delete"}
-                style={{ color: "var(--danger)", fontWeight: 700, minHeight: 26, padding: "0 8px", fontSize: 12 }}
+                className="icon-button"
+                style={{ color: "var(--danger)", minHeight: 26, padding: 0, width: 26, minWidth: 26 }}
                 onClick={() => onDeleteTransaction(t.id)}
               >
-                {"x"}
+                <AppIcon name="delete" />
               </button>
             </div>
           </div>
