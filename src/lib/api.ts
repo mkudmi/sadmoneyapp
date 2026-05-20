@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { DateFormat } from "./date";
+import type { SalaryEventKind } from "./salaryEvent";
 
 export type TxType = "income" | "expense" | "planned_expense";
 
@@ -18,6 +19,7 @@ export type SalaryEvent = {
   date: string;
   amount: number; // kopecks
   title: string;
+  kind?: SalaryEventKind;
 };
 
 export type Vacation = {

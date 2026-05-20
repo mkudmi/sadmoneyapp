@@ -14,7 +14,7 @@ type AfterVacationSummary = {
 type SelectedDateTransactionsListProps = {
   selectedDate: string;
   dateFormat: DateFormat;
-  salaryForSelectedDate: SalaryEvent | null;
+  salaryEventsForSelectedDate: SalaryEvent[];
   plannedAfterExpensesForSelectedDate: number | null;
   afterVacationForSelectedDate: AfterVacationSummary | null;
   transactionsForSelectedDate: Transaction[];
@@ -27,7 +27,7 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
   const {
     selectedDate,
     dateFormat,
-    salaryForSelectedDate,
+    salaryEventsForSelectedDate,
     plannedAfterExpensesForSelectedDate,
     afterVacationForSelectedDate,
     transactionsForSelectedDate,
@@ -52,9 +52,9 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
           paddingRight: 6,
         }}
       >
-        {salaryForSelectedDate ? (
+        {salaryEventsForSelectedDate.map((salaryEvent) => (
           <div
-            key={"salary"}
+            key={salaryEvent.id}
             style={{
               display: "flex",
               alignItems: "center",
@@ -68,11 +68,11 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
           >
             <div>
               <div style={{ fontSize: 12 }}>
-                <b>+ </b> {salaryForSelectedDate.title}  -  {rub(salaryForSelectedDate.amount)}
+                <b>+ </b> {salaryEvent.title}  -  {rub(salaryEvent.amount)}
               </div>
             </div>
           </div>
-        ) : null}
+        ))}
 
         {plannedAfterExpensesForSelectedDate !== null ? (
           <div

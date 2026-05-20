@@ -147,6 +147,21 @@ pub struct SalaryEvent {
     pub date: String, // YYYY-MM-DD
     pub amount: i64,  // копейки
     pub title: String,
+    #[serde(default = "default_salary_event_kind")]
+    pub kind: SalaryEventKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SalaryEventKind {
+    #[default]
+    Regular,
+    VacationPay,
+    Excluded,
+}
+
+fn default_salary_event_kind() -> SalaryEventKind {
+    SalaryEventKind::Regular
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

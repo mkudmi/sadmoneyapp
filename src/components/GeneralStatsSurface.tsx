@@ -9,12 +9,12 @@ type GeneralStatsSurfaceProps = {
   monthKey: string;
   year: number;
   today: string;
-  avgDailyEarnings: number;
+  vacationAverageDailyPay: number;
   dateFormat: DateFormat;
 };
 
 export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
-  const { data, monthKey, year, today, avgDailyEarnings, dateFormat } = props;
+  const { data, monthKey, year, today, vacationAverageDailyPay, dateFormat } = props;
   const monthLabel = useMemo(
     () =>
       capitalizeMonth(
@@ -108,8 +108,8 @@ export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
           <div className="general-stats-secondary-value">{rub(yearTotals.incomeTotal)}</div>
         </div>
         <div className="general-stats-secondary-card">
-          <div className="general-stats-secondary-label">{"Average daily earnings"}</div>
-          <div className="general-stats-secondary-value">{rub(avgDailyEarnings)}</div>
+          <div className="general-stats-secondary-label">{"Vacation average per day"}</div>
+          <div className="general-stats-secondary-value">{rub(vacationAverageDailyPay)}</div>
         </div>
       </div>
     </div>

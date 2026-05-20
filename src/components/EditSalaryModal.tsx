@@ -2,6 +2,8 @@ import { DateInputWithCalendar } from "./DateInputWithCalendar";
 import { dateFormatPattern } from "../lib/date";
 import type { DateFormat } from "../lib/date";
 import { AppIcon } from "./AppIcon";
+import type { SalaryEventKind } from "../lib/salaryEvent";
+import { salaryEventKindLabel } from "../lib/salaryEvent";
 
 type EditSalaryModalProps = {
   open: boolean;
@@ -9,9 +11,11 @@ type EditSalaryModalProps = {
   dateFormat: DateFormat;
   amount: string;
   title: string;
+  kind: SalaryEventKind;
   onDateChange: (value: string) => void;
   onAmountChange: (value: string) => void;
   onTitleChange: (value: string) => void;
+  onKindChange: (value: SalaryEventKind) => void;
   onClose: () => void;
   onSubmit: () => void;
 };
@@ -23,9 +27,11 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
     dateFormat,
     amount,
     title,
+    kind,
     onDateChange,
     onAmountChange,
     onTitleChange,
+    onKindChange,
     onClose,
     onSubmit,
   } = props;
@@ -89,6 +95,19 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
               placeholder={"Salary"}
               style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
             />
+          </div>
+
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Vacation pay calculation"}</div>
+            <select
+              value={kind}
+              onChange={(e) => onKindChange(e.target.value as SalaryEventKind)}
+              style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+            >
+              <option value="regular">{salaryEventKindLabel("regular")}</option>
+              <option value="vacation_pay">{salaryEventKindLabel("vacation_pay")}</option>
+              <option value="excluded">{salaryEventKindLabel("excluded")}</option>
+            </select>
           </div>
         </div>
 

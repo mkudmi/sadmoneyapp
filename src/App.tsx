@@ -12,15 +12,13 @@ import {
   daysInMonth,
   formatDateForDisplay,
   normalizeDateFormat,
-  overlapInclusiveDays,
-  parseDisplayDate,
   parseYmdLocal,
   ymd,
   ymFromYmd,
 } from "./lib/date";
 import type { DateFormat } from "./lib/date";
 import { isDebtCategory, normalizeCategoryInput } from "./lib/category";
-import { normalizeVacationType, vacationTypeLabel, VacationType } from "./lib/vacation";
+import { normalizeVacationType, VacationType } from "./lib/vacation";
 import { useDismissible } from "./hooks/useDismissible";
 import { useVacationDaysCount } from "./hooks/useVacationDaysCount";
 import { VacationsPanel } from "./components/VacationsPanel";
@@ -39,6 +37,9 @@ import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 import { buildTrendsData } from "./lib/trends";
 import { AppIcon } from "./components/AppIcon";
+import { DateInputWithCalendar } from "./components/DateInputWithCalendar";
+import { calculateVacationAverageDailyPay, calculateVacationPayout, getVacationChargeableDays, isRussianPublicHoliday } from "./lib/russianVacation";
+import { normalizeSalaryEventKind, SalaryEventKind, salaryEventKindLabel } from "./lib/salaryEvent";
 
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
 const LEGACY_PIGGY_BANK_STORAGE_KEY = "sadmoneyapp.piggy_bank_amount";
@@ -63,6 +64,17 @@ export default function App() {
     const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
     return (data?.vacations ?? []).filter(v => v.start_date <= monthEnd && v.end_date >= monthStart);
   }, [data?.vacations, month0, monthKey, year]);
+  const vacationsInManagerRange = useMemo(() => {
+    const monthStart = `${monthKey}-01`;
+
+    return [...(data?.vacations ?? [])]
+      .filter((vacation) => vacation.end_date >= monthStart)
+      .sort((a, b) => {
+        if (a.start_date !== b.start_date) return a.start_date.localeCompare(b.start_date);
+        if (a.end_date !== b.end_date) return a.end_date.localeCompare(b.end_date);
+        return a.title.localeCompare(b.title);
+      });
+  }, [data?.vacations, monthKey]);
   const topCategoriesThisMonth = useMemo(() => {
     if (!data) return [] as Array<{ category: string; amount: number; type: "income" | "expense" }>;
 
@@ -128,7 +140,10 @@ export default function App() {
       const cur = parseYmdLocal(start);
       const endDate = parseYmdLocal(end);
       while (cur <= endDate) {
-        usedDays.add(ymd(cur));
+        const date = ymd(cur);
+        if (!isRussianPublicHoliday(date)) {
+          usedDays.add(date);
+        }
         cur.setDate(cur.getDate() + 1);
       }
     }
@@ -136,59 +151,13 @@ export default function App() {
     return Math.max(total - usedDays.size, 0);
   }, [data, vacationDaysCount, year]);
 
-  const avgDailyEarnings = useMemo(() => {
-    // Salary/advance sum for the last 12 months divided by worked days
-    // (excluding weekends, vacations, and user-defined non-working days)
+  const vacationAverageDailyPay = useMemo(() => {
     if (!data) return 0;
-    const end = new Date(today);
-    const start = new Date(end);
-    start.setFullYear(start.getFullYear() - 1);
-
-    // Sum all salary events in range
-    let total = 0;
-    for (const s of data.salaryEvents ?? []) {
-      const sd = new Date(s.date);
-      if (sd >= start && sd <= end) total += s.amount;
-    }
-
-    // Count worked days in range
-    const vacations = data.vacations ?? [];
-    const offDays = data.offDays ?? [];
-    let workedDays = 0;
-
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const y = ymd(d);
-      const day = d.getDay(); // 0 = Sun, 6 = Sat
-
-      // always exclude vacation days
-      let inVacation = false;
-      for (const v of vacations) {
-        if (v.start_date <= y && y <= v.end_date) {
-          inVacation = true;
-          break;
-        }
-      }
-      if (inVacation) continue;
-
-      const off = offDays.find(o => o.date === y) ?? null;
-
-      if (day === 0 || day === 6) {
-        // Weekend by calendar: count only when explicitly marked as working
-        if (off && off.is_working) {
-          workedDays++;
-        } else {
-          continue;
-        }
-      } else {
-        // Weekday by calendar: exclude only when explicitly marked as non-working
-        if (off && !off.is_working) continue;
-        workedDays++;
-      }
-    }
-
-    if (workedDays === 0) return 0;
-    // Return average in kopecks
-    return Math.round(total / workedDays);
+    return calculateVacationAverageDailyPay({
+      salaryEvents: data.salaryEvents ?? [],
+      vacations: data.vacations ?? [],
+      vacationStartDate: today,
+    });
   }, [data, today]);
 
   function focusOnDate(date: string) {
@@ -347,7 +316,6 @@ export default function App() {
   }, [data]);
 
   const salaryEventsForSelectedDate = (data?.salaryEvents ?? []).filter((s) => s.date === selectedDate);
-  const salaryForSelectedDate = salaryEventsForSelectedDate[0] ?? null;
   const salaryAmountForSelectedDate = salaryEventsForSelectedDate.reduce((sum, s) => sum + s.amount, 0);
   const transactionsForSelectedDate = (data?.transactions ?? []).filter((t) => t.date === selectedDate);
   const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
@@ -387,14 +355,14 @@ export default function App() {
     return nextSalaryAmount - plannedUntilSelected;
   }, [data, budget?.next_salary_date, selectedDate]);
   const afterVacationForSelectedDate = useMemo(() => {
-    if (!data || salaryAmountForSelectedDate <= 0 || avgDailyEarnings <= 0) return null;
+    if (!data || salaryAmountForSelectedDate <= 0 || vacationAverageDailyPay <= 0) return null;
 
     const selected = parseYmdLocal(selectedDate);
     const selectedYear = selected.getFullYear();
     const selectedMonth0 = selected.getMonth();
     const selectedDay = selected.getDate();
     const selectedMonthKey = `${selectedYear}-${String(selectedMonth0 + 1).padStart(2, "0")}`;
-    let vacationDaysForThisSalary = 0;
+    const vacationDatesForThisSalary = new Set<string>();
 
     for (const v of data.vacations ?? []) {
       const vacStart = parseYmdLocal(v.start_date);
@@ -413,7 +381,17 @@ export default function App() {
         // First half (1..15) affects the salary in the second half (16..end) of the same month.
         if (selectedMonthKey === monthKey && selectedDay >= 16) {
           const firstHalfEnd = `${monthKey}-15`;
-          vacationDaysForThisSalary += overlapInclusiveDays(v.start_date, v.end_date, monthStart, firstHalfEnd);
+          const overlapStart = v.start_date > monthStart ? v.start_date : monthStart;
+          const overlapEnd = v.end_date < firstHalfEnd ? v.end_date : firstHalfEnd;
+          const cursorDate = parseYmdLocal(overlapStart);
+          const overlapEndDate = parseYmdLocal(overlapEnd);
+          while (cursorDate <= overlapEndDate) {
+            const date = ymd(cursorDate);
+            if (!isRussianPublicHoliday(date)) {
+              vacationDatesForThisSalary.add(date);
+            }
+            cursorDate.setDate(cursorDate.getDate() + 1);
+          }
         }
 
         // Second half (16..end) affects the salary up to day 5 of the next month.
@@ -421,16 +399,27 @@ export default function App() {
         const nextMonthKey = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}`;
         if (selectedMonthKey === nextMonthKey && selectedDay <= 5) {
           const secondHalfStart = `${monthKey}-16`;
-          vacationDaysForThisSalary += overlapInclusiveDays(v.start_date, v.end_date, secondHalfStart, monthEnd);
+          const overlapStart = v.start_date > secondHalfStart ? v.start_date : secondHalfStart;
+          const overlapEnd = v.end_date < monthEnd ? v.end_date : monthEnd;
+          const cursorDate = parseYmdLocal(overlapStart);
+          const overlapEndDate = parseYmdLocal(overlapEnd);
+          while (cursorDate <= overlapEndDate) {
+            const date = ymd(cursorDate);
+            if (!isRussianPublicHoliday(date)) {
+              vacationDatesForThisSalary.add(date);
+            }
+            cursorDate.setDate(cursorDate.getDate() + 1);
+          }
         }
 
         cursor.setMonth(cursor.getMonth() + 1);
       }
     }
 
+    const vacationDaysForThisSalary = vacationDatesForThisSalary.size;
     if (vacationDaysForThisSalary <= 0) return null;
 
-    const vacationDeduction = vacationDaysForThisSalary * avgDailyEarnings;
+    const vacationDeduction = vacationDaysForThisSalary * vacationAverageDailyPay;
     const baseAmount = plannedAfterExpensesForSelectedDate ?? salaryAmountForSelectedDate;
 
     return {
@@ -444,7 +433,7 @@ export default function App() {
     data,
     selectedDate,
     salaryAmountForSelectedDate,
-    avgDailyEarnings,
+    vacationAverageDailyPay,
     plannedAfterExpensesForSelectedDate,
   ]);
   const selectedDateWeekDay = new Date(selectedDate).getDay(); // 0 = Sunday, 6 = Saturday
@@ -492,17 +481,17 @@ export default function App() {
   const [salaryModalDate, setSalaryModalDate] = useState<string>(today);
   const [salaryModalAmount, setSalaryModalAmount] = useState<string>("");
   const [salaryModalTitle, setSalaryModalTitle] = useState<string>("Salary");
+  const [salaryModalKind, setSalaryModalKind] = useState<SalaryEventKind>("regular");
   const [editSalaryModalOpen, setEditSalaryModalOpen] = useState(false);
   const [editSalaryModalId, setEditSalaryModalId] = useState<string | null>(null);
   const [editSalaryModalDate, setEditSalaryModalDate] = useState<string>(today);
   const [editSalaryModalAmount, setEditSalaryModalAmount] = useState<string>("");
   const [editSalaryModalTitle, setEditSalaryModalTitle] = useState<string>("Salary");
+  const [editSalaryModalKind, setEditSalaryModalKind] = useState<SalaryEventKind>("regular");
   const [piggyBankModalOpen, setPiggyBankModalOpen] = useState(false);
   const [piggyBankModalAmount, setPiggyBankModalAmount] = useState<string>("");
   const [piggyBankModalType, setPiggyBankModalType] = useState<PiggyBankModalType>("add");
-  const [isPickingVacationStart, setIsPickingVacationStart] = useState(false);
-  const [isPickingVacationEnd, setIsPickingVacationEnd] = useState(false);
-  const [vacationStartDate, setVacationStartDate] = useState<string | null>(null);
+  const [vacationModalEditId, setVacationModalEditId] = useState<string | null>(null);
   const [vacationModalOpen, setVacationModalOpen] = useState(false);
   const [vacationModalStart, setVacationModalStart] = useState<string>(today);
   const [vacationModalEnd, setVacationModalEnd] = useState<string>(today);
@@ -512,7 +501,7 @@ export default function App() {
   const [isPickingCustomWorkDays, setIsPickingCustomWorkDays] = useState(false);
   const [customWorkingDays, setCustomWorkingDays] = useState<string[]>([]);
   const isCalendarPickerFocus =
-    isPickingSalaryDate || isPickingVacationStart || isPickingVacationEnd || isPickingCustomWorkDays;
+    isPickingSalaryDate || isPickingCustomWorkDays;
 
   useEffect(() => {
     if (!dayMenuOpen) return;
@@ -772,6 +761,22 @@ export default function App() {
   const debtPeople = useMemo(() => {
     return Array.from(new Set(debts.map((d) => normalizeCategoryInput(d.person)).filter((p) => p.length > 0)));
   }, [debts]);
+  const vacationModalRange = useMemo(() => {
+    const start = vacationModalStart <= vacationModalEnd ? vacationModalStart : vacationModalEnd;
+    const end = vacationModalStart <= vacationModalEnd ? vacationModalEnd : vacationModalStart;
+    const days = getVacationChargeableDays(start, end);
+    return { start, end, days };
+  }, [vacationModalEnd, vacationModalStart]);
+  const vacationModalPayoutAmount = useMemo(() => {
+    if (!data || vacationModalType === "unpaid") return 0;
+    return calculateVacationPayout({
+      salaryEvents: data.salaryEvents ?? [],
+      vacations: data.vacations ?? [],
+      vacationStartDate: vacationModalRange.start,
+      vacationEndDate: vacationModalRange.end,
+      vacationType: vacationModalType,
+    });
+  }, [data, vacationModalRange.end, vacationModalRange.start, vacationModalType]);
 
   function txModalTitle(type: "income" | "expense" | "planned_expense") {
     if (type === "income") return "Add income";
@@ -901,9 +906,6 @@ export default function App() {
       await saveCustomSchedule();
     }
     setIsPickingSalaryDate(true);
-    setIsPickingVacationStart(false);
-    setIsPickingVacationEnd(false);
-    setVacationStartDate(null);
     setVacationModalOpen(false);
     setVacationTypeMenuOpen(false);
     setIsPickingCustomWorkDays(false);
@@ -916,6 +918,7 @@ export default function App() {
     setSalaryModalDate(date);
     setSalaryModalAmount("");
     setSalaryModalTitle("Salary");
+    setSalaryModalKind("regular");
     setSalaryModalOpen(true);
   }
 
@@ -923,6 +926,7 @@ export default function App() {
     setSalaryModalOpen(false);
     setSalaryModalAmount("");
     setSalaryModalTitle("Salary");
+    setSalaryModalKind("regular");
   }
 
   function handleCalendarDayTileClick(date: string) {
@@ -930,24 +934,6 @@ export default function App() {
 
     if (isPickingCustomWorkDays) {
       toggleCustomWorkingDay(date);
-      return;
-    }
-
-    if (isPickingVacationStart) {
-      setIsPickingVacationStart(false);
-      setIsPickingVacationEnd(true);
-      setVacationStartDate(date);
-      return;
-    }
-
-    if (isPickingVacationEnd) {
-      if (!vacationStartDate) {
-        setIsPickingVacationEnd(false);
-        return;
-      }
-      setIsPickingVacationEnd(false);
-      setVacationStartDate(null);
-      openVacationModal(vacationStartDate, date);
       return;
     }
 
@@ -1081,6 +1067,7 @@ export default function App() {
         date: salaryModalDate,
         amount,
         title,
+        kind: salaryModalKind,
       });
 
       setData(updated);
@@ -1094,49 +1081,39 @@ export default function App() {
     if (isPickingCustomWorkDays) {
       await saveCustomSchedule();
     }
-    setVacationModalType(vacationType);
     setIsPickingSalaryDate(false);
-    setIsPickingVacationStart(true);
-    setIsPickingVacationEnd(false);
-    setVacationStartDate(null);
     setSalaryModalOpen(false);
-    setVacationModalOpen(false);
     setVacationTypeMenuOpen(false);
     setIsPickingCustomWorkDays(false);
     setDayMenuOpen(null);
     setDayMenuAnchorRect(null);
-  }
-
-  function cancelVacationPicking() {
-    setIsPickingVacationStart(false);
-    setIsPickingVacationEnd(false);
-    setVacationStartDate(null);
-    setVacationTypeMenuOpen(false);
-  }
-
-  function openVacationModal(startDate: string, endDate: string) {
-    const start = startDate <= endDate ? startDate : endDate;
-    const end = startDate <= endDate ? endDate : startDate;
-    setVacationModalStart(start);
-    setVacationModalEnd(end);
+    setVacationModalEditId(null);
+    setVacationModalType(vacationType);
+    setVacationModalStart(selectedDate);
+    setVacationModalEnd(selectedDate);
     setVacationModalTitle("Vacation");
     setVacationModalOpen(true);
   }
 
   function closeVacationModal() {
+    setVacationModalEditId(null);
     setVacationModalOpen(false);
+    setVacationModalStart(today);
+    setVacationModalEnd(today);
     setVacationModalTitle("Vacation");
     setVacationModalType("paid");
   }
 
   async function submitVacationModal() {
+    const startDate = vacationModalStart <= vacationModalEnd ? vacationModalStart : vacationModalEnd;
+    const endDate = vacationModalStart <= vacationModalEnd ? vacationModalEnd : vacationModalStart;
     const title = vacationModalTitle.trim() || "Vacation";
 
     try {
       const updated = await api.upsertVacation({
-        id: "",
-        start_date: vacationModalStart,
-        end_date: vacationModalEnd,
+        id: vacationModalEditId ?? "",
+        start_date: startDate,
+        end_date: endDate,
         title,
         vacation_type: vacationModalType,
       });
@@ -1152,9 +1129,6 @@ export default function App() {
     setCustomWorkingDays([]);
     setIsPickingCustomWorkDays(true);
     setIsPickingSalaryDate(false);
-    setIsPickingVacationStart(false);
-    setIsPickingVacationEnd(false);
-    setVacationStartDate(null);
     setVacationTypeMenuOpen(false);
     setDayMenuOpen(null);
     setDayMenuAnchorRect(null);
@@ -1397,29 +1371,12 @@ export default function App() {
   }
 
   async function handleEditVacation(v: Vacation) {
-    const startInput = prompt(`Start date (${dateFormatPattern(dateFormat)}):`, formatDateForDisplay(v.start_date, dateFormat));
-    if (startInput === null) return;
-    const endInput = prompt(`End date (${dateFormatPattern(dateFormat)}):`, formatDateForDisplay(v.end_date, dateFormat));
-    if (endInput === null) return;
-    const newStart = parseDisplayDate(startInput, dateFormat);
-    const newEnd = parseDisplayDate(endInput, dateFormat);
-    if (!newStart || !newEnd) {
-      alert(`Use ${dateFormatPattern(dateFormat)}.`);
-      return;
-    }
-    const newTitle = prompt("Title:", v.title) ?? v.title;
-    const currentType = normalizeVacationType(v.vacation_type);
-    const newTypeRaw = prompt('Type ("paid" | "unpaid"):', currentType) ?? currentType;
-    const newType = normalizeVacationType(newTypeRaw.trim().toLowerCase());
-
-    const updated = await api.upsertVacation({
-      ...v,
-      start_date: newStart,
-      end_date: newEnd,
-      title: newTitle,
-      vacation_type: newType,
-    });
-    setData(updated);
+    setVacationModalEditId(v.id);
+    setVacationModalStart(v.start_date);
+    setVacationModalEnd(v.end_date);
+    setVacationModalTitle(v.title);
+    setVacationModalType(normalizeVacationType(v.vacation_type));
+    setVacationModalOpen(true);
   }
 
   async function handleDeleteVacation(id: string) {
@@ -1433,6 +1390,7 @@ export default function App() {
     setEditSalaryModalDate(s.date);
     setEditSalaryModalAmount(String(s.amount / 100));
     setEditSalaryModalTitle(s.title);
+    setEditSalaryModalKind(normalizeSalaryEventKind(s.kind));
     setEditSalaryModalOpen(true);
   }
 
@@ -1448,6 +1406,7 @@ export default function App() {
     setEditSalaryModalDate(today);
     setEditSalaryModalAmount("");
     setEditSalaryModalTitle("Salary");
+    setEditSalaryModalKind("regular");
   }
 
   async function submitEditSalaryModal() {
@@ -1462,6 +1421,7 @@ export default function App() {
         date: editSalaryModalDate,
         amount,
         title,
+        kind: editSalaryModalKind,
       });
       setData(updated);
       closeEditSalaryModal();
@@ -1603,7 +1563,7 @@ export default function App() {
           monthKey={monthKey}
           year={year}
           today={today}
-          avgDailyEarnings={avgDailyEarnings}
+          vacationAverageDailyPay={vacationAverageDailyPay}
           dateFormat={dateFormat}
         />
         <SalariesPanel
@@ -1683,7 +1643,7 @@ export default function App() {
         <SelectedDateTransactionsList
           selectedDate={selectedDate}
           dateFormat={dateFormat}
-          salaryForSelectedDate={salaryForSelectedDate}
+          salaryEventsForSelectedDate={salaryEventsForSelectedDate}
           plannedAfterExpensesForSelectedDate={plannedAfterExpensesForSelectedDate}
           afterVacationForSelectedDate={afterVacationForSelectedDate}
           transactionsForSelectedDate={transactionsForSelectedDate}
@@ -1791,32 +1751,32 @@ export default function App() {
           <div
             className="modal-panel"
             style={{
-              width: "min(860px, 100%)",
+              width: "min(560px, 100%)",
               maxHeight: "80vh",
               overflowY: "auto",
-              padding: 12,
+              padding: 18,
             }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-              <button onClick={() => setVacationsPanelOpen(false)} aria-label={"Close"} className="icon-button">
+            <div className="vacations-manager-modal-head">
+              <div>
+                <b className="vacations-manager-modal-title">{"Vacation manager"}</b>
+              </div>
+              <button onClick={() => setVacationsPanelOpen(false)} aria-label={"Close"} className="icon-button vacations-manager-close">
                 <AppIcon name="close" />
               </button>
             </div>
             <VacationsPanel
-              vacations={vacationsThisMonth}
+              vacations={vacationsInManagerRange}
               dateFormat={dateFormat}
-              avgDailyEarnings={avgDailyEarnings}
+              salaryEvents={data?.salaryEvents ?? []}
               vacationDaysCount={vacationDaysCount}
               vacationDaysLeft={vacationDaysLeft}
-              isPickingVacationStart={isPickingVacationStart}
-              isPickingVacationEnd={isPickingVacationEnd}
               vacationTypeMenuOpen={vacationTypeMenuOpen}
               onVacationDaysCountChange={handleVacationDaysCountChange}
               onVacationDaysCountCommit={commitVacationDaysCount}
               onToggleVacationTypeMenu={() => setVacationTypeMenuOpen((v) => !v)}
               onSelectVacationType={beginAddVacation}
-              onCancelVacationPicking={cancelVacationPicking}
               onEditVacation={handleEditVacation}
               onDeleteVacation={handleDeleteVacation}
             />
@@ -1835,7 +1795,6 @@ export default function App() {
           }}
           onClick={async () => {
             setIsPickingSalaryDate(false);
-            cancelVacationPicking();
             if (isPickingCustomWorkDays) {
               await saveCustomSchedule();
             } else {
@@ -2396,43 +2355,111 @@ export default function App() {
           <div
             className="modal-panel"
             style={{
-              width: "min(520px, 100%)",
-              padding: 12,
+              width: "min(620px, 100%)",
+              padding: 18,
             }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-              <b style={{ fontSize: 14 }}>
-                {"Add vacation"} - {formatDateForDisplay(vacationModalStart, dateFormat)} {"->"} {formatDateForDisplay(vacationModalEnd, dateFormat)}
-              </b>
-              <button onClick={closeVacationModal} aria-label={"Close"} className="icon-button">
+            <div className="vacation-form-modal-head">
+              <div>
+                <b className="vacation-form-modal-title">
+                  {vacationModalEditId ? "Edit vacation" : "Add vacation"}
+                </b>
+                <div className="vacation-form-modal-subtitle">
+                  {"Choose dates, set the type, and confirm the details below."}
+                </div>
+              </div>
+              <button onClick={closeVacationModal} aria-label={"Close"} className="icon-button vacations-manager-close">
                 <AppIcon name="close" />
               </button>
             </div>
 
-            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Type"}</div>
-                <input
-                  value={vacationTypeLabel(vacationModalType)}
-                  readOnly
-                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd", background: "#f7f7f7" }}
-                />
+            <div className="vacation-form-layout">
+              <div
+                className="vacation-form-fields"
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{`Start date (${dateFormatPattern(dateFormat)})`}</div>
+                  <DateInputWithCalendar
+                    value={vacationModalStart}
+                    dateFormat={dateFormat}
+                    onChange={setVacationModalStart}
+                  />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{`End date (${dateFormatPattern(dateFormat)})`}</div>
+                  <DateInputWithCalendar
+                    value={vacationModalEnd}
+                    dateFormat={dateFormat}
+                    onChange={setVacationModalEnd}
+                  />
+                </div>
               </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Title"}</div>
-                <input
-                  value={vacationModalTitle}
-                  onChange={(e) => setVacationModalTitle(e.target.value)}
-                  placeholder={"Vacation"}
-                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
-                />
+
+              <div className="vacation-form-main">
+                <div className="vacation-form-fields vacation-form-fields-secondary">
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Title"}</div>
+                    <input
+                      value={vacationModalTitle}
+                      onChange={(e) => setVacationModalTitle(e.target.value)}
+                      placeholder={"Vacation"}
+                      style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                    />
+                  </div>
+
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>{"Type"}</div>
+                    <div className="vacation-type-toggle">
+                      <button
+                        type="button"
+                        onClick={() => setVacationModalType("paid")}
+                        className={vacationModalType === "paid" ? "vacation-type-option vacation-type-option-active" : "vacation-type-option"}
+                      >
+                        {"Paid"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVacationModalType("unpaid")}
+                        className={vacationModalType === "unpaid" ? "vacation-type-option vacation-type-option-active" : "vacation-type-option"}
+                      >
+                        {"Unpaid"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="vacation-form-summary-card">
+                  <div className="vacation-form-summary-title">{"Summary"}</div>
+                  <div className="vacation-form-summary-grid">
+                    <div className="vacation-form-summary-item">
+                      <span className="vacation-form-summary-label">{"Vacation days"}</span>
+                      <b>{vacationModalRange.days} {"days"}</b>
+                    </div>
+                    <div className="vacation-form-summary-item">
+                      <span className="vacation-form-summary-label">{"Range"}</span>
+                      <b>{formatDateForDisplay(vacationModalRange.start, dateFormat)} {"->"} {formatDateForDisplay(vacationModalRange.end, dateFormat)}</b>
+                    </div>
+                    <div className="vacation-form-summary-item">
+                      <span className="vacation-form-summary-label">{"Type"}</span>
+                      <b>{vacationModalType === "paid" ? "Paid" : "Unpaid"}</b>
+                    </div>
+                    <div className="vacation-form-summary-item vacation-form-summary-item-payout">
+                      <span className="vacation-form-summary-label">{"Estimated payout"}</span>
+                      <b>
+                        {vacationModalType === "paid" ? rub(vacationModalPayoutAmount) : "No payout"}
+                      </b>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+            <div className="vacation-form-footer">
               <button onClick={closeVacationModal}>{"Cancel"}</button>
-              <button onClick={submitVacationModal}>{"Add vacation"}</button>
+              <button onClick={submitVacationModal} className="vacation-form-submit">
+                {vacationModalEditId ? "Save vacation" : "Add vacation"}
+              </button>
             </div>
           </div>
         </div>
@@ -2493,6 +2520,19 @@ export default function App() {
                   style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                 />
               </div>
+
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Vacation pay calculation"}</div>
+                <select
+                  value={salaryModalKind}
+                  onChange={(e) => setSalaryModalKind(e.target.value as SalaryEventKind)}
+                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                >
+                  <option value="regular">{salaryEventKindLabel("regular")}</option>
+                  <option value="vacation_pay">{salaryEventKindLabel("vacation_pay")}</option>
+                  <option value="excluded">{salaryEventKindLabel("excluded")}</option>
+                </select>
+              </div>
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
@@ -2509,9 +2549,11 @@ export default function App() {
         dateFormat={dateFormat}
         amount={editSalaryModalAmount}
         title={editSalaryModalTitle}
+        kind={editSalaryModalKind}
         onDateChange={setEditSalaryModalDate}
         onAmountChange={setEditSalaryModalAmount}
         onTitleChange={setEditSalaryModalTitle}
+        onKindChange={setEditSalaryModalKind}
         onClose={closeEditSalaryModal}
         onSubmit={() => { void submitEditSalaryModal(); }}
       />

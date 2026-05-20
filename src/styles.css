@@ -370,6 +370,339 @@ select {
   font-weight: 700;
 }
 
+.vacations-manager-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.vacations-manager-modal-title {
+  display: block;
+  font-size: 18px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.vacations-manager-close {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 14px;
+}
+
+.vacations-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vacations-panel-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid #e1e8f2;
+}
+
+.vacations-panel-toolbar-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vacations-panel-title-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vacations-panel-title {
+  font-size: 16px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.vacations-panel-subtle-count {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.vacations-panel-summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vacations-panel-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 10px;
+  border-radius: 12px;
+  border: 1px solid #dbe3f0;
+  background: #f7fafe;
+}
+
+.vacations-panel-stat-editable {
+  cursor: text;
+}
+
+.vacations-panel-stat-strong {
+  background: #eef4ff;
+}
+
+.vacations-panel-stat-label {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.vacations-panel-stat-value {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.vacations-panel-count-input {
+  width: 48px;
+  min-height: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 8px;
+}
+
+.vacations-panel-add-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f2f6fc 100%);
+}
+
+.vacations-panel-list-wrap {
+  min-height: 0;
+}
+
+.vacations-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vacations-entry {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #e3e9f2;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.vacations-entry-month {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 12px;
+  background: #f3f6fb;
+  color: var(--muted);
+  font-weight: 600;
+  text-align: center;
+}
+
+.vacations-entry-main {
+  min-width: 0;
+}
+
+.vacations-entry-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.vacations-entry-type {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--muted);
+}
+
+.vacations-entry-type-paid {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--brand-2);
+}
+
+.vacations-entry-meta {
+  margin-top: 4px;
+  color: var(--muted);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vacations-entry-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.vacations-panel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  min-height: 92px;
+  padding: 14px;
+  border: 1px dashed #c7d4e7;
+  border-radius: 14px;
+  background: rgba(247, 250, 255, 0.7);
+}
+
+.vacations-panel-empty-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.vacations-panel-empty-text {
+  color: var(--muted);
+  max-width: 480px;
+}
+
+.vacation-form-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e2e9f3;
+}
+
+.vacation-form-modal-title {
+  display: block;
+  font-size: 20px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.vacation-form-modal-subtitle {
+  margin-top: 5px;
+  color: var(--muted);
+  max-width: 440px;
+}
+
+.vacation-form-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vacation-form-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.vacation-form-fields-secondary {
+  align-items: start;
+}
+
+.vacation-form-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.vacation-type-toggle {
+  display: inline-flex;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid #dbe3f0;
+  background: #f4f7fc;
+}
+
+.vacation-type-option {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+}
+
+.vacation-type-option:hover {
+  box-shadow: none;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.vacation-type-option-active {
+  border-color: #cfd9e8;
+  background: #ffffff;
+  color: var(--text);
+}
+
+.vacation-form-summary-card {
+  border: 1px solid #dde5f0;
+  border-radius: 16px;
+  padding: 14px;
+  background: #f7fafe;
+}
+
+.vacation-form-summary-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.vacation-form-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.vacation-form-summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e9f3;
+}
+
+.vacation-form-summary-item-payout {
+  background: #eef6f2;
+}
+
+.vacation-form-summary-label {
+  color: var(--muted);
+}
+
+.vacation-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.vacation-form-submit {
+  min-width: 132px;
+}
+
 .summary-title {
   font-size: 28px;
   letter-spacing: -0.02em;
@@ -464,5 +797,38 @@ select {
   .topbar-action-group {
     margin-left: 0;
     justify-content: flex-start;
+  }
+
+  .vacations-panel-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .vacations-panel-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .vacations-entry {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .vacations-entry-month {
+    justify-content: flex-start;
+  }
+
+  .vacations-entry-actions {
+    justify-content: flex-end;
+    width: 100%;
+  }
+
+  .vacation-form-fields,
+  .vacation-form-main {
+    grid-template-columns: 1fr;
+  }
+
+  .vacation-form-summary-grid {
+    grid-template-columns: 1fr;
   }
 }
