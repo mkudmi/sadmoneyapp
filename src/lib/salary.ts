@@ -267,6 +267,10 @@ function inferMonthlySalaryAmountFromHistory(
   salaryEvents: SalaryEvent[],
   accrualMonth: string,
   title: string,
+  vacations: Vacation[],
+  workSchedule: "5/2" | "custom",
+  offDays: OffDay[],
+  productionCalendarDays?: ReadonlyMap<string, RussianProductionCalendarDay> | null,
 ) {
   const normalizedTitle = title.trim().toLowerCase();
 
@@ -290,9 +294,38 @@ function inferMonthlySalaryAmountFromHistory(
     return totalsByMonth;
   }
 
+  function getVacationWorkingDaysExcludedForMonth(month: string) {
+    const monthDate = parseYmdLocal(`${month}-01`);
+    const monthStart = `${month}-01`;
+    const monthEnd = `${month}-${String(daysInMonth(monthDate.getFullYear(), monthDate.getMonth())).padStart(2, "0")}`;
+    const monthWorkingDays = countWorkingDaysInRange(
+      monthStart,
+      monthEnd,
+      workSchedule,
+      offDays,
+      productionCalendarDays,
+    );
+    const payableMonthWorkingDays = countPayableWorkingDaysInRange(
+      monthStart,
+      monthEnd,
+      workSchedule,
+      offDays,
+      vacations,
+      productionCalendarDays,
+    );
+
+    return monthWorkingDays - payableMonthWorkingDays;
+  }
+
+  function pickBestMonth(totalsByMonth: Map<string, number>) {
+    const months = Array.from(totalsByMonth.keys()).sort((a, b) => b.localeCompare(a));
+    const latestUnaffectedMonth = months.find((month) => getVacationWorkingDaysExcludedForMonth(month) === 0) ?? null;
+    return latestUnaffectedMonth ?? months[0] ?? null;
+  }
+
   const titledTotals = normalizedTitle ? collectTotals(true) : new Map<string, number>();
   const fallbackTotals = titledTotals.size > 0 ? titledTotals : collectTotals(false);
-  const latestMonth = Array.from(fallbackTotals.keys()).sort((a, b) => b.localeCompare(a))[0] ?? null;
+  const latestMonth = pickBestMonth(fallbackTotals);
   if (!latestMonth) {
     return null;
   }
@@ -381,6 +414,10 @@ export function estimateManualSalaryForDate(args: ManualSalaryEstimateArgs): Man
     relevantSalaryEvents,
     args.accrualMonth,
     args.title,
+    args.vacations,
+    args.workSchedule,
+    args.offDays,
+    args.productionCalendarDays,
   );
   const monthlySalaryAmount = monthlySalaryAmountFromHistory ?? args.enteredAmount;
   const source: "history" | "input_fallback" = monthlySalaryAmountFromHistory ? "history" : "input_fallback";
