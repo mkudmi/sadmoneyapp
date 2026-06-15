@@ -69,6 +69,7 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
             <div>
               <div style={{ fontSize: 12 }}>
                 <b>+ </b> {salaryEvent.title}  -  {rub(salaryEvent.amount)}
+                {salaryEvent.generated ? <span style={{ marginLeft: 6, opacity: 0.65 }}>{"(auto)"}</span> : null}
               </div>
             </div>
           </div>

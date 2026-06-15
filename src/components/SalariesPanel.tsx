@@ -67,30 +67,33 @@ export function SalariesPanel(props: SalariesPanelProps) {
               <div>
                 <div style={{ fontSize: 12 }}>
                   <b>{formatDateForDisplay(s.date, dateFormat)}</b> - {s.title} - {rub(s.amount)}
+                  {s.generated ? <span style={{ marginLeft: 6, opacity: 0.65 }}>{"(auto)"}</span> : null}
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: 6 }}>
-                <button
-                  className="edit-pencil-btn"
-                  title={"Edit salary"}
-                  aria-label={"Edit salary"}
-                  style={{ width: 26, minWidth: 26, minHeight: 26, borderRadius: 8 }}
-                  onClick={() => onEditSalary(s)}
-                >
-                  <AppIcon name="edit" />
-                </button>
+              {s.generated ? null : (
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    className="edit-pencil-btn"
+                    title={"Edit salary"}
+                    aria-label={"Edit salary"}
+                    style={{ width: 26, minWidth: 26, minHeight: 26, borderRadius: 8 }}
+                    onClick={() => onEditSalary(s)}
+                  >
+                    <AppIcon name="edit" />
+                  </button>
 
-                <button
-                  title={"Delete salary"}
-                  aria-label={"Delete salary"}
-                  className="icon-button"
-                  style={{ color: "var(--danger)", minHeight: 26, padding: 0, width: 26, minWidth: 26 }}
-                  onClick={() => onDeleteSalary(s.id)}
-                >
-                  <AppIcon name="delete" />
-                </button>
-              </div>
+                  <button
+                    title={"Delete salary"}
+                    aria-label={"Delete salary"}
+                    className="icon-button"
+                    style={{ color: "var(--danger)", minHeight: 26, padding: 0, width: 26, minWidth: 26 }}
+                    onClick={() => onDeleteSalary(s.id)}
+                  >
+                    <AppIcon name="delete" />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

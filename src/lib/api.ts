@@ -20,6 +20,19 @@ export type SalaryEvent = {
   amount: number; // kopecks
   title: string;
   kind?: SalaryEventKind;
+  accrualMonth?: string | null;
+  generated?: boolean;
+  sourceConfigId?: string | null;
+  payoutType?: "advance" | "salary" | null;
+};
+
+export type SalaryConfig = {
+  id: string;
+  effectiveFrom: string;
+  amount: number;
+  advancePercent: number;
+  advanceDay: number;
+  salaryDay: number;
 };
 
 export type Vacation = {
@@ -56,6 +69,7 @@ export type AppData = {
     lastDailyLimitCarryoverDate?: string;
     language?: "ru" | "en";
     dateFormat?: DateFormat;
+    salaryConfigs?: SalaryConfig[];
   };
   piggyBankAmount?: number;
   salaryEvents: SalaryEvent[];
@@ -106,6 +120,8 @@ export const api = {
       saveRemainingDailyLimitToPiggyBank,
       lastDailyLimitCarryoverDate,
     }),
+  setSalaryConfigs: (salaryConfigs: SalaryConfig[]) =>
+    invoke<AppData>("set_salary_configs", { salaryConfigs }),
   applyDailyLimitCarryover: (amount: number, processedDate: string) =>
     invoke<AppData>("apply_daily_limit_carryover", { amount, processedDate }),
   calcDailyBudget: (fromDate: string) => invoke<DailyBudgetResult>("calc_daily_budget", { fromDate }),

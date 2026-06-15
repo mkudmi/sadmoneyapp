@@ -12,10 +12,12 @@ type EditSalaryModalProps = {
   amount: string;
   title: string;
   kind: SalaryEventKind;
+  accrualMonth: string;
   onDateChange: (value: string) => void;
   onAmountChange: (value: string) => void;
   onTitleChange: (value: string) => void;
   onKindChange: (value: SalaryEventKind) => void;
+  onAccrualMonthChange: (value: string) => void;
   onClose: () => void;
   onSubmit: () => void;
 };
@@ -28,10 +30,12 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
     amount,
     title,
     kind,
+    accrualMonth,
     onDateChange,
     onAmountChange,
     onTitleChange,
     onKindChange,
+    onAccrualMonthChange,
     onClose,
     onSubmit,
   } = props;
@@ -93,6 +97,16 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
               value={title}
               onChange={(e) => onTitleChange(e.target.value)}
               placeholder={"Salary"}
+              style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+            />
+          </div>
+
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Accrual month"}</div>
+            <input
+              type="month"
+              value={accrualMonth}
+              onChange={(e) => onAccrualMonthChange(e.target.value)}
               style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
             />
           </div>

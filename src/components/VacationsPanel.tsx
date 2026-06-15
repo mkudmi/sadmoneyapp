@@ -3,6 +3,7 @@ import { formatDateForDisplay } from "../lib/date";
 import type { DateFormat } from "../lib/date";
 import { rub } from "../lib/money";
 import { calculateVacationPayout, getVacationChargeableDays } from "../lib/russianVacation";
+import type { RussianProductionCalendarDay } from "../lib/russianProductionCalendar";
 import { normalizeVacationType, VacationType, vacationTypeLabel } from "../lib/vacation";
 import { AppIcon } from "./AppIcon";
 
@@ -10,6 +11,7 @@ type VacationsPanelProps = {
   vacations: Vacation[];
   dateFormat: DateFormat;
   salaryEvents: SalaryEvent[];
+  productionCalendarDays?: ReadonlyMap<string, RussianProductionCalendarDay> | null;
   vacationDaysCount: string;
   vacationDaysLeft: number;
   vacationTypeMenuOpen: boolean;
@@ -26,6 +28,7 @@ export function VacationsPanel(props: VacationsPanelProps) {
     vacations,
     dateFormat,
     salaryEvents,
+    productionCalendarDays,
     vacationDaysCount,
     vacationDaysLeft,
     vacationTypeMenuOpen,
@@ -114,7 +117,11 @@ export function VacationsPanel(props: VacationsPanelProps) {
           <div className="vacations-panel-list">
             {vacations.map((vacation) => {
               const normalizedType = normalizeVacationType(vacation.vacation_type);
-              const daysCount = getVacationChargeableDays(vacation.start_date, vacation.end_date);
+              const daysCount = getVacationChargeableDays(
+                vacation.start_date,
+                vacation.end_date,
+                productionCalendarDays,
+              );
               const payoutLabel = normalizedType === "paid"
                 ? rub(
                     calculateVacationPayout({
@@ -123,6 +130,7 @@ export function VacationsPanel(props: VacationsPanelProps) {
                       vacationStartDate: vacation.start_date,
                       vacationEndDate: vacation.end_date,
                       vacationType: normalizedType,
+                      productionCalendarDays,
                     }),
                   )
                 : "No payout";

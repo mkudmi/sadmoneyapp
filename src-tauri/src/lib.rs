@@ -15,6 +15,7 @@ pub fn run() {
             commands::set_date_format,
             commands::set_tx_categories,
             commands::set_user_preferences,
+            commands::set_salary_configs,
             commands::add_transaction,
             commands::update_transaction,
             commands::delete_transaction,

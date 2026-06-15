@@ -3,10 +3,16 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
-import { api, AppData, Debt, OffDay, SalaryEvent, Transaction, Vacation } from "./lib/api";
+import { api, AppData, Debt, OffDay, SalaryConfig, SalaryEvent, Transaction, Vacation } from "./lib/api";
 import { rub, toKop } from "./lib/money";
 import { capitalizeFirst } from "./lib/text";
-import { findFollowingSalaryDate } from "./lib/salary";
+import {
+  buildAutoSalaryEvents,
+  estimateManualSalaryForDate,
+  findFollowingSalaryDate,
+  normalizeSalaryConfigs,
+  type ManualSalaryEstimate,
+} from "./lib/salary";
 import {
   dateFormatPattern,
   daysInMonth,
@@ -20,6 +26,7 @@ import type { DateFormat } from "./lib/date";
 import { isDebtCategory, normalizeCategoryInput } from "./lib/category";
 import { normalizeVacationType, VacationType } from "./lib/vacation";
 import { useDismissible } from "./hooks/useDismissible";
+import { useRussianProductionCalendar } from "./hooks/useRussianProductionCalendar";
 import { useVacationDaysCount } from "./hooks/useVacationDaysCount";
 import { VacationsPanel } from "./components/VacationsPanel";
 import { SalariesPanel } from "./components/SalariesPanel";
@@ -39,12 +46,45 @@ import { buildTrendsData } from "./lib/trends";
 import { AppIcon } from "./components/AppIcon";
 import { DateInputWithCalendar } from "./components/DateInputWithCalendar";
 import { calculateVacationAverageDailyPay, calculateVacationPayout, getVacationChargeableDays, isRussianPublicHoliday } from "./lib/russianVacation";
-import { normalizeSalaryEventKind, SalaryEventKind, salaryEventKindLabel } from "./lib/salaryEvent";
+import {
+  getRussianProductionCalendarDay,
+  getRussianProductionCalendarDayLabel,
+  getRussianProductionCalendarDayTone,
+  isRussianProductionCalendarDayOff,
+  isRussianWorkingWeekend,
+} from "./lib/russianProductionCalendar";
+import {
+  inferSalaryEventAccrualMonth,
+  normalizeSalaryEventAccrualMonth,
+  normalizeSalaryEventKind,
+  SalaryEventKind,
+  salaryEventKindLabel,
+} from "./lib/salaryEvent";
 
 const VACATION_DAYS_COUNT_STORAGE_KEY = "sadmoneyapp.vacation_days_count";
 const LEGACY_PIGGY_BANK_STORAGE_KEY = "sadmoneyapp.piggy_bank_amount";
 const DEBUG_USE_CUSTOM_TODAY = false;
 const DEBUG_CUSTOM_TODAY = "2026-03-06";
+
+type SalaryConfigDraft = {
+  id: string;
+  effectiveFrom: string;
+  amount: string;
+  advancePercent: string;
+  advanceDay: string;
+  salaryDay: string;
+};
+
+function createEmptySalaryConfigDraft(today: string): SalaryConfigDraft {
+  return {
+    id: "",
+    effectiveFrom: today,
+    amount: "",
+    advancePercent: "50",
+    advanceDay: "20",
+    salaryDay: "5",
+  };
+}
 
 export default function App() {
   const today = DEBUG_USE_CUSTOM_TODAY ? DEBUG_CUSTOM_TODAY : ymd(new Date());
@@ -56,9 +96,40 @@ export default function App() {
   const [budget, setBudget] = useState<{ per_day: number; days: number; next_salary_date: string | null; available: number } | null>(null);
   const piggyBankAmount = Math.max(0, data?.piggyBankAmount ?? 0);
   const monthKey = `${year}-${String(month0 + 1).padStart(2, "0")}`; // "YYYY-MM"
-  const salaryThisMonth = (data?.salaryEvents ?? [])
-    .filter(s => ymFromYmd(s.date) === monthKey)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const displayedMonthStart = `${monthKey}-01`;
+  const displayedMonthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
+  const salaryEventsRangeStart = useMemo(() => {
+    const vacationWindowStart = new Date(parseYmdLocal(today).getFullYear(), parseYmdLocal(today).getMonth() - 12, 1);
+    const yearStart = new Date(year, 0, 1);
+    const displayedStart = parseYmdLocal(displayedMonthStart);
+    const earliest = new Date(Math.min(vacationWindowStart.getTime(), yearStart.getTime(), displayedStart.getTime()));
+    return ymd(earliest);
+  }, [displayedMonthStart, today, year]);
+  const salaryEventsRangeEnd = useMemo(() => {
+    const todayPlusBudgetWindow = new Date(parseYmdLocal(today).getFullYear(), parseYmdLocal(today).getMonth(), parseYmdLocal(today).getDate() + 70);
+    const yearEnd = new Date(year, 11, 31);
+    const displayedEnd = parseYmdLocal(displayedMonthEnd);
+    const latest = new Date(Math.max(todayPlusBudgetWindow.getTime(), yearEnd.getTime(), displayedEnd.getTime()));
+    return ymd(latest);
+  }, [displayedMonthEnd, today, year]);
+  const autoSalaryEvents = useMemo(
+    () => buildAutoSalaryEvents(data?.settings.salaryConfigs, salaryEventsRangeStart, salaryEventsRangeEnd),
+    [data?.settings.salaryConfigs, salaryEventsRangeEnd, salaryEventsRangeStart]
+  );
+  const allSalaryEvents = useMemo(
+    () =>
+      [...(data?.salaryEvents ?? []), ...autoSalaryEvents].sort(
+        (a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id)
+      ),
+    [autoSalaryEvents, data?.salaryEvents]
+  );
+  const viewData = useMemo(
+    () => (data ? { ...data, salaryEvents: allSalaryEvents } : null),
+    [allSalaryEvents, data]
+  );
+  const salaryThisMonth = allSalaryEvents
+    .filter((s) => ymFromYmd(s.date) === monthKey)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
   const vacationsThisMonth = useMemo(() => {
     const monthStart = `${monthKey}-01`;
     const monthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
@@ -91,7 +162,7 @@ export default function App() {
       });
     }
 
-    for (const s of data.salaryEvents ?? []) {
+    for (const s of allSalaryEvents) {
       if (s.date < monthStart || s.date > today) continue;
       const category = (s.title || "").trim() || "Salary";
       const key = `income:${category}`;
@@ -109,10 +180,10 @@ export default function App() {
         type: value.type,
       }))
       .sort((a, b) => b.amount - a.amount);
-  }, [data, monthKey, today]);
+  }, [allSalaryEvents, data, monthKey, today]);
   const trendsData = useMemo(
-    () => buildTrendsData({ data, monthKey, year, month0, today, locale }),
-    [data, locale, month0, monthKey, today, year]
+    () => buildTrendsData({ data: viewData, monthKey, year, month0, today, locale }),
+    [locale, month0, monthKey, today, viewData, year]
   );
 
   const storedWorkSchedule = data?.settings.workSchedule === "custom" ? "custom" : "5/2";
@@ -120,6 +191,27 @@ export default function App() {
   const saveRemainingDailyLimitToPiggyBank = Boolean(data?.settings.saveRemainingDailyLimitToPiggyBank);
   const lastDailyLimitCarryoverDate = data?.settings.lastDailyLimitCarryoverDate ?? "";
   const dateFormat = normalizeDateFormat(data?.settings.dateFormat);
+  const productionCalendarYears = useMemo(() => {
+    const years = new Set<number>([
+      parseYmdLocal(today).getFullYear(),
+      parseYmdLocal(selectedDate).getFullYear(),
+      year - 1,
+      year,
+      year + 1,
+    ]);
+
+    for (const vacation of data?.vacations ?? []) {
+      years.add(parseYmdLocal(vacation.start_date).getFullYear());
+      years.add(parseYmdLocal(vacation.end_date).getFullYear());
+    }
+
+    return Array.from(years).sort((a, b) => a - b);
+  }, [data?.vacations, selectedDate, today, year]);
+  const productionCalendarDays = useRussianProductionCalendar(productionCalendarYears);
+  const salaryConfigs = useMemo(
+    () => normalizeSalaryConfigs(data?.settings.salaryConfigs),
+    [data?.settings.salaryConfigs]
+  );
   const { vacationDaysCount, handleVacationDaysCountChange, commitVacationDaysCount } =
     useVacationDaysCount(VACATION_DAYS_COUNT_STORAGE_KEY);
   const vacationDaysLeft = useMemo(() => {
@@ -141,7 +233,7 @@ export default function App() {
       const endDate = parseYmdLocal(end);
       while (cur <= endDate) {
         const date = ymd(cur);
-        if (!isRussianPublicHoliday(date)) {
+        if (!isRussianPublicHoliday(date, productionCalendarDays)) {
           usedDays.add(date);
         }
         cur.setDate(cur.getDate() + 1);
@@ -149,16 +241,17 @@ export default function App() {
     }
 
     return Math.max(total - usedDays.size, 0);
-  }, [data, vacationDaysCount, year]);
+  }, [data, productionCalendarDays, vacationDaysCount, year]);
 
   const vacationAverageDailyPay = useMemo(() => {
-    if (!data) return 0;
+    if (!viewData) return 0;
     return calculateVacationAverageDailyPay({
-      salaryEvents: data.salaryEvents ?? [],
-      vacations: data.vacations ?? [],
+      salaryEvents: viewData.salaryEvents ?? [],
+      vacations: viewData.vacations ?? [],
       vacationStartDate: today,
+      productionCalendarDays,
     });
-  }, [data, today]);
+  }, [productionCalendarDays, today, viewData]);
 
   function focusOnDate(date: string) {
     const parsed = parseYmdLocal(date);
@@ -266,22 +359,19 @@ export default function App() {
         continue;
       }
 
-      if (isWeekend) {
-        if (offForDay?.is_working) {
-          total++;
-        }
-        continue;
+      const defaultWorking = isRussianWorkingWeekend(date, productionCalendarDays)
+        ? true
+        : isRussianProductionCalendarDayOff(date, productionCalendarDays)
+          ? false
+          : !isWeekend;
+      const effectiveWorking = offForDay ? !!offForDay.is_working : defaultWorking;
+      if (effectiveWorking) {
+        total++;
       }
-
-      if (offForDay && !offForDay.is_working) {
-        continue;
-      }
-
-      total++;
     }
 
     return total;
-  }, [data?.offDays, data?.vacations, monthDays, workSchedule]);
+  }, [data?.offDays, data?.vacations, monthDays, productionCalendarDays, workSchedule]);
 
   // Build calendar grid cells so weeks start on Monday and end on Sunday
   const firstDayJs = new Date(year, month0, 1).getDay(); // 0 = Sun .. 6 = Sat
@@ -297,8 +387,8 @@ export default function App() {
 
   const sumsByDate = useMemo(() => {
     const map = new Map<string, { inc: number; exp: number }>();
-    if (!data) return map;
-    for (const t of data.transactions) {
+    if (!viewData) return map;
+    for (const t of viewData.transactions) {
       const cur = map.get(t.date) ?? { inc: 0, exp: 0 };
       if (t.type === "income") cur.inc += t.amount;
       if (t.type === "expense" || t.type === "planned_expense") cur.exp += t.amount;
@@ -306,25 +396,25 @@ export default function App() {
     }
 
     // Add salary events as income for each day
-    for (const s of data.salaryEvents ?? []) {
+    for (const s of viewData.salaryEvents ?? []) {
       const cur = map.get(s.date) ?? { inc: 0, exp: 0 };
       cur.inc += s.amount;
       map.set(s.date, cur);
     }
 
     return map;
-  }, [data]);
+  }, [viewData]);
 
-  const salaryEventsForSelectedDate = (data?.salaryEvents ?? []).filter((s) => s.date === selectedDate);
+  const salaryEventsForSelectedDate = allSalaryEvents.filter((s) => s.date === selectedDate);
   const salaryAmountForSelectedDate = salaryEventsForSelectedDate.reduce((sum, s) => sum + s.amount, 0);
   const transactionsForSelectedDate = (data?.transactions ?? []).filter((t) => t.date === selectedDate);
   const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
   const vacationForSelectedDate = (data?.vacations ?? []).find(v => v.start_date <= selectedDate && v.end_date >= selectedDate) ?? null;
   const plannedAfterExpensesForSelectedDate = useMemo(() => {
-    if (!data || !budget?.next_salary_date) return null;
+    if (!viewData || !budget?.next_salary_date) return null;
 
     const nextSalaryDate = budget.next_salary_date;
-    const salaryEvents = data.salaryEvents ?? [];
+    const salaryEvents = viewData.salaryEvents ?? [];
     const salaryDates = salaryEvents.map((s) => s.date);
 
     // End of period = day before the following salary date after nextSalaryDate.
@@ -343,7 +433,7 @@ export default function App() {
 
     if (nextSalaryAmount <= 0) return null;
 
-    const plannedUntilSelected = (data.transactions ?? [])
+    const plannedUntilSelected = (viewData.transactions ?? [])
       .filter(
         (t) =>
           t.type === "planned_expense" &&
@@ -353,7 +443,7 @@ export default function App() {
       .reduce((sum, t) => sum + t.amount, 0);
 
     return nextSalaryAmount - plannedUntilSelected;
-  }, [data, budget?.next_salary_date, selectedDate]);
+  }, [budget?.next_salary_date, selectedDate, viewData]);
   const afterVacationForSelectedDate = useMemo(() => {
     if (!data || salaryAmountForSelectedDate <= 0 || vacationAverageDailyPay <= 0) return null;
 
@@ -387,7 +477,7 @@ export default function App() {
           const overlapEndDate = parseYmdLocal(overlapEnd);
           while (cursorDate <= overlapEndDate) {
             const date = ymd(cursorDate);
-            if (!isRussianPublicHoliday(date)) {
+            if (!isRussianPublicHoliday(date, productionCalendarDays)) {
               vacationDatesForThisSalary.add(date);
             }
             cursorDate.setDate(cursorDate.getDate() + 1);
@@ -405,7 +495,7 @@ export default function App() {
           const overlapEndDate = parseYmdLocal(overlapEnd);
           while (cursorDate <= overlapEndDate) {
             const date = ymd(cursorDate);
-            if (!isRussianPublicHoliday(date)) {
+            if (!isRussianPublicHoliday(date, productionCalendarDays)) {
               vacationDatesForThisSalary.add(date);
             }
             cursorDate.setDate(cursorDate.getDate() + 1);
@@ -434,14 +524,54 @@ export default function App() {
     selectedDate,
     salaryAmountForSelectedDate,
     vacationAverageDailyPay,
+    productionCalendarDays,
     plannedAfterExpensesForSelectedDate,
   ]);
   const selectedDateWeekDay = new Date(selectedDate).getDay(); // 0 = Sunday, 6 = Saturday
   const selectedDateIsWeekend = selectedDateWeekDay === 0 || selectedDateWeekDay === 6;
-  const selectedDateDefaultWorking = workSchedule === "5/2" ? !selectedDateIsWeekend : false;
+  const selectedDateDefaultWorking = workSchedule === "5/2"
+    ? (
+        isRussianWorkingWeekend(selectedDate, productionCalendarDays)
+          ? true
+          : isRussianProductionCalendarDayOff(selectedDate, productionCalendarDays)
+            ? false
+            : !selectedDateIsWeekend
+      )
+    : false;
   const selectedDateIsWorking = offForSelectedDate
     ? !!offForSelectedDate.is_working
     : selectedDateDefaultWorking;
+  const selectedProductionCalendarDay = getRussianProductionCalendarDay(selectedDate, productionCalendarDays);
+  const selectedProductionCalendarTone = selectedProductionCalendarDay
+    ? getRussianProductionCalendarDayTone(selectedProductionCalendarDay.type)
+    : null;
+  const selectedDateStatus = vacationForSelectedDate
+    ? {
+        label: "Vacation",
+        border: "#a37500",
+        color: "#7a5200",
+        background: "#ffe07a",
+      }
+    : selectedProductionCalendarDay
+      ? {
+          label: getRussianProductionCalendarDayLabel(selectedProductionCalendarDay.type),
+          border: selectedProductionCalendarTone?.border ?? "#4b83b6",
+          color: selectedProductionCalendarTone?.color ?? "#1d5f91",
+          background: selectedProductionCalendarTone?.background ?? "#d9efff",
+        }
+      : selectedDateIsWorking
+        ? {
+            label: "Working",
+            border: "#1c7f4d",
+            color: "#1c7f4d",
+            background: "#cfead8",
+          }
+        : {
+            label: "Day off",
+            border: "#bf3a3a",
+            color: "#bf3a3a",
+            background: "#f2cfd3",
+          };
 
   const [dayMenuOpen, setDayMenuOpen] = useState<string | null>(null);
   const [dayMenuPos, setDayMenuPos] = useState<{ left: number; top: number }>({ left: 8, top: 8 });
@@ -458,6 +588,8 @@ export default function App() {
   const [incomeCategoryDraft, setIncomeCategoryDraft] = useState<string>("");
   const [appVersion, setAppVersion] = useState<string>("-");
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [salaryConfigDraft, setSalaryConfigDraft] = useState<SalaryConfigDraft>(() => createEmptySalaryConfigDraft(today));
+  const [salaryConfigEditId, setSalaryConfigEditId] = useState<string | null>(null);
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [txModalType, setTxModalType] = useState<"income" | "expense" | "planned_expense">("expense");
@@ -482,12 +614,15 @@ export default function App() {
   const [salaryModalAmount, setSalaryModalAmount] = useState<string>("");
   const [salaryModalTitle, setSalaryModalTitle] = useState<string>("Salary");
   const [salaryModalKind, setSalaryModalKind] = useState<SalaryEventKind>("regular");
+  const [salaryModalAccrualMonth, setSalaryModalAccrualMonth] = useState<string>("");
+  const [salaryModalCheckResult, setSalaryModalCheckResult] = useState<ManualSalaryEstimate | null>(null);
   const [editSalaryModalOpen, setEditSalaryModalOpen] = useState(false);
   const [editSalaryModalId, setEditSalaryModalId] = useState<string | null>(null);
   const [editSalaryModalDate, setEditSalaryModalDate] = useState<string>(today);
   const [editSalaryModalAmount, setEditSalaryModalAmount] = useState<string>("");
   const [editSalaryModalTitle, setEditSalaryModalTitle] = useState<string>("Salary");
   const [editSalaryModalKind, setEditSalaryModalKind] = useState<SalaryEventKind>("regular");
+  const [editSalaryModalAccrualMonth, setEditSalaryModalAccrualMonth] = useState<string>("");
   const [piggyBankModalOpen, setPiggyBankModalOpen] = useState(false);
   const [piggyBankModalAmount, setPiggyBankModalAmount] = useState<string>("");
   const [piggyBankModalType, setPiggyBankModalType] = useState<PiggyBankModalType>("add");
@@ -639,10 +774,10 @@ export default function App() {
   async function handleToggleWorkingDay(params: {
     date: string;
     effectiveWorking: boolean;
-    isWeekend: boolean;
+    defaultWorking: boolean;
     offForDay: OffDay | null;
   }) {
-    const { date, effectiveWorking, isWeekend, offForDay } = params;
+    const { date, effectiveWorking, defaultWorking, offForDay } = params;
 
     try {
       const makeWorking = !effectiveWorking;
@@ -654,32 +789,17 @@ export default function App() {
           is_working: makeWorking,
         });
         setData(updated);
-      } else if (isWeekend) {
-        if (makeWorking) {
-          const updated = await api.upsertOffDay({
-            id: offForDay?.id ?? "",
-            date,
-            note: offForDay?.note ?? "",
-            is_working: true,
-          });
-          setData(updated);
-        } else if (offForDay) {
-          const updated = await api.deleteOffDay(offForDay.id);
-          setData(updated);
-        }
-      } else {
-        if (!makeWorking) {
-          const updated = await api.upsertOffDay({
-            id: offForDay?.id ?? "",
-            date,
-            note: offForDay?.note ?? "",
-            is_working: false,
-          });
-          setData(updated);
-        } else if (offForDay) {
-          const updated = await api.deleteOffDay(offForDay.id);
-          setData(updated);
-        }
+      } else if (makeWorking !== defaultWorking) {
+        const updated = await api.upsertOffDay({
+          id: offForDay?.id ?? "",
+          date,
+          note: offForDay?.note ?? "",
+          is_working: makeWorking,
+        });
+        setData(updated);
+      } else if (offForDay) {
+        const updated = await api.deleteOffDay(offForDay.id);
+        setData(updated);
       }
     } catch (err) {
       console.error("day menu update failed", err);
@@ -709,18 +829,20 @@ export default function App() {
       .filter((t) => t.type === "income")
       .map((t) => normalizeCategoryInput(t.category))
       .filter((c) => c.length > 0);
-    const fromSalaryTitles = (data?.salaryEvents ?? [])
+    const fromSalaryTitles = allSalaryEvents
       .map((s) => normalizeCategoryInput(s.title))
       .filter((c) => c.length > 0);
 
     return Array.from(new Set([...savedIncomeCategories, ...fromTx, ...fromSalaryTitles]));
-  }, [data, savedIncomeCategories]);
+  }, [allSalaryEvents, data, savedIncomeCategories]);
 
   useEffect(() => {
     if (!settingsModalOpen) return;
     setExpenseCategoryDraft("");
     setIncomeCategoryDraft("");
-  }, [settingsModalOpen]);
+    setSalaryConfigDraft(createEmptySalaryConfigDraft(today));
+    setSalaryConfigEditId(null);
+  }, [settingsModalOpen, today]);
 
   const expenseCategoriesWithDebt = useMemo(() => {
     const debtCategory = "Debt";
@@ -764,19 +886,20 @@ export default function App() {
   const vacationModalRange = useMemo(() => {
     const start = vacationModalStart <= vacationModalEnd ? vacationModalStart : vacationModalEnd;
     const end = vacationModalStart <= vacationModalEnd ? vacationModalEnd : vacationModalStart;
-    const days = getVacationChargeableDays(start, end);
+    const days = getVacationChargeableDays(start, end, productionCalendarDays);
     return { start, end, days };
-  }, [vacationModalEnd, vacationModalStart]);
+  }, [productionCalendarDays, vacationModalEnd, vacationModalStart]);
   const vacationModalPayoutAmount = useMemo(() => {
-    if (!data || vacationModalType === "unpaid") return 0;
+    if (!viewData || vacationModalType === "unpaid") return 0;
     return calculateVacationPayout({
-      salaryEvents: data.salaryEvents ?? [],
-      vacations: data.vacations ?? [],
+      salaryEvents: viewData.salaryEvents ?? [],
+      vacations: viewData.vacations ?? [],
       vacationStartDate: vacationModalRange.start,
       vacationEndDate: vacationModalRange.end,
       vacationType: vacationModalType,
+      productionCalendarDays,
     });
-  }, [data, vacationModalRange.end, vacationModalRange.start, vacationModalType]);
+  }, [productionCalendarDays, vacationModalRange.end, vacationModalRange.start, vacationModalType, viewData]);
 
   function txModalTitle(type: "income" | "expense" | "planned_expense") {
     if (type === "income") return "Add income";
@@ -919,6 +1042,8 @@ export default function App() {
     setSalaryModalAmount("");
     setSalaryModalTitle("Salary");
     setSalaryModalKind("regular");
+    setSalaryModalAccrualMonth(inferSalaryEventAccrualMonth(date) ?? "");
+    setSalaryModalCheckResult(null);
     setSalaryModalOpen(true);
   }
 
@@ -927,6 +1052,43 @@ export default function App() {
     setSalaryModalAmount("");
     setSalaryModalTitle("Salary");
     setSalaryModalKind("regular");
+    setSalaryModalAccrualMonth("");
+    setSalaryModalCheckResult(null);
+  }
+
+  function handleCheckSalaryModal() {
+    const monthlySalaryAmount = toKop(salaryModalAmount);
+    if (monthlySalaryAmount <= 0) {
+      setSalaryModalCheckResult(null);
+      return;
+    }
+
+    setSalaryModalCheckResult(
+      estimateManualSalaryForDate({
+        enteredAmount: monthlySalaryAmount,
+        payoutDate: salaryModalDate,
+        accrualMonth:
+          normalizeSalaryEventAccrualMonth(salaryModalAccrualMonth)
+          ?? inferSalaryEventAccrualMonth(salaryModalDate)
+          ?? salaryModalDate.slice(0, 7),
+        title: salaryModalTitle.trim() || "Salary",
+        salaryEvents: allSalaryEvents,
+        vacations: data?.vacations ?? [],
+        workSchedule,
+        offDays: data?.offDays ?? [],
+        productionCalendarDays,
+      })
+    );
+  }
+
+  function applyCheckedSalaryAmount() {
+    if (!salaryModalCheckResult) return;
+
+    const rubles = (salaryModalCheckResult.amount / 100)
+      .toFixed(2)
+      .replace(/\.00$/, "")
+      .replace(/(\.\d*[1-9])0$/, "$1");
+    setSalaryModalAmount(rubles);
   }
 
   function handleCalendarDayTileClick(date: string) {
@@ -1068,6 +1230,7 @@ export default function App() {
         amount,
         title,
         kind: salaryModalKind,
+        accrualMonth: normalizeSalaryEventAccrualMonth(salaryModalAccrualMonth),
       });
 
       setData(updated);
@@ -1235,6 +1398,74 @@ export default function App() {
     }
   }
 
+  function beginEditSalaryConfig(config: SalaryConfig) {
+    setSalaryConfigDraft({
+      id: config.id,
+      effectiveFrom: config.effectiveFrom,
+      amount: String(config.amount / 100),
+      advancePercent: String(config.advancePercent),
+      advanceDay: String(config.advanceDay),
+      salaryDay: String(config.salaryDay),
+    });
+    setSalaryConfigEditId(config.id);
+  }
+
+  function resetSalaryConfigDraft() {
+    setSalaryConfigDraft(createEmptySalaryConfigDraft(today));
+    setSalaryConfigEditId(null);
+  }
+
+  async function saveSalaryConfig() {
+    const amount = Math.max(0, toKop(salaryConfigDraft.amount));
+    const effectiveFrom = salaryConfigDraft.effectiveFrom;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
+      alert("Pick the date from which the salary starts.");
+      return;
+    }
+
+    if (amount <= 0) {
+      alert("Enter the monthly salary amount.");
+      return;
+    }
+
+    const advancePercent = Math.min(100, Math.max(0, Number.parseInt(salaryConfigDraft.advancePercent || "0", 10)));
+    const advanceDay = Math.min(31, Math.max(1, Number.parseInt(salaryConfigDraft.advanceDay || "1", 10)));
+    const salaryDay = Math.min(31, Math.max(1, Number.parseInt(salaryConfigDraft.salaryDay || "1", 10)));
+
+    const nextConfig: SalaryConfig = {
+      ...salaryConfigDraft,
+      id: salaryConfigEditId ?? salaryConfigDraft.id,
+      amount,
+      advancePercent,
+      advanceDay,
+      salaryDay,
+    };
+
+    const nextConfigs = salaryConfigEditId
+      ? salaryConfigs.map((config) => (config.id === salaryConfigEditId ? nextConfig : config))
+      : [...salaryConfigs, { ...nextConfig, id: "" }];
+
+    try {
+      const updated = await api.setSalaryConfigs(nextConfigs);
+      setData(updated);
+      resetSalaryConfigDraft();
+    } catch (err) {
+      alert(String(err));
+    }
+  }
+
+  async function handleDeleteSalaryConfig(id: string) {
+    try {
+      const updated = await api.setSalaryConfigs(salaryConfigs.filter((config) => config.id !== id));
+      setData(updated);
+      if (salaryConfigEditId === id) {
+        resetSalaryConfigDraft();
+      }
+    } catch (err) {
+      alert(String(err));
+    }
+  }
+
   async function exportBackupFile() {
     try {
       const ts = ymd(new Date());
@@ -1391,6 +1622,9 @@ export default function App() {
     setEditSalaryModalAmount(String(s.amount / 100));
     setEditSalaryModalTitle(s.title);
     setEditSalaryModalKind(normalizeSalaryEventKind(s.kind));
+    setEditSalaryModalAccrualMonth(
+      normalizeSalaryEventAccrualMonth(s.accrualMonth) ?? inferSalaryEventAccrualMonth(s.date) ?? "",
+    );
     setEditSalaryModalOpen(true);
   }
 
@@ -1407,6 +1641,7 @@ export default function App() {
     setEditSalaryModalAmount("");
     setEditSalaryModalTitle("Salary");
     setEditSalaryModalKind("regular");
+    setEditSalaryModalAccrualMonth("");
   }
 
   async function submitEditSalaryModal() {
@@ -1422,6 +1657,7 @@ export default function App() {
         amount,
         title,
         kind: editSalaryModalKind,
+        accrualMonth: normalizeSalaryEventAccrualMonth(editSalaryModalAccrualMonth),
       });
       setData(updated);
       closeEditSalaryModal();
@@ -1559,7 +1795,7 @@ export default function App() {
         }}
       >
         <GeneralStatsSurface
-          data={data}
+          data={viewData}
           monthKey={monthKey}
           year={year}
           today={today}
@@ -1626,12 +1862,12 @@ export default function App() {
               fontSize: 12,
               padding: "2px 8px",
               borderRadius: 999,
-              border: `1px solid ${vacationForSelectedDate ? "#a37500" : (selectedDateIsWorking ? "#1c7f4d" : "#bf3a3a")}`,
-              color: vacationForSelectedDate ? "#7a5200" : (selectedDateIsWorking ? "#1c7f4d" : "#bf3a3a"),
-              background: vacationForSelectedDate ? "#ffe07a" : (selectedDateIsWorking ? "#cfead8" : "#f2cfd3"),
+              border: `1px solid ${selectedDateStatus.border}`,
+              color: selectedDateStatus.color,
+              background: selectedDateStatus.background,
             }}
           >
-            {vacationForSelectedDate ? "Vacation" : (selectedDateIsWorking ? "Working" : "Day off")}
+            {selectedDateStatus.label}
           </div>
         </div>
         <SelectedDateBudgetSummary
@@ -1665,6 +1901,7 @@ export default function App() {
         selectedDate={selectedDate}
         data={data}
         workSchedule={workSchedule}
+        productionCalendarDays={productionCalendarDays}
         isPickingCustomWorkDays={isPickingCustomWorkDays}
         customWorkingDays={customWorkingDays}
         isCalendarPickerFocus={isCalendarPickerFocus}
@@ -1769,7 +2006,8 @@ export default function App() {
             <VacationsPanel
               vacations={vacationsInManagerRange}
               dateFormat={dateFormat}
-              salaryEvents={data?.salaryEvents ?? []}
+              salaryEvents={allSalaryEvents}
+              productionCalendarDays={productionCalendarDays}
               vacationDaysCount={vacationDaysCount}
               vacationDaysLeft={vacationDaysLeft}
               vacationTypeMenuOpen={vacationTypeMenuOpen}
@@ -2015,6 +2253,130 @@ export default function App() {
                   <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
                     {"Applies to all displayed dates. Internal storage stays in YYYY-MM-DD."}
                   </div>
+                </div>
+
+                <div className="surface" style={{ padding: 10 }}>
+                  <div style={{ fontSize: 13, marginBottom: 8 }}><b>{"Fixed salary schedule"}</b></div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>{"Effective from"}</span>
+                      <DateInputWithCalendar
+                        value={salaryConfigDraft.effectiveFrom}
+                        dateFormat={dateFormat}
+                        onChange={(value) => setSalaryConfigDraft((draft) => ({ ...draft, effectiveFrom: value }))}
+                      />
+                    </label>
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>{"Monthly salary"}</span>
+                      <input
+                        value={salaryConfigDraft.amount}
+                        onChange={(e) => setSalaryConfigDraft((draft) => ({ ...draft, amount: e.target.value }))}
+                        placeholder="0"
+                      />
+                    </label>
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>{"Advance share, %"}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={salaryConfigDraft.advancePercent}
+                        onChange={(e) => setSalaryConfigDraft((draft) => ({ ...draft, advancePercent: e.target.value }))}
+                      />
+                    </label>
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>{"Advance day"}</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={salaryConfigDraft.advanceDay}
+                        onChange={(e) => setSalaryConfigDraft((draft) => ({ ...draft, advanceDay: e.target.value }))}
+                      />
+                    </label>
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>{"Salary day"}</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={salaryConfigDraft.salaryDay}
+                        onChange={(e) => setSalaryConfigDraft((draft) => ({ ...draft, salaryDay: e.target.value }))}
+                      />
+                    </label>
+                  </div>
+
+                  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
+                    {`Split preview: ${salaryConfigDraft.advancePercent || "0"}/${Math.max(
+                      0,
+                      100 - (Number.parseInt(salaryConfigDraft.advancePercent || "0", 10) || 0)
+                    )}. If a payout date lands on Saturday or Sunday, it moves to Friday.`}
+                  </div>
+
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button onClick={() => { void saveSalaryConfig(); }}>
+                      {salaryConfigEditId ? "Update salary schedule" : "Add salary schedule"}
+                    </button>
+                    {salaryConfigEditId ? (
+                      <button onClick={resetSalaryConfigDraft}>
+                        {"Cancel edit"}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+                    {"Manual salary entries stay untouched and are added on top of this automatic schedule."}
+                  </div>
+
+                  {salaryConfigs.length > 0 ? (
+                    <div className="panel-list" style={{ marginTop: 10 }}>
+                      {salaryConfigs.map((config) => (
+                        <div
+                          className="panel-item"
+                          key={config.id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 10,
+                            border: "1px solid #eee",
+                            borderRadius: 10,
+                            padding: "8px 10px",
+                          }}
+                        >
+                          <div style={{ fontSize: 12 }}>
+                            <div>
+                              <b>{formatDateForDisplay(config.effectiveFrom, dateFormat)}</b>
+                              {` • ${rub(config.amount)} • ${config.advancePercent}/${100 - config.advancePercent}`}
+                            </div>
+                            <div style={{ opacity: 0.75, marginTop: 2 }}>
+                              {`Advance: ${config.advanceDay}, salary: ${config.salaryDay}`}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button
+                              className="edit-pencil-btn"
+                              style={{ width: 26, minWidth: 26, minHeight: 26, borderRadius: 8 }}
+                              onClick={() => beginEditSalaryConfig(config)}
+                              aria-label="Edit fixed salary"
+                              title="Edit fixed salary"
+                            >
+                              <AppIcon name="edit" />
+                            </button>
+                            <button
+                              title="Delete fixed salary"
+                              aria-label="Delete fixed salary"
+                              className="icon-button"
+                              style={{ color: "var(--danger)", minHeight: 26, padding: 0, width: 26, minWidth: 26 }}
+                              onClick={() => { void handleDeleteSalaryConfig(config.id); }}
+                            >
+                              <AppIcon name="delete" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
                 <label className="surface" style={{ padding: 10, display: "block" }}>
@@ -2504,7 +2866,10 @@ export default function App() {
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
                 <input
                   value={salaryModalAmount}
-                  onChange={(e) => setSalaryModalAmount(e.target.value)}
+                  onChange={(e) => {
+                    setSalaryModalAmount(e.target.value);
+                    setSalaryModalCheckResult(null);
+                  }}
                   placeholder="80000"
                   inputMode="decimal"
                   style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
@@ -2515,8 +2880,24 @@ export default function App() {
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Title"}</div>
                 <input
                   value={salaryModalTitle}
-                  onChange={(e) => setSalaryModalTitle(e.target.value)}
+                  onChange={(e) => {
+                    setSalaryModalTitle(e.target.value);
+                    setSalaryModalCheckResult(null);
+                  }}
                   placeholder={"Salary"}
+                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                />
+              </div>
+
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Accrual month"}</div>
+                <input
+                  type="month"
+                  value={salaryModalAccrualMonth}
+                  onChange={(e) => {
+                    setSalaryModalAccrualMonth(e.target.value);
+                    setSalaryModalCheckResult(null);
+                  }}
                   style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                 />
               </div>
@@ -2525,13 +2906,79 @@ export default function App() {
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Vacation pay calculation"}</div>
                 <select
                   value={salaryModalKind}
-                  onChange={(e) => setSalaryModalKind(e.target.value as SalaryEventKind)}
+                  onChange={(e) => {
+                    setSalaryModalKind(e.target.value as SalaryEventKind);
+                    setSalaryModalCheckResult(null);
+                  }}
                   style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                 >
                   <option value="regular">{salaryEventKindLabel("regular")}</option>
                   <option value="vacation_pay">{salaryEventKindLabel("vacation_pay")}</option>
                   <option value="excluded">{salaryEventKindLabel("excluded")}</option>
                 </select>
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid #eee",
+                  borderRadius: 10,
+                  padding: 10,
+                  background: "#fafafa",
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>
+                    {"Estimate the payout for this date from the monthly amount, using workdays and public holidays."}
+                  </div>
+                  <button type="button" onClick={handleCheckSalaryModal}>
+                    {"Check salary"}
+                  </button>
+                </div>
+                {salaryModalCheckResult ? (
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <div style={{ fontSize: 12 }}>
+                      <b>
+                        {salaryModalCheckResult.payoutKind === "first_half"
+                          ? "Estimated first-half payout"
+                          : "Estimated second-half payout"}
+                      </b>
+                      <span style={{ marginLeft: 8 }}>{rub(salaryModalCheckResult.amount)}</span>
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>
+                      {`${salaryModalCheckResult.payablePeriodWorkingDays} payable working days in the period, ${salaryModalCheckResult.payableMonthWorkingDays} payable of ${salaryModalCheckResult.monthWorkingDays} working days for ${salaryModalCheckResult.payrollMonth}`}
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>
+                      {`${formatDateForDisplay(salaryModalCheckResult.periodStart, dateFormat)} -> ${formatDateForDisplay(salaryModalCheckResult.periodEnd, dateFormat)}`}
+                    </div>
+                    {salaryModalCheckResult.vacationWorkingDaysExcluded > 0 ? (
+                      <div style={{ fontSize: 12, opacity: 0.8 }}>
+                        {`Vacation excluded ${salaryModalCheckResult.vacationWorkingDaysExcluded} working day(s) from the month salary calculation.`}
+                      </div>
+                    ) : null}
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>
+                      {`Monthly base: ${rub(salaryModalCheckResult.monthlySalaryAmount)} (${salaryModalCheckResult.source === "history" ? "from previous payouts" : "from entered amount"})`}
+                    </div>
+                    {salaryModalCheckResult.previouslyRecordedAmount > 0 ? (
+                      <div style={{ fontSize: 12, opacity: 0.8 }}>
+                        {`Already recorded for ${salaryModalCheckResult.payrollMonth}: ${rub(salaryModalCheckResult.previouslyRecordedAmount)}`}
+                      </div>
+                    ) : null}
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>
+                      {salaryModalCheckResult.deltaFromEntered === 0
+                        ? "Entered amount matches the estimate."
+                        : salaryModalCheckResult.deltaFromEntered > 0
+                          ? `Entered amount is ${rub(salaryModalCheckResult.deltaFromEntered)} above the estimate.`
+                          : `Entered amount is ${rub(Math.abs(salaryModalCheckResult.deltaFromEntered))} below the estimate.`}
+                    </div>
+                    <div>
+                      <button type="button" onClick={applyCheckedSalaryAmount}>
+                        {"Use estimated amount"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -2550,10 +2997,12 @@ export default function App() {
         amount={editSalaryModalAmount}
         title={editSalaryModalTitle}
         kind={editSalaryModalKind}
+        accrualMonth={editSalaryModalAccrualMonth}
         onDateChange={setEditSalaryModalDate}
         onAmountChange={setEditSalaryModalAmount}
         onTitleChange={setEditSalaryModalTitle}
         onKindChange={setEditSalaryModalKind}
+        onAccrualMonthChange={setEditSalaryModalAccrualMonth}
         onClose={closeEditSalaryModal}
         onSubmit={() => { void submitEditSalaryModal(); }}
       />

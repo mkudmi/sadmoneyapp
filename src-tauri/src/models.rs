@@ -80,6 +80,9 @@ pub struct Settings {
     #[serde(rename = "dateFormat")]
     #[serde(default = "default_date_format")]
     pub date_format: String,
+    #[serde(rename = "salaryConfigs")]
+    #[serde(default)]
+    pub salary_configs: Vec<SalaryConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -137,6 +140,7 @@ impl Default for Settings {
             last_daily_limit_carryover_date: String::new(),
             language: default_language(),
             date_format: default_date_format(),
+            salary_configs: vec![],
         }
     }
 }
@@ -147,8 +151,25 @@ pub struct SalaryEvent {
     pub date: String, // YYYY-MM-DD
     pub amount: i64,  // копейки
     pub title: String,
+    #[serde(rename = "accrualMonth")]
+    #[serde(default)]
+    pub accrual_month: Option<String>,
     #[serde(default = "default_salary_event_kind")]
     pub kind: SalaryEventKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SalaryConfig {
+    pub id: String,
+    #[serde(rename = "effectiveFrom")]
+    pub effective_from: String,
+    pub amount: i64,
+    #[serde(rename = "advancePercent")]
+    pub advance_percent: i32,
+    #[serde(rename = "advanceDay")]
+    pub advance_day: u32,
+    #[serde(rename = "salaryDay")]
+    pub salary_day: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

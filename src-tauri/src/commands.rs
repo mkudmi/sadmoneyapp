@@ -1,7 +1,7 @@
-use crate::models::{AppData, Debt, OffDay, SalaryEvent, Transaction, TxType, Vacation, WorkSchedule};
+use crate::models::{AppData, Debt, OffDay, SalaryConfig, SalaryEvent, Transaction, TxType, Vacation, WorkSchedule};
 use crate::storage;
 use anyhow::Result;
-use chrono::NaiveDate;
+use chrono::{Datelike, Duration, NaiveDate, Weekday};
 use tauri::AppHandle;
 use uuid::Uuid;
 
@@ -24,6 +24,173 @@ fn normalize_date_format(s: &str) -> Option<String> {
         "yyyy-mm-dd" => Some("yyyy-mm-dd".to_string()),
         _ => None,
     }
+}
+
+fn normalize_accrual_month(s: &str) -> Option<String> {
+    let trimmed = s.trim();
+    let mut parts = trimmed.split('-');
+    let year = parts.next()?.parse::<i32>().ok()?;
+    let month = parts.next()?.parse::<u32>().ok()?;
+    if parts.next().is_some() || !(1..=12).contains(&month) {
+        return None;
+    }
+    Some(format!("{year:04}-{month:02}"))
+}
+
+fn clamp_salary_day(year: i32, month: u32, day: u32) -> u32 {
+    let mut candidate = day.clamp(1, 31);
+    while NaiveDate::from_ymd_opt(year, month, candidate).is_none() && candidate > 1 {
+        candidate -= 1;
+    }
+    candidate
+}
+
+fn shift_to_previous_workday(date: NaiveDate) -> NaiveDate {
+    match date.weekday() {
+        Weekday::Sat => date - Duration::days(1),
+        Weekday::Sun => date - Duration::days(2),
+        _ => date,
+    }
+}
+
+fn normalize_salary_config(raw: SalaryConfig) -> Result<SalaryConfig, String> {
+    let effective_from = raw.effective_from.trim().to_string();
+    parse_date(&effective_from).map_err(|e| e.to_string())?;
+
+    let advance_percent = raw.advance_percent.clamp(0, 100);
+    let advance_day = raw.advance_day.clamp(1, 31);
+    let salary_day = raw.salary_day.clamp(1, 31);
+    let amount = raw.amount.max(0);
+
+    Ok(SalaryConfig {
+        id: if raw.id.trim().is_empty() {
+            format!("salary_cfg_{}", Uuid::new_v4())
+        } else {
+            raw.id.trim().to_string()
+        },
+        effective_from,
+        amount,
+        advance_percent,
+        advance_day,
+        salary_day,
+    })
+}
+
+fn normalized_salary_configs(configs: &[SalaryConfig]) -> Result<Vec<SalaryConfig>, String> {
+    let mut out = Vec::with_capacity(configs.len());
+    for config in configs {
+        out.push(normalize_salary_config(config.clone())?);
+    }
+    out.sort_by(|a, b| {
+        a.effective_from
+            .cmp(&b.effective_from)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    Ok(out)
+}
+
+fn generated_salary_events_between(
+    configs: &[SalaryConfig],
+    range_start: NaiveDate,
+    range_end: NaiveDate,
+) -> Vec<SalaryEvent> {
+    if configs.is_empty() || range_end < range_start {
+        return Vec::new();
+    }
+
+    let normalized = match normalized_salary_configs(configs) {
+        Ok(value) => value,
+        Err(_) => return Vec::new(),
+    };
+    let end_with_weekend_shift = range_end + Duration::days(7);
+    let mut events = Vec::new();
+
+    for (index, config) in normalized.iter().enumerate() {
+        if config.amount <= 0 {
+            continue;
+        }
+
+        let effective_from = match parse_date(&config.effective_from) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let next_effective = normalized
+            .get(index + 1)
+            .and_then(|next| parse_date(&next.effective_from).ok());
+
+        let mut cursor = NaiveDate::from_ymd_opt(range_start.year(), range_start.month(), 1)
+            .unwrap_or(range_start);
+        while cursor <= end_with_weekend_shift {
+            let year = cursor.year();
+            let month = cursor.month();
+            let advance_base_day = clamp_salary_day(year, month, config.advance_day);
+            let salary_base_day = clamp_salary_day(year, month, config.salary_day);
+
+            let candidates = [
+                (
+                    "Advance",
+                    "advance",
+                    shift_to_previous_workday(
+                        NaiveDate::from_ymd_opt(year, month, advance_base_day).unwrap_or(cursor),
+                    ),
+                    ((config.amount as i128) * (config.advance_percent as i128) / 100) as i64,
+                ),
+                (
+                    "Salary",
+                    "salary",
+                    shift_to_previous_workday(
+                        NaiveDate::from_ymd_opt(year, month, salary_base_day).unwrap_or(cursor),
+                    ),
+                    config.amount
+                        - (((config.amount as i128) * (config.advance_percent as i128) / 100) as i64),
+                ),
+            ];
+
+            for (title, payout_type, date, amount) in candidates {
+                if amount <= 0 {
+                    continue;
+                }
+                if date < range_start || date > range_end {
+                    continue;
+                }
+                if date < effective_from {
+                    continue;
+                }
+                if let Some(next_start) = next_effective {
+                    if date >= next_start {
+                        continue;
+                    }
+                }
+
+                events.push(SalaryEvent {
+                    id: format!(
+                        "auto_{}_{}_{}",
+                        config.id,
+                        payout_type,
+                        date.format("%Y-%m-%d")
+                    ),
+                    date: date.format("%Y-%m-%d").to_string(),
+                    amount,
+                    title: title.to_string(),
+                    accrual_month: None,
+                    kind: crate::models::SalaryEventKind::Regular,
+                });
+            }
+
+            let next_month = if month == 12 {
+                NaiveDate::from_ymd_opt(year + 1, 1, 1)
+            } else {
+                NaiveDate::from_ymd_opt(year, month + 1, 1)
+            };
+            let Some(next_month) = next_month else {
+                break;
+            };
+            cursor = next_month;
+        }
+    }
+
+    events.sort_by(|a, b| a.date.cmp(&b.date).then_with(|| a.title.cmp(&b.title)));
+    events
 }
 
 fn remember_category(settings: &mut crate::models::Settings, tx_type: &TxType, category: &str) {
@@ -184,6 +351,14 @@ pub fn set_user_preferences(
 }
 
 #[tauri::command]
+pub fn set_salary_configs(app: AppHandle, salary_configs: Vec<SalaryConfig>) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    data.settings.salary_configs = normalized_salary_configs(&salary_configs)?;
+    save(&app, &data)?;
+    Ok(data)
+}
+
+#[tauri::command]
 pub fn apply_daily_limit_carryover(
     app: AppHandle,
     amount: i64,
@@ -272,6 +447,13 @@ pub fn upsert_salary_event(app: AppHandle, mut ev: SalaryEvent) -> Result<AppDat
         ev.id = format!("sal_{}", Uuid::new_v4());
     }
     ev.amount = ev.amount.saturating_abs();
+    ev.accrual_month = match ev.accrual_month.as_deref() {
+        Some(raw) if raw.trim().is_empty() => None,
+        Some(raw) => normalize_accrual_month(raw)
+            .ok_or_else(|| "accrualMonth must be in YYYY-MM format".to_string())
+            .map(Some)?,
+        None => None,
+    };
 
     let idx = data.salary_events.iter().position(|x| x.id == ev.id);
     match idx {
@@ -456,10 +638,23 @@ pub struct DailyBudgetResult {
 pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudgetResult, String> {
     let data = load(&app)?;
     let from = parse_date(&from_date).map_err(|e| e.to_string())?;
+    let generated_start = data
+        .settings
+        .salary_configs
+        .iter()
+        .filter_map(|config| parse_date(&config.effective_from).ok())
+        .min()
+        .unwrap_or(from);
+    let generated_salary_events = generated_salary_events_between(
+        &data.settings.salary_configs,
+        generated_start,
+        from + Duration::days(400),
+    );
+    let mut all_salary_events = data.salary_events.clone();
+    all_salary_events.extend(generated_salary_events);
 
     // Найти ближайшую зарплату строго после from_date
-    let next_date = data
-        .salary_events
+    let next_date = all_salary_events
         .iter()
         .filter_map(|s| parse_date(&s.date).ok())
         .filter(|d| *d > from)
@@ -488,7 +683,7 @@ pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudge
     let mut balance: i64 = 0;
     let mut balance_for_limit: i64 = 0;
 
-    for s in &data.salary_events {
+    for s in &all_salary_events {
         if let Ok(d) = parse_date(&s.date) {
             if d <= from {
                 balance += s.amount;

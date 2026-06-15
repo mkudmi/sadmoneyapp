@@ -1,6 +1,11 @@
 import { SalaryEvent, Vacation } from "./api";
 import { daysInMonth, parseYmdLocal, ymd } from "./date";
-import { isSalaryEventIncludedInVacationAverage, normalizeSalaryEventKind } from "./salaryEvent";
+import type { RussianProductionCalendarDay } from "./russianProductionCalendar";
+import {
+  getSalaryEventAccrualMonth,
+  isSalaryEventIncludedInVacationAverage,
+  normalizeSalaryEventKind,
+} from "./salaryEvent";
 
 const AVERAGE_MONTH_CALENDAR_DAYS = 29.3;
 const RUSSIAN_PUBLIC_HOLIDAYS = new Set([
@@ -24,6 +29,7 @@ type VacationPayAverageArgs = {
   salaryEvents: SalaryEvent[];
   vacations: Vacation[];
   vacationStartDate: string;
+  productionCalendarDays?: ReadonlyMap<string, RussianProductionCalendarDay> | null;
 };
 
 type VacationPayoutArgs = VacationPayAverageArgs & {
@@ -31,21 +37,37 @@ type VacationPayoutArgs = VacationPayAverageArgs & {
   vacationType?: string;
 };
 
-export function isRussianPublicHoliday(date: string) {
+export function isRussianPublicHoliday(
+  date: string,
+  productionCalendarDays?: ReadonlyMap<string, RussianProductionCalendarDay> | null,
+) {
+  const calendarDay = productionCalendarDays?.get(date);
+  if (calendarDay) {
+    return calendarDay.type === "public_holiday";
+  }
+
   return RUSSIAN_PUBLIC_HOLIDAYS.has(date.slice(5));
 }
 
-function shouldExcludeVacationDateFromAverage(vacation: Vacation, date: string) {
+function shouldExcludeVacationDateFromAverage(
+  vacation: Vacation,
+  date: string,
+  productionCalendarDays?: ReadonlyMap<string, RussianProductionCalendarDay> | null,
+) {
   if (vacation.vacation_type === "unpaid") {
     return true;
   }
 
   // Paid vacation excludes only the days preserved by average earnings.
   // Public holidays inside the vacation period are not paid as vacation days.
-  return !isRussianPublicHoliday(date);
+  return !isRussianPublicHoliday(date, productionCalendarDays);
 }
 
-export function getVacationChargeableDays(startDate: string, endDate: string) {
+export function getVacationChargeableDays(
+  startDate: string,
+  endDate: string,
+  productionCalendarDays?: ReadonlyMap<string, RussianProductionCalendarDay> | null,
+) {
   if (startDate > endDate) return 0;
 
   let total = 0;
@@ -54,7 +76,7 @@ export function getVacationChargeableDays(startDate: string, endDate: string) {
 
   while (cursor <= end) {
     const date = ymd(cursor);
-    if (!isRussianPublicHoliday(date)) {
+    if (!isRussianPublicHoliday(date, productionCalendarDays)) {
       total += 1;
     }
     cursor.setDate(cursor.getDate() + 1);
@@ -82,7 +104,13 @@ export function calculateVacationAverageDailyPay(args: VacationPayAverageArgs) {
     const earningsTotal = args.salaryEvents.reduce((sum, event) => {
       const kind = normalizeSalaryEventKind(event.kind);
       if (!isSalaryEventIncludedInVacationAverage(kind)) return sum;
-      if (event.date < ymd(periodStart) || event.date > ymd(periodEnd)) return sum;
+      const accrualMonth = getSalaryEventAccrualMonth(event);
+      if (accrualMonth) {
+        const eventMonthStart = `${accrualMonth}-01`;
+        if (eventMonthStart < ymd(periodStart) || eventMonthStart > ymd(periodEnd)) return sum;
+      } else if (event.date < ymd(periodStart) || event.date > ymd(periodEnd)) {
+        return sum;
+      }
       return sum + event.amount;
     }, 0);
 
@@ -104,7 +132,7 @@ export function calculateVacationAverageDailyPay(args: VacationPayAverageArgs) {
         const overlapEndDate = parseYmdLocal(overlapEnd);
         while (cursor <= overlapEndDate) {
           const date = ymd(cursor);
-          if (shouldExcludeVacationDateFromAverage(vacation, date)) {
+          if (shouldExcludeVacationDateFromAverage(vacation, date, args.productionCalendarDays)) {
             excludedDates.add(date);
           }
           cursor.setDate(cursor.getDate() + 1);
@@ -138,6 +166,10 @@ export function calculateVacationAverageDailyPay(args: VacationPayAverageArgs) {
 export function calculateVacationPayout(args: VacationPayoutArgs) {
   if (args.vacationType === "unpaid") return 0;
   const averageDailyPay = calculateVacationAverageDailyPay(args);
-  const chargeableDays = getVacationChargeableDays(args.vacationStartDate, args.vacationEndDate);
+  const chargeableDays = getVacationChargeableDays(
+    args.vacationStartDate,
+    args.vacationEndDate,
+    args.productionCalendarDays,
+  );
   return averageDailyPay * chargeableDays;
 }

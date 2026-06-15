@@ -1,6 +1,13 @@
 import { Dispatch, RefObject, SetStateAction } from "react";
 import { AppData, OffDay, TxType } from "../lib/api";
 import { rub } from "../lib/money";
+import {
+  getRussianProductionCalendarDay,
+  getRussianProductionCalendarDayTone,
+  isRussianProductionCalendarDayOff,
+  isRussianWorkingWeekend,
+  type RussianProductionCalendarDay,
+} from "../lib/russianProductionCalendar";
 import { AppIcon } from "./AppIcon";
 
 type CalendarSurfaceProps = {
@@ -11,6 +18,7 @@ type CalendarSurfaceProps = {
   selectedDate: string;
   data: AppData | null;
   workSchedule: "5/2" | "custom";
+  productionCalendarDays: ReadonlyMap<string, RussianProductionCalendarDay>;
   isPickingCustomWorkDays: boolean;
   customWorkingDays: string[];
   isCalendarPickerFocus: boolean;
@@ -27,7 +35,7 @@ type CalendarSurfaceProps = {
   onToggleWorkingDay: (params: {
     date: string;
     effectiveWorking: boolean;
-    isWeekend: boolean;
+    defaultWorking: boolean;
     offForDay: OffDay | null;
   }) => Promise<void>;
 };
@@ -41,6 +49,7 @@ export function CalendarSurface(props: CalendarSurfaceProps) {
     selectedDate,
     data,
     workSchedule,
+    productionCalendarDays,
     isPickingCustomWorkDays,
     customWorkingDays,
     isCalendarPickerFocus,
@@ -103,10 +112,22 @@ export function CalendarSurface(props: CalendarSurfaceProps) {
         const isSel = d === selectedDate;
         const vacForDay = (data?.vacations ?? []).find((v) => v.start_date <= d && d <= v.end_date) ?? null;
         const offForDay = (data?.offDays ?? []).find((o) => o.date === d) ?? null;
+        const productionCalendarDay = getRussianProductionCalendarDay(d, productionCalendarDays);
+        const productionTone = productionCalendarDay
+          ? getRussianProductionCalendarDayTone(productionCalendarDay.type)
+          : null;
 
         const dayOfWeek = new Date(d).getDay(); // 0 = Sunday, 6 = Saturday
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-        const defaultWorking = workSchedule === "5/2" ? !isWeekend : false;
+        const defaultWorking = workSchedule === "5/2"
+          ? (
+              isRussianWorkingWeekend(d, productionCalendarDays)
+                ? true
+                : isRussianProductionCalendarDayOff(d, productionCalendarDays)
+                  ? false
+                  : !isWeekend
+            )
+          : false;
         const effectiveWorking = offForDay ? !!offForDay.is_working : defaultWorking;
         const weekendHighlight = workSchedule === "5/2" && isWeekend && !effectiveWorking;
         const vacationHighlight = vacForDay !== null;
@@ -119,6 +140,8 @@ export function CalendarSurface(props: CalendarSurfaceProps) {
           ? (isCustomMarkedWorking ? "rgba(30, 160, 90, 0.18)" : "transparent")
           : vacationHighlight
             ? "rgba(255, 223, 99, 0.25)"
+            : productionTone
+              ? productionTone.tileBackground
             : isCustomMainView
               ? (isCustomNonWorking ? "rgba(210, 20, 20, 0.10)" : "#fff")
               : isCustomNonWorking
@@ -134,6 +157,8 @@ export function CalendarSurface(props: CalendarSurfaceProps) {
           ? (isCustomMarkedWorking ? "#17653e" : undefined)
           : vacationHighlight
             ? "#7a5200"
+            : productionTone
+              ? productionTone.color
             : isCustomMainView
               ? (isCustomNonWorking ? "#b10000" : undefined)
               : isCustomNonWorking
@@ -254,7 +279,7 @@ export function CalendarSurface(props: CalendarSurfaceProps) {
                         await onToggleWorkingDay({
                           date: d,
                           effectiveWorking,
-                          isWeekend,
+                          defaultWorking,
                           offForDay,
                         });
                         setDayMenuOpen(null);
