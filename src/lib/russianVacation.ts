@@ -35,6 +35,16 @@ export function isRussianPublicHoliday(date: string) {
   return RUSSIAN_PUBLIC_HOLIDAYS.has(date.slice(5));
 }
 
+function shouldExcludeVacationDateFromAverage(vacation: Vacation, date: string) {
+  if (vacation.vacation_type === "unpaid") {
+    return true;
+  }
+
+  // Paid vacation excludes only the days preserved by average earnings.
+  // Public holidays inside the vacation period are not paid as vacation days.
+  return !isRussianPublicHoliday(date);
+}
+
 export function getVacationChargeableDays(startDate: string, endDate: string) {
   if (startDate > endDate) return 0;
 
@@ -61,8 +71,11 @@ export function calculateVacationAverageDailyPay(args: VacationPayAverageArgs) {
   );
 
   let anchorPeriodEnd = initialPeriodEnd;
+  const earliestSalaryDate = args.salaryEvents
+    .map((event) => event.date)
+    .sort((a, b) => a.localeCompare(b))[0] ?? null;
 
-  for (let attempt = 0; attempt < 6; attempt += 1) {
+  for (;;) {
     const periodEnd = new Date(anchorPeriodEnd.getFullYear(), anchorPeriodEnd.getMonth(), anchorPeriodEnd.getDate());
     const periodStart = new Date(periodEnd.getFullYear(), periodEnd.getMonth() - 11, 1);
 
@@ -90,7 +103,10 @@ export function calculateVacationAverageDailyPay(args: VacationPayAverageArgs) {
         const cursor = parseYmdLocal(overlapStart);
         const overlapEndDate = parseYmdLocal(overlapEnd);
         while (cursor <= overlapEndDate) {
-          excludedDates.add(ymd(cursor));
+          const date = ymd(cursor);
+          if (shouldExcludeVacationDateFromAverage(vacation, date)) {
+            excludedDates.add(date);
+          }
           cursor.setDate(cursor.getDate() + 1);
         }
       }
@@ -107,6 +123,10 @@ export function calculateVacationAverageDailyPay(args: VacationPayAverageArgs) {
 
     if (earningsTotal > 0 && denominator > 0) {
       return Math.round(earningsTotal / denominator);
+    }
+
+    if (earliestSalaryDate === null || ymd(periodStart) <= earliestSalaryDate) {
+      break;
     }
 
     anchorPeriodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth(), 0);
