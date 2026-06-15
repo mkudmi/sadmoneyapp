@@ -9,6 +9,7 @@ import { AppIcon } from "./AppIcon";
 
 type VacationsPanelProps = {
   vacations: Vacation[];
+  allVacations: Vacation[];
   dateFormat: DateFormat;
   salaryEvents: SalaryEvent[];
   productionCalendarDays?: ReadonlyMap<string, RussianProductionCalendarDay> | null;
@@ -26,6 +27,7 @@ type VacationsPanelProps = {
 export function VacationsPanel(props: VacationsPanelProps) {
   const {
     vacations,
+    allVacations,
     dateFormat,
     salaryEvents,
     productionCalendarDays,
@@ -126,7 +128,7 @@ export function VacationsPanel(props: VacationsPanelProps) {
                 ? rub(
                     calculateVacationPayout({
                       salaryEvents,
-                      vacations,
+                      vacations: allVacations,
                       vacationStartDate: vacation.start_date,
                       vacationEndDate: vacation.end_date,
                       vacationType: normalizedType,

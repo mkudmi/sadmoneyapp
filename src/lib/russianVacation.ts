@@ -150,7 +150,7 @@ export function calculateVacationAverageDailyPay(args: VacationPayAverageArgs) {
     }
 
     if (earningsTotal > 0 && denominator > 0) {
-      return Math.round(earningsTotal / denominator);
+      return earningsTotal / denominator;
     }
 
     if (earliestSalaryDate === null || ymd(periodStart) <= earliestSalaryDate) {
@@ -171,5 +171,5 @@ export function calculateVacationPayout(args: VacationPayoutArgs) {
     args.vacationEndDate,
     args.productionCalendarDays,
   );
-  return averageDailyPay * chargeableDays;
+  return Math.round(averageDailyPay * chargeableDays);
 }

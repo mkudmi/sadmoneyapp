@@ -4,6 +4,9 @@ import type { DateFormat } from "../lib/date";
 import { AppIcon } from "./AppIcon";
 import type { SalaryEventKind } from "../lib/salaryEvent";
 import { salaryEventKindLabel } from "../lib/salaryEvent";
+import type { ManualSalaryEstimate } from "../lib/salary";
+import { rub } from "../lib/money";
+import { formatDateForDisplay } from "../lib/date";
 
 type EditSalaryModalProps = {
   open: boolean;
@@ -13,11 +16,14 @@ type EditSalaryModalProps = {
   title: string;
   kind: SalaryEventKind;
   accrualMonth: string;
+  checkResult: ManualSalaryEstimate | null;
   onDateChange: (value: string) => void;
   onAmountChange: (value: string) => void;
   onTitleChange: (value: string) => void;
   onKindChange: (value: SalaryEventKind) => void;
   onAccrualMonthChange: (value: string) => void;
+  onCheck: () => void;
+  onUseEstimatedAmount: () => void;
   onClose: () => void;
   onSubmit: () => void;
 };
@@ -31,11 +37,14 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
     title,
     kind,
     accrualMonth,
+    checkResult,
     onDateChange,
     onAmountChange,
     onTitleChange,
     onKindChange,
     onAccrualMonthChange,
+    onCheck,
+    onUseEstimatedAmount,
     onClose,
     onSubmit,
   } = props;
@@ -122,6 +131,69 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
               <option value="vacation_pay">{salaryEventKindLabel("vacation_pay")}</option>
               <option value="excluded">{salaryEventKindLabel("excluded")}</option>
             </select>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid #eee",
+              borderRadius: 10,
+              padding: 10,
+              background: "#fafafa",
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>
+                {"Estimate the payout for this date from the monthly amount, using workdays and public holidays."}
+              </div>
+              <button type="button" onClick={onCheck}>
+                {"Check salary"}
+              </button>
+            </div>
+            {checkResult ? (
+              <div style={{ display: "grid", gap: 4 }}>
+                <div style={{ fontSize: 12 }}>
+                  <b>
+                    {checkResult.payoutKind === "first_half"
+                      ? "Estimated first-half payout"
+                      : "Estimated second-half payout"}
+                  </b>
+                  <span style={{ marginLeft: 8 }}>{rub(checkResult.amount)}</span>
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>
+                  {`${checkResult.payablePeriodWorkingDays} payable working days in the period, ${checkResult.payableMonthWorkingDays} payable of ${checkResult.monthWorkingDays} working days for ${checkResult.payrollMonth}`}
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>
+                  {`${formatDateForDisplay(checkResult.periodStart, dateFormat)} -> ${formatDateForDisplay(checkResult.periodEnd, dateFormat)}`}
+                </div>
+                {checkResult.vacationWorkingDaysExcluded > 0 ? (
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>
+                    {`Vacation excluded ${checkResult.vacationWorkingDaysExcluded} working day(s) from the month salary calculation.`}
+                  </div>
+                ) : null}
+                <div style={{ fontSize: 12, opacity: 0.8 }}>
+                  {`Monthly base: ${rub(checkResult.monthlySalaryAmount)} (${checkResult.source === "history" ? "from previous payouts" : "from entered amount"})`}
+                </div>
+                {checkResult.previouslyRecordedAmount > 0 ? (
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>
+                    {`Already recorded for ${checkResult.payrollMonth}: ${rub(checkResult.previouslyRecordedAmount)}`}
+                  </div>
+                ) : null}
+                <div style={{ fontSize: 12, opacity: 0.8 }}>
+                  {checkResult.deltaFromEntered === 0
+                    ? "Entered amount matches the estimate."
+                    : checkResult.deltaFromEntered > 0
+                      ? `Entered amount is ${rub(checkResult.deltaFromEntered)} above the estimate.`
+                      : `Entered amount is ${rub(Math.abs(checkResult.deltaFromEntered))} below the estimate.`}
+                </div>
+                <div>
+                  <button type="button" onClick={onUseEstimatedAmount}>
+                    {"Use estimated amount"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 

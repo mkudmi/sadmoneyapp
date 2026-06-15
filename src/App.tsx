@@ -623,6 +623,7 @@ export default function App() {
   const [editSalaryModalTitle, setEditSalaryModalTitle] = useState<string>("Salary");
   const [editSalaryModalKind, setEditSalaryModalKind] = useState<SalaryEventKind>("regular");
   const [editSalaryModalAccrualMonth, setEditSalaryModalAccrualMonth] = useState<string>("");
+  const [editSalaryModalCheckResult, setEditSalaryModalCheckResult] = useState<ManualSalaryEstimate | null>(null);
   const [piggyBankModalOpen, setPiggyBankModalOpen] = useState(false);
   const [piggyBankModalAmount, setPiggyBankModalAmount] = useState<string>("");
   const [piggyBankModalType, setPiggyBankModalType] = useState<PiggyBankModalType>("add");
@@ -1625,6 +1626,7 @@ export default function App() {
     setEditSalaryModalAccrualMonth(
       normalizeSalaryEventAccrualMonth(s.accrualMonth) ?? inferSalaryEventAccrualMonth(s.date) ?? "",
     );
+    setEditSalaryModalCheckResult(null);
     setEditSalaryModalOpen(true);
   }
 
@@ -1642,6 +1644,45 @@ export default function App() {
     setEditSalaryModalTitle("Salary");
     setEditSalaryModalKind("regular");
     setEditSalaryModalAccrualMonth("");
+    setEditSalaryModalCheckResult(null);
+  }
+
+  function handleCheckEditSalaryModal() {
+    if (!editSalaryModalId) return;
+
+    const monthlySalaryAmount = toKop(editSalaryModalAmount);
+    if (monthlySalaryAmount <= 0) {
+      setEditSalaryModalCheckResult(null);
+      return;
+    }
+
+    setEditSalaryModalCheckResult(
+      estimateManualSalaryForDate({
+        enteredAmount: monthlySalaryAmount,
+        payoutDate: editSalaryModalDate,
+        accrualMonth:
+          normalizeSalaryEventAccrualMonth(editSalaryModalAccrualMonth)
+          ?? inferSalaryEventAccrualMonth(editSalaryModalDate)
+          ?? editSalaryModalDate.slice(0, 7),
+        title: editSalaryModalTitle.trim() || "Salary",
+        salaryEvents: allSalaryEvents,
+        excludedSalaryEventIds: [editSalaryModalId],
+        vacations: data?.vacations ?? [],
+        workSchedule,
+        offDays: data?.offDays ?? [],
+        productionCalendarDays,
+      })
+    );
+  }
+
+  function applyCheckedEditSalaryAmount() {
+    if (!editSalaryModalCheckResult) return;
+
+    const rubles = (editSalaryModalCheckResult.amount / 100)
+      .toFixed(2)
+      .replace(/\.00$/, "")
+      .replace(/(\.\d*[1-9])0$/, "$1");
+    setEditSalaryModalAmount(rubles);
   }
 
   async function submitEditSalaryModal() {
@@ -2005,6 +2046,7 @@ export default function App() {
             </div>
             <VacationsPanel
               vacations={vacationsInManagerRange}
+              allVacations={viewData?.vacations ?? []}
               dateFormat={dateFormat}
               salaryEvents={allSalaryEvents}
               productionCalendarDays={productionCalendarDays}
@@ -2998,11 +3040,29 @@ export default function App() {
         title={editSalaryModalTitle}
         kind={editSalaryModalKind}
         accrualMonth={editSalaryModalAccrualMonth}
-        onDateChange={setEditSalaryModalDate}
-        onAmountChange={setEditSalaryModalAmount}
-        onTitleChange={setEditSalaryModalTitle}
-        onKindChange={setEditSalaryModalKind}
-        onAccrualMonthChange={setEditSalaryModalAccrualMonth}
+        checkResult={editSalaryModalCheckResult}
+        onDateChange={(value) => {
+          setEditSalaryModalDate(value);
+          setEditSalaryModalCheckResult(null);
+        }}
+        onAmountChange={(value) => {
+          setEditSalaryModalAmount(value);
+          setEditSalaryModalCheckResult(null);
+        }}
+        onTitleChange={(value) => {
+          setEditSalaryModalTitle(value);
+          setEditSalaryModalCheckResult(null);
+        }}
+        onKindChange={(value) => {
+          setEditSalaryModalKind(value);
+          setEditSalaryModalCheckResult(null);
+        }}
+        onAccrualMonthChange={(value) => {
+          setEditSalaryModalAccrualMonth(value);
+          setEditSalaryModalCheckResult(null);
+        }}
+        onCheck={handleCheckEditSalaryModal}
+        onUseEstimatedAmount={applyCheckedEditSalaryAmount}
         onClose={closeEditSalaryModal}
         onSubmit={() => { void submitEditSalaryModal(); }}
       />
