@@ -3,6 +3,8 @@ import { AppData } from "../lib/api";
 import { formatDateForDisplay, ymFromYmd } from "../lib/date";
 import type { DateFormat } from "../lib/date";
 import { rub } from "../lib/money";
+import { getLatestPaidVacationAverageReference } from "../lib/russianVacation";
+import type { RussianProductionCalendarDay } from "../lib/russianProductionCalendar";
 
 type GeneralStatsSurfaceProps = {
   data: AppData | null;
@@ -11,10 +13,11 @@ type GeneralStatsSurfaceProps = {
   today: string;
   vacationAverageDailyPay: number;
   dateFormat: DateFormat;
+  productionCalendarDays?: ReadonlyMap<string, RussianProductionCalendarDay> | null;
 };
 
 export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
-  const { data, monthKey, year, today, vacationAverageDailyPay, dateFormat } = props;
+  const { data, monthKey, year, today, vacationAverageDailyPay, dateFormat, productionCalendarDays } = props;
   const monthLabel = useMemo(
     () =>
       capitalizeMonth(
@@ -74,6 +77,16 @@ export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
     return { incomeTotal, salaryAndVacationIncome };
   }, [data, today, year]);
 
+  const latestPaidVacationAverageReference = useMemo(() => {
+    if (!data) return null;
+    return getLatestPaidVacationAverageReference({
+      salaryEvents: data.salaryEvents ?? [],
+      vacations: data.vacations ?? [],
+      today,
+      productionCalendarDays,
+    });
+  }, [data, productionCalendarDays, today]);
+
   return (
     <div className="surface general-stats-surface" style={{ minWidth: 0, height: "100%" }}>
       <div className="general-stats-header">
@@ -109,7 +122,14 @@ export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
         </div>
         <div className="general-stats-secondary-card">
           <div className="general-stats-secondary-label">{"Vacation average per day"}</div>
-          <div className="general-stats-secondary-value">{rub(vacationAverageDailyPay)}</div>
+          <div className="general-stats-secondary-value">
+            {rub(vacationAverageDailyPay)}
+            {latestPaidVacationAverageReference ? (
+              <span style={{ fontSize: 12, fontWeight: 500, opacity: 0.75, marginLeft: 6 }}>
+                {`(${rub(Math.round(latestPaidVacationAverageReference.averageDailyPay))})`}
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

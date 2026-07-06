@@ -46,7 +46,13 @@ import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 import { buildTrendsData } from "./lib/trends";
 import { AppIcon } from "./components/AppIcon";
 import { DateInputWithCalendar } from "./components/DateInputWithCalendar";
-import { calculateVacationAverageDailyPay, calculateVacationPayout, getVacationChargeableDays, isRussianPublicHoliday } from "./lib/russianVacation";
+import {
+  calculateVacationAverageDailyPay,
+  calculateVacationPayout,
+  getLatestPaidVacationAverageReference,
+  getVacationChargeableDays,
+  isRussianPublicHoliday,
+} from "./lib/russianVacation";
 import {
   getRussianProductionCalendarDay,
   getRussianProductionCalendarDayLabel,
@@ -820,6 +826,19 @@ export default function App() {
       productionCalendarDays,
     });
   }, [productionCalendarDays, vacationModalRange.end, vacationModalRange.start, vacationModalType, viewData]);
+  const latestPaidVacationAverageReference = useMemo(() => {
+    if (!viewData) return null;
+    return getLatestPaidVacationAverageReference({
+      salaryEvents: viewData.salaryEvents ?? [],
+      vacations: viewData.vacations ?? [],
+      today,
+      productionCalendarDays,
+    });
+  }, [productionCalendarDays, today, viewData]);
+  const vacationModalReferencePayoutAmount = useMemo(() => {
+    if (vacationModalType === "unpaid" || !latestPaidVacationAverageReference) return 0;
+    return Math.round(latestPaidVacationAverageReference.averageDailyPay * vacationModalRange.days);
+  }, [latestPaidVacationAverageReference, vacationModalRange.days, vacationModalType]);
 
   function txModalTitle(type: "income" | "expense" | "planned_expense") {
     if (type === "income") return "Add income";
@@ -1767,6 +1786,7 @@ export default function App() {
           today={today}
           vacationAverageDailyPay={vacationAverageDailyPay}
           dateFormat={dateFormat}
+          productionCalendarDays={productionCalendarDays}
         />
         <SalariesPanel
           salaries={salaryThisMonth}
@@ -2775,7 +2795,9 @@ export default function App() {
                     <div className="vacation-form-summary-item vacation-form-summary-item-payout">
                       <span className="vacation-form-summary-label">{"Estimated payout"}</span>
                       <b>
-                        {vacationModalType === "paid" ? rub(vacationModalPayoutAmount) : "No payout"}
+                        {vacationModalType === "paid"
+                          ? `${rub(vacationModalPayoutAmount)}${latestPaidVacationAverageReference ? ` (${rub(vacationModalReferencePayoutAmount)})` : ""}`
+                          : "No payout"}
                       </b>
                     </div>
                   </div>

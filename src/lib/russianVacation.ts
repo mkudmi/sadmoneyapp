@@ -37,6 +37,13 @@ type VacationPayoutArgs = VacationPayAverageArgs & {
   vacationType?: string;
 };
 
+export type LatestPaidVacationAverageReference = {
+  vacation: Vacation;
+  vacationPayEvent: SalaryEvent;
+  chargeableDays: number;
+  averageDailyPay: number;
+};
+
 export function isRussianPublicHoliday(
   date: string,
   productionCalendarDays?: ReadonlyMap<string, RussianProductionCalendarDay> | null,
@@ -172,4 +179,45 @@ export function calculateVacationPayout(args: VacationPayoutArgs) {
     args.productionCalendarDays,
   );
   return Math.round(averageDailyPay * chargeableDays);
+}
+
+export function getLatestPaidVacationAverageReference(args: {
+  salaryEvents: SalaryEvent[];
+  vacations: Vacation[];
+  today: string;
+  productionCalendarDays?: ReadonlyMap<string, RussianProductionCalendarDay> | null;
+}): LatestPaidVacationAverageReference | null {
+  const paidVacations = [...args.vacations]
+    .filter((vacation) => vacation.vacation_type !== "unpaid" && vacation.start_date <= args.today)
+    .sort((a, b) => b.start_date.localeCompare(a.start_date));
+
+  const vacationPayEvents = [...args.salaryEvents]
+    .filter((event) => normalizeSalaryEventKind(event.kind) === "vacation_pay" && event.date <= args.today)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  for (const vacation of paidVacations) {
+    const matchingEvent = vacationPayEvents.find((event) => {
+      if (event.date > vacation.start_date) return false;
+      const diffMs = parseYmdLocal(vacation.start_date).getTime() - parseYmdLocal(event.date).getTime();
+      const diffDays = diffMs / (24 * 60 * 60 * 1000);
+      return diffDays >= 0 && diffDays <= 31;
+    });
+    if (!matchingEvent) continue;
+
+    const chargeableDays = getVacationChargeableDays(
+      vacation.start_date,
+      vacation.end_date,
+      args.productionCalendarDays,
+    );
+    if (chargeableDays <= 0) continue;
+
+    return {
+      vacation,
+      vacationPayEvent: matchingEvent,
+      chargeableDays,
+      averageDailyPay: matchingEvent.amount / chargeableDays,
+    };
+  }
+
+  return null;
 }
