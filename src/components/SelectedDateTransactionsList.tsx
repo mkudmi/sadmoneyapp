@@ -4,19 +4,11 @@ import type { DateFormat } from "../lib/date";
 import { rub } from "../lib/money";
 import { AppIcon } from "./AppIcon";
 
-type AfterVacationSummary = {
-  vacationDays: number;
-  vacationDeduction: number;
-  amount: number;
-  basedOnPlannedAfterExpenses: boolean;
-};
-
 type SelectedDateTransactionsListProps = {
   selectedDate: string;
   dateFormat: DateFormat;
   salaryEventsForSelectedDate: SalaryEvent[];
   plannedAfterExpensesForSelectedDate: number | null;
-  afterVacationForSelectedDate: AfterVacationSummary | null;
   transactionsForSelectedDate: Transaction[];
   onMarkPlannedAsPaid: (tx: Transaction) => void;
   onEditTransaction: (tx: Transaction) => void;
@@ -29,7 +21,6 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
     dateFormat,
     salaryEventsForSelectedDate,
     plannedAfterExpensesForSelectedDate,
-    afterVacationForSelectedDate,
     transactionsForSelectedDate,
     onMarkPlannedAsPaid,
     onEditTransaction,
@@ -94,32 +85,6 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
             </div>
             <div style={{ fontSize: 12, fontWeight: 700 }}>
               {rub(plannedAfterExpensesForSelectedDate)}
-            </div>
-          </div>
-        ) : null}
-
-        {afterVacationForSelectedDate !== null ? (
-          <div
-            key={"after-vacation"}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
-              border: "1px solid #eee",
-              borderRadius: 10,
-              padding: "6px 8px",
-              background: "#fff",
-            }}
-          >
-            <div style={{ fontSize: 12 }}>
-              <b>{"After vacation"}</b>
-              <span style={{ marginLeft: 8, opacity: 0.75 }}>
-                {`(-${rub(afterVacationForSelectedDate.vacationDeduction)}, ${afterVacationForSelectedDate.vacationDays}d${afterVacationForSelectedDate.basedOnPlannedAfterExpenses ? ", incl. planned" : ""})`}
-              </span>
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 700 }}>
-              {rub(afterVacationForSelectedDate.amount)}
             </div>
           </div>
         ) : null}

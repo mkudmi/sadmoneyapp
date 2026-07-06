@@ -406,7 +406,6 @@ export default function App() {
   }, [viewData]);
 
   const salaryEventsForSelectedDate = allSalaryEvents.filter((s) => s.date === selectedDate);
-  const salaryAmountForSelectedDate = salaryEventsForSelectedDate.reduce((sum, s) => sum + s.amount, 0);
   const transactionsForSelectedDate = (data?.transactions ?? []).filter((t) => t.date === selectedDate);
   const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
   const vacationForSelectedDate = (data?.vacations ?? []).find(v => v.start_date <= selectedDate && v.end_date >= selectedDate) ?? null;
@@ -444,89 +443,6 @@ export default function App() {
 
     return nextSalaryAmount - plannedUntilSelected;
   }, [budget?.next_salary_date, selectedDate, viewData]);
-  const afterVacationForSelectedDate = useMemo(() => {
-    if (!data || salaryAmountForSelectedDate <= 0 || vacationAverageDailyPay <= 0) return null;
-
-    const selected = parseYmdLocal(selectedDate);
-    const selectedYear = selected.getFullYear();
-    const selectedMonth0 = selected.getMonth();
-    const selectedDay = selected.getDate();
-    const selectedMonthKey = `${selectedYear}-${String(selectedMonth0 + 1).padStart(2, "0")}`;
-    const vacationDatesForThisSalary = new Set<string>();
-
-    for (const v of data.vacations ?? []) {
-      const vacStart = parseYmdLocal(v.start_date);
-      const vacEnd = parseYmdLocal(v.end_date);
-      const cursor = new Date(vacStart.getFullYear(), vacStart.getMonth(), 1);
-      const endMonthCursor = new Date(vacEnd.getFullYear(), vacEnd.getMonth(), 1);
-
-      while (cursor <= endMonthCursor) {
-        const y = cursor.getFullYear();
-        const m0 = cursor.getMonth();
-        const monthKey = `${y}-${String(m0 + 1).padStart(2, "0")}`;
-        const monthDays = daysInMonth(y, m0);
-        const monthStart = `${monthKey}-01`;
-        const monthEnd = `${monthKey}-${String(monthDays).padStart(2, "0")}`;
-
-        // First half (1..15) affects the salary in the second half (16..end) of the same month.
-        if (selectedMonthKey === monthKey && selectedDay >= 16) {
-          const firstHalfEnd = `${monthKey}-15`;
-          const overlapStart = v.start_date > monthStart ? v.start_date : monthStart;
-          const overlapEnd = v.end_date < firstHalfEnd ? v.end_date : firstHalfEnd;
-          const cursorDate = parseYmdLocal(overlapStart);
-          const overlapEndDate = parseYmdLocal(overlapEnd);
-          while (cursorDate <= overlapEndDate) {
-            const date = ymd(cursorDate);
-            if (!isRussianPublicHoliday(date, productionCalendarDays)) {
-              vacationDatesForThisSalary.add(date);
-            }
-            cursorDate.setDate(cursorDate.getDate() + 1);
-          }
-        }
-
-        // Second half (16..end) affects the salary up to day 5 of the next month.
-        const nextMonthDate = new Date(y, m0 + 1, 1);
-        const nextMonthKey = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}`;
-        if (selectedMonthKey === nextMonthKey && selectedDay <= 5) {
-          const secondHalfStart = `${monthKey}-16`;
-          const overlapStart = v.start_date > secondHalfStart ? v.start_date : secondHalfStart;
-          const overlapEnd = v.end_date < monthEnd ? v.end_date : monthEnd;
-          const cursorDate = parseYmdLocal(overlapStart);
-          const overlapEndDate = parseYmdLocal(overlapEnd);
-          while (cursorDate <= overlapEndDate) {
-            const date = ymd(cursorDate);
-            if (!isRussianPublicHoliday(date, productionCalendarDays)) {
-              vacationDatesForThisSalary.add(date);
-            }
-            cursorDate.setDate(cursorDate.getDate() + 1);
-          }
-        }
-
-        cursor.setMonth(cursor.getMonth() + 1);
-      }
-    }
-
-    const vacationDaysForThisSalary = vacationDatesForThisSalary.size;
-    if (vacationDaysForThisSalary <= 0) return null;
-
-    const vacationDeduction = vacationDaysForThisSalary * vacationAverageDailyPay;
-    const baseAmount = plannedAfterExpensesForSelectedDate ?? salaryAmountForSelectedDate;
-
-    return {
-      vacationDays: vacationDaysForThisSalary,
-      vacationDeduction,
-      baseAmount,
-      amount: baseAmount - vacationDeduction,
-      basedOnPlannedAfterExpenses: plannedAfterExpensesForSelectedDate !== null,
-    };
-  }, [
-    data,
-    selectedDate,
-    salaryAmountForSelectedDate,
-    vacationAverageDailyPay,
-    productionCalendarDays,
-    plannedAfterExpensesForSelectedDate,
-  ]);
   const selectedDateWeekDay = new Date(selectedDate).getDay(); // 0 = Sunday, 6 = Saturday
   const selectedDateIsWeekend = selectedDateWeekDay === 0 || selectedDateWeekDay === 6;
   const selectedDateDefaultWorking = workSchedule === "5/2"
@@ -1922,7 +1838,6 @@ export default function App() {
           dateFormat={dateFormat}
           salaryEventsForSelectedDate={salaryEventsForSelectedDate}
           plannedAfterExpensesForSelectedDate={plannedAfterExpensesForSelectedDate}
-          afterVacationForSelectedDate={afterVacationForSelectedDate}
           transactionsForSelectedDate={transactionsForSelectedDate}
           onMarkPlannedAsPaid={(tx) => { void handleMarkPlannedTransactionPaid(tx); }}
           onEditTransaction={(tx) => { void handleEditTransaction(tx); }}
