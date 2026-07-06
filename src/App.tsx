@@ -12,6 +12,7 @@ import {
   findFollowingSalaryDate,
   normalizeSalaryConfigs,
   type ManualSalaryEstimate,
+  type ManualSalaryPayoutKind,
 } from "./lib/salary";
 import {
   dateFormatPattern,
@@ -531,6 +532,7 @@ export default function App() {
   const [salaryModalTitle, setSalaryModalTitle] = useState<string>("Salary");
   const [salaryModalKind, setSalaryModalKind] = useState<SalaryEventKind>("regular");
   const [salaryModalAccrualMonth, setSalaryModalAccrualMonth] = useState<string>("");
+  const [salaryModalPayoutKind, setSalaryModalPayoutKind] = useState<"auto" | ManualSalaryPayoutKind>("auto");
   const [salaryModalCheckResult, setSalaryModalCheckResult] = useState<ManualSalaryEstimate | null>(null);
   const [editSalaryModalOpen, setEditSalaryModalOpen] = useState(false);
   const [editSalaryModalId, setEditSalaryModalId] = useState<string | null>(null);
@@ -539,6 +541,7 @@ export default function App() {
   const [editSalaryModalTitle, setEditSalaryModalTitle] = useState<string>("Salary");
   const [editSalaryModalKind, setEditSalaryModalKind] = useState<SalaryEventKind>("regular");
   const [editSalaryModalAccrualMonth, setEditSalaryModalAccrualMonth] = useState<string>("");
+  const [editSalaryModalPayoutKind, setEditSalaryModalPayoutKind] = useState<"auto" | ManualSalaryPayoutKind>("auto");
   const [editSalaryModalCheckResult, setEditSalaryModalCheckResult] = useState<ManualSalaryEstimate | null>(null);
   const [piggyBankModalOpen, setPiggyBankModalOpen] = useState(false);
   const [piggyBankModalAmount, setPiggyBankModalAmount] = useState<string>("");
@@ -960,6 +963,7 @@ export default function App() {
     setSalaryModalTitle("Salary");
     setSalaryModalKind("regular");
     setSalaryModalAccrualMonth(inferSalaryEventAccrualMonth(date) ?? "");
+    setSalaryModalPayoutKind("auto");
     setSalaryModalCheckResult(null);
     setSalaryModalOpen(true);
   }
@@ -970,6 +974,7 @@ export default function App() {
     setSalaryModalTitle("Salary");
     setSalaryModalKind("regular");
     setSalaryModalAccrualMonth("");
+    setSalaryModalPayoutKind("auto");
     setSalaryModalCheckResult(null);
   }
 
@@ -988,6 +993,7 @@ export default function App() {
           normalizeSalaryEventAccrualMonth(salaryModalAccrualMonth)
           ?? inferSalaryEventAccrualMonth(salaryModalDate)
           ?? salaryModalDate.slice(0, 7),
+        payoutKindOverride: salaryModalPayoutKind === "auto" ? null : salaryModalPayoutKind,
         title: salaryModalTitle.trim() || "Salary",
         salaryEvents: allSalaryEvents,
         vacations: data?.vacations ?? [],
@@ -1542,6 +1548,7 @@ export default function App() {
     setEditSalaryModalAccrualMonth(
       normalizeSalaryEventAccrualMonth(s.accrualMonth) ?? inferSalaryEventAccrualMonth(s.date) ?? "",
     );
+    setEditSalaryModalPayoutKind("auto");
     setEditSalaryModalCheckResult(null);
     setEditSalaryModalOpen(true);
   }
@@ -1560,6 +1567,7 @@ export default function App() {
     setEditSalaryModalTitle("Salary");
     setEditSalaryModalKind("regular");
     setEditSalaryModalAccrualMonth("");
+    setEditSalaryModalPayoutKind("auto");
     setEditSalaryModalCheckResult(null);
   }
 
@@ -1580,6 +1588,7 @@ export default function App() {
           normalizeSalaryEventAccrualMonth(editSalaryModalAccrualMonth)
           ?? inferSalaryEventAccrualMonth(editSalaryModalDate)
           ?? editSalaryModalDate.slice(0, 7),
+        payoutKindOverride: editSalaryModalPayoutKind === "auto" ? null : editSalaryModalPayoutKind,
         title: editSalaryModalTitle.trim() || "Salary",
         salaryEvents: allSalaryEvents,
         excludedSalaryEventIds: [editSalaryModalId],
@@ -2885,9 +2894,24 @@ export default function App() {
                   gap: 6,
                 }}
               >
+                <div style={{ display: "grid", gap: 4 }}>
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>{"Salary period for check"}</div>
+                  <select
+                    value={salaryModalPayoutKind}
+                    onChange={(e) => {
+                      setSalaryModalPayoutKind(e.target.value as "auto" | ManualSalaryPayoutKind);
+                      setSalaryModalCheckResult(null);
+                    }}
+                    style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                  >
+                    <option value="auto">{"Auto detect"}</option>
+                    <option value="first_half">{"First half / advance"}</option>
+                    <option value="second_half">{"Second half / final payout"}</option>
+                  </select>
+                </div>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
                   <div style={{ fontSize: 12, opacity: 0.8 }}>
-                    {"Estimate the payout for this date from the monthly amount, using workdays and public holidays."}
+                    {"Estimate the payout for this date from the monthly amount, using workdays, vacations and public holidays."}
                   </div>
                   <button type="button" onClick={handleCheckSalaryModal}>
                     {"Check salary"}
@@ -2955,6 +2979,7 @@ export default function App() {
         title={editSalaryModalTitle}
         kind={editSalaryModalKind}
         accrualMonth={editSalaryModalAccrualMonth}
+        payoutKind={editSalaryModalPayoutKind}
         checkResult={editSalaryModalCheckResult}
         onDateChange={(value) => {
           setEditSalaryModalDate(value);
@@ -2974,6 +2999,10 @@ export default function App() {
         }}
         onAccrualMonthChange={(value) => {
           setEditSalaryModalAccrualMonth(value);
+          setEditSalaryModalCheckResult(null);
+        }}
+        onPayoutKindChange={(value) => {
+          setEditSalaryModalPayoutKind(value);
           setEditSalaryModalCheckResult(null);
         }}
         onCheck={handleCheckEditSalaryModal}

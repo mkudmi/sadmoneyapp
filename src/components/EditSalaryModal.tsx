@@ -4,7 +4,7 @@ import type { DateFormat } from "../lib/date";
 import { AppIcon } from "./AppIcon";
 import type { SalaryEventKind } from "../lib/salaryEvent";
 import { salaryEventKindLabel } from "../lib/salaryEvent";
-import type { ManualSalaryEstimate } from "../lib/salary";
+import type { ManualSalaryEstimate, ManualSalaryPayoutKind } from "../lib/salary";
 import { rub } from "../lib/money";
 import { formatDateForDisplay } from "../lib/date";
 
@@ -16,12 +16,14 @@ type EditSalaryModalProps = {
   title: string;
   kind: SalaryEventKind;
   accrualMonth: string;
+  payoutKind: "auto" | ManualSalaryPayoutKind;
   checkResult: ManualSalaryEstimate | null;
   onDateChange: (value: string) => void;
   onAmountChange: (value: string) => void;
   onTitleChange: (value: string) => void;
   onKindChange: (value: SalaryEventKind) => void;
   onAccrualMonthChange: (value: string) => void;
+  onPayoutKindChange: (value: "auto" | ManualSalaryPayoutKind) => void;
   onCheck: () => void;
   onUseEstimatedAmount: () => void;
   onClose: () => void;
@@ -37,12 +39,14 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
     title,
     kind,
     accrualMonth,
+    payoutKind,
     checkResult,
     onDateChange,
     onAmountChange,
     onTitleChange,
     onKindChange,
     onAccrualMonthChange,
+    onPayoutKindChange,
     onCheck,
     onUseEstimatedAmount,
     onClose,
@@ -143,9 +147,21 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
               gap: 6,
             }}
           >
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>{"Salary period for check"}</div>
+              <select
+                value={payoutKind}
+                onChange={(e) => onPayoutKindChange(e.target.value as "auto" | ManualSalaryPayoutKind)}
+                style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+              >
+                <option value="auto">{"Auto detect"}</option>
+                <option value="first_half">{"First half / advance"}</option>
+                <option value="second_half">{"Second half / final payout"}</option>
+              </select>
+            </div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
               <div style={{ fontSize: 12, opacity: 0.8 }}>
-                {"Estimate the payout for this date from the monthly amount, using workdays and public holidays."}
+                {"Estimate the payout for this date from the monthly amount, using workdays, vacations and public holidays."}
               </div>
               <button type="button" onClick={onCheck}>
                 {"Check salary"}

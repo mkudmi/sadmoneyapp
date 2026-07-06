@@ -151,6 +151,7 @@ type ManualSalaryEstimateArgs = {
   enteredAmount: number;
   payoutDate: string;
   accrualMonth: string;
+  payoutKindOverride?: ManualSalaryPayoutKind | null;
   title: string;
   salaryEvents: SalaryEvent[];
   excludedSalaryEventIds?: string[];
@@ -162,7 +163,7 @@ type ManualSalaryEstimateArgs = {
 
 export type ManualSalaryEstimate = {
   amount: number;
-  payoutKind: "first_half" | "second_half";
+  payoutKind: ManualSalaryPayoutKind;
   payrollMonth: string;
   periodStart: string;
   periodEnd: string;
@@ -177,6 +178,8 @@ export type ManualSalaryEstimate = {
   deltaFromEntered: number;
   source: "history" | "input_fallback";
 };
+
+export type ManualSalaryPayoutKind = "first_half" | "second_half";
 
 function isEffectiveWorkingDay(
   date: string,
@@ -349,14 +352,37 @@ export function estimateManualSalaryForDate(args: ManualSalaryEstimateArgs): Man
   const payoutMonth = args.payoutDate.slice(0, 7);
   const payoutDay = payout.getDate();
   const previousPayoutMonth = previousMonth(payoutMonth);
-  const payoutKind: "first_half" | "second_half" =
-    payoutMonth === args.accrualMonth
-      ? "first_half"
-      : previousPayoutMonth === args.accrualMonth
-        ? "second_half"
-        : payoutDay <= 15
+  const normalizedTitle = args.title.trim().toLowerCase();
+  const matchingRecordedEvents = relevantSalaryEvents.filter((salaryEvent) => {
+    if (salaryEvent.generated) return false;
+    if (normalizeSalaryEventKind(salaryEvent.kind) !== "regular") return false;
+    const salaryEventAccrualMonth = getSalaryEventAccrualMonth(salaryEvent);
+    if (salaryEventAccrualMonth !== args.accrualMonth) return false;
+    if (salaryEvent.date >= args.payoutDate) return false;
+    if (!normalizedTitle) return true;
+    return (salaryEvent.title ?? "").trim().toLowerCase() === normalizedTitle;
+  });
+  const recordedEventsForAccrualMonth = matchingRecordedEvents.length > 0
+    ? matchingRecordedEvents
+    : relevantSalaryEvents.filter((salaryEvent) => {
+        if (salaryEvent.generated) return false;
+        if (normalizeSalaryEventKind(salaryEvent.kind) !== "regular") return false;
+        const salaryEventAccrualMonth = getSalaryEventAccrualMonth(salaryEvent);
+        return salaryEventAccrualMonth === args.accrualMonth && salaryEvent.date < args.payoutDate;
+      });
+  const payoutKind: ManualSalaryPayoutKind =
+    args.payoutKindOverride
+    ?? (
+      payoutMonth === args.accrualMonth
+        ? recordedEventsForAccrualMonth.length > 0
           ? "second_half"
-          : "first_half";
+          : "first_half"
+        : previousPayoutMonth === args.accrualMonth
+          ? "second_half"
+          : payoutDay <= 15
+            ? "second_half"
+            : "first_half"
+    );
   const payrollMonth = args.accrualMonth;
   const payrollMonthDate = parseYmdLocal(`${payrollMonth}-01`);
   const monthStart = `${payrollMonth}-01`;
@@ -422,24 +448,6 @@ export function estimateManualSalaryForDate(args: ManualSalaryEstimateArgs): Man
   const monthlySalaryAmount = monthlySalaryAmountFromHistory ?? args.enteredAmount;
   const source: "history" | "input_fallback" = monthlySalaryAmountFromHistory ? "history" : "input_fallback";
   const firstHalfAmount = Math.round((monthlySalaryAmount * payableFirstHalfWorkingDays) / monthWorkingDays);
-  const normalizedTitle = args.title.trim().toLowerCase();
-  const matchingRecordedEvents = relevantSalaryEvents.filter((salaryEvent) => {
-    if (salaryEvent.generated) return false;
-    if (normalizeSalaryEventKind(salaryEvent.kind) !== "regular") return false;
-    const salaryEventAccrualMonth = getSalaryEventAccrualMonth(salaryEvent);
-    if (salaryEventAccrualMonth !== args.accrualMonth) return false;
-    if (salaryEvent.date >= args.payoutDate) return false;
-    if (!normalizedTitle) return true;
-    return (salaryEvent.title ?? "").trim().toLowerCase() === normalizedTitle;
-  });
-  const recordedEventsForAccrualMonth = matchingRecordedEvents.length > 0
-    ? matchingRecordedEvents
-    : relevantSalaryEvents.filter((salaryEvent) => {
-        if (salaryEvent.generated) return false;
-        if (normalizeSalaryEventKind(salaryEvent.kind) !== "regular") return false;
-        const salaryEventAccrualMonth = getSalaryEventAccrualMonth(salaryEvent);
-        return salaryEventAccrualMonth === args.accrualMonth && salaryEvent.date < args.payoutDate;
-      });
   const previouslyRecordedAmount = relevantSalaryEvents
     .filter((salaryEvent) => recordedEventsForAccrualMonth.includes(salaryEvent))
     .reduce((sum, salaryEvent) => sum + salaryEvent.amount, 0);
