@@ -94,7 +94,7 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
           </div>
 
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
+            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB; optional for salary check)"}</div>
             <input
               value={amount}
               onChange={(e) => onAmountChange(e.target.value)}
@@ -161,7 +161,7 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
               <div style={{ fontSize: 12, opacity: 0.8 }}>
-                {"Estimate the payout for this date from the monthly amount, using workdays, vacations and public holidays."}
+                {"Estimate the payout from the configured salary rate or history, using workdays, vacations and public holidays."}
               </div>
               <button type="button" onClick={onCheck}>
                 {"Check salary"}
@@ -189,20 +189,28 @@ export function EditSalaryModal(props: EditSalaryModalProps) {
                   </div>
                 ) : null}
                 <div style={{ fontSize: 12, opacity: 0.8 }}>
-                  {`Monthly base: ${rub(checkResult.monthlySalaryAmount)} (${checkResult.source === "history" ? "from previous payouts" : "from entered amount"})`}
+                  {`Monthly base: ${rub(checkResult.monthlySalaryAmount)} (${
+                    checkResult.source === "config"
+                      ? "from fixed salary schedule"
+                      : checkResult.source === "history"
+                        ? "from previous payouts"
+                        : "from entered amount"
+                  })`}
                 </div>
                 {checkResult.previouslyRecordedAmount > 0 ? (
                   <div style={{ fontSize: 12, opacity: 0.8 }}>
                     {`Already recorded for ${checkResult.payrollMonth}: ${rub(checkResult.previouslyRecordedAmount)}`}
                   </div>
                 ) : null}
-                <div style={{ fontSize: 12, opacity: 0.8 }}>
-                  {checkResult.deltaFromEntered === 0
-                    ? "Entered amount matches the estimate."
-                    : checkResult.deltaFromEntered > 0
-                      ? `Entered amount is ${rub(checkResult.deltaFromEntered)} above the estimate.`
-                      : `Entered amount is ${rub(Math.abs(checkResult.deltaFromEntered))} below the estimate.`}
-                </div>
+                {checkResult.deltaFromEntered !== null ? (
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>
+                    {checkResult.deltaFromEntered === 0
+                      ? "Entered amount matches the estimate."
+                      : checkResult.deltaFromEntered > 0
+                        ? `Entered amount is ${rub(checkResult.deltaFromEntered)} above the estimate.`
+                        : `Entered amount is ${rub(Math.abs(checkResult.deltaFromEntered))} below the estimate.`}
+                  </div>
+                ) : null}
                 <div>
                   <button type="button" onClick={onUseEstimatedAmount}>
                     {"Use estimated amount"}

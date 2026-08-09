@@ -82,6 +82,10 @@ body {
   animation: rise-in 420ms ease both;
 }
 
+.surface:has([data-date-picker-open="true"]) {
+  z-index: 40;
+}
+
 .topbar {
   padding: 10px 14px;
 }

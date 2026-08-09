@@ -70,6 +70,7 @@ fn normalize_salary_config(raw: SalaryConfig) -> Result<SalaryConfig, String> {
         },
         effective_from,
         amount,
+        auto_generate: raw.auto_generate,
         advance_percent,
         advance_day,
         salary_day,
@@ -102,91 +103,92 @@ fn generated_salary_events_between(
         Ok(value) => value,
         Err(_) => return Vec::new(),
     };
-    let end_with_weekend_shift = range_end + Duration::days(7);
     let mut events = Vec::new();
 
-    for (index, config) in normalized.iter().enumerate() {
-        if config.amount <= 0 {
-            continue;
-        }
+    // The final payout for an accrual month is paid in the following calendar
+    // month, so include the month immediately before the requested range.
+    let mut cursor = if range_start.month() == 1 {
+        NaiveDate::from_ymd_opt(range_start.year() - 1, 12, 1)
+    } else {
+        NaiveDate::from_ymd_opt(range_start.year(), range_start.month() - 1, 1)
+    }
+    .unwrap_or(range_start);
+    let last_accrual_month =
+        NaiveDate::from_ymd_opt(range_end.year(), range_end.month(), 1).unwrap_or(range_end);
 
-        let effective_from = match parse_date(&config.effective_from) {
-            Ok(value) => value,
-            Err(_) => continue,
-        };
-        let next_effective = normalized
-            .get(index + 1)
-            .and_then(|next| parse_date(&next.effective_from).ok());
+    while cursor <= last_accrual_month {
+        let year = cursor.year();
+        let month = cursor.month();
+        let accrual_month = cursor.format("%Y-%m").to_string();
+        let config = normalized
+            .iter()
+            .rev()
+            .find(|candidate| candidate.effective_from.get(..7) <= Some(accrual_month.as_str()));
 
-        let mut cursor = NaiveDate::from_ymd_opt(range_start.year(), range_start.month(), 1)
-            .unwrap_or(range_start);
-        while cursor <= end_with_weekend_shift {
-            let year = cursor.year();
-            let month = cursor.month();
+        if let Some(config) = config.filter(|candidate| candidate.auto_generate && candidate.amount > 0) {
             let advance_base_day = clamp_salary_day(year, month, config.advance_day);
-            let salary_base_day = clamp_salary_day(year, month, config.salary_day);
-
-            let candidates = [
-                (
-                    "Advance",
-                    "advance",
-                    shift_to_previous_workday(
-                        NaiveDate::from_ymd_opt(year, month, advance_base_day).unwrap_or(cursor),
-                    ),
-                    ((config.amount as i128) * (config.advance_percent as i128) / 100) as i64,
-                ),
-                (
-                    "Salary",
-                    "salary",
-                    shift_to_previous_workday(
-                        NaiveDate::from_ymd_opt(year, month, salary_base_day).unwrap_or(cursor),
-                    ),
-                    config.amount
-                        - (((config.amount as i128) * (config.advance_percent as i128) / 100) as i64),
-                ),
-            ];
-
-            for (title, payout_type, date, amount) in candidates {
-                if amount <= 0 {
-                    continue;
-                }
-                if date < range_start || date > range_end {
-                    continue;
-                }
-                if date < effective_from {
-                    continue;
-                }
-                if let Some(next_start) = next_effective {
-                    if date >= next_start {
-                        continue;
-                    }
-                }
-
-                events.push(SalaryEvent {
-                    id: format!(
-                        "auto_{}_{}_{}",
-                        config.id,
-                        payout_type,
-                        date.format("%Y-%m-%d")
-                    ),
-                    date: date.format("%Y-%m-%d").to_string(),
-                    amount,
-                    title: title.to_string(),
-                    accrual_month: None,
-                    kind: crate::models::SalaryEventKind::Regular,
-                });
-            }
-
-            let next_month = if month == 12 {
+            let salary_month = if month == 12 {
                 NaiveDate::from_ymd_opt(year + 1, 1, 1)
             } else {
                 NaiveDate::from_ymd_opt(year, month + 1, 1)
             };
-            let Some(next_month) = next_month else {
-                break;
-            };
-            cursor = next_month;
+
+            if let Some(salary_month) = salary_month {
+                let salary_base_day =
+                    clamp_salary_day(salary_month.year(), salary_month.month(), config.salary_day);
+                let advance_amount =
+                    ((config.amount as i128) * (config.advance_percent as i128) / 100) as i64;
+                let candidates = [
+                    (
+                        "Advance",
+                        "advance",
+                        shift_to_previous_workday(
+                            NaiveDate::from_ymd_opt(year, month, advance_base_day)
+                                .unwrap_or(cursor),
+                        ),
+                        advance_amount,
+                    ),
+                    (
+                        "Salary",
+                        "salary",
+                        shift_to_previous_workday(
+                            NaiveDate::from_ymd_opt(
+                                salary_month.year(),
+                                salary_month.month(),
+                                salary_base_day,
+                            )
+                            .unwrap_or(salary_month),
+                        ),
+                        config.amount - advance_amount,
+                    ),
+                ];
+
+                for (title, payout_type, date, amount) in candidates {
+                    if amount <= 0 || date < range_start || date > range_end {
+                        continue;
+                    }
+
+                    events.push(SalaryEvent {
+                        id: format!("auto_{}_{}_{}", config.id, payout_type, accrual_month),
+                        date: date.format("%Y-%m-%d").to_string(),
+                        amount,
+                        title: title.to_string(),
+                        accrual_month: Some(accrual_month.clone()),
+                        kind: crate::models::SalaryEventKind::Regular,
+                    });
+                }
+            }
         }
+
+        let next_month = if month == 12 {
+            NaiveDate::from_ymd_opt(year + 1, 1, 1)
+        } else {
+            NaiveDate::from_ymd_opt(year, month + 1, 1)
+        };
+        let Some(next_month) = next_month else {
+            break;
+        };
+        cursor = next_month;
     }
 
     events.sort_by(|a, b| a.date.cmp(&b.date).then_with(|| a.title.cmp(&b.title)));
@@ -745,4 +747,81 @@ pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudge
         available,
         per_day,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn existing_salary_config_defaults_to_manual_payouts() {
+        let config: SalaryConfig = serde_json::from_str(
+            r#"{
+                "id": "manual",
+                "effectiveFrom": "2026-09-01",
+                "amount": 20000000,
+                "advancePercent": 50,
+                "advanceDay": 20,
+                "salaryDay": 5
+            }"#,
+        )
+        .unwrap();
+
+        assert!(!config.auto_generate);
+        assert!(generated_salary_events_between(
+            &[config],
+            NaiveDate::from_ymd_opt(2026, 9, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 10, 10).unwrap(),
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn salary_raise_applies_to_accrual_month_not_payout_month() {
+        let configs = vec![
+            SalaryConfig {
+                id: "old".to_string(),
+                effective_from: "2026-01-01".to_string(),
+                amount: 16_008_000,
+                auto_generate: true,
+                advance_percent: 50,
+                advance_day: 20,
+                salary_day: 5,
+            },
+            SalaryConfig {
+                id: "raise".to_string(),
+                effective_from: "2026-09-01".to_string(),
+                amount: 20_000_000,
+                auto_generate: true,
+                advance_percent: 50,
+                advance_day: 20,
+                salary_day: 5,
+            },
+        ];
+
+        let events = generated_salary_events_between(
+            &configs,
+            NaiveDate::from_ymd_opt(2026, 9, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 10, 10).unwrap(),
+        );
+        let actual = events
+            .iter()
+            .map(|event| {
+                (
+                    event.date.as_str(),
+                    event.amount,
+                    event.accrual_month.as_deref(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            actual,
+            vec![
+                ("2026-09-04", 8_004_000, Some("2026-08")),
+                ("2026-09-18", 10_000_000, Some("2026-09")),
+                ("2026-10-05", 10_000_000, Some("2026-09")),
+            ]
+        );
+    }
 }

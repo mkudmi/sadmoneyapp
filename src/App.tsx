@@ -77,6 +77,7 @@ type SalaryConfigDraft = {
   id: string;
   effectiveFrom: string;
   amount: string;
+  autoGenerate: boolean;
   advancePercent: string;
   advanceDay: string;
   salaryDay: string;
@@ -87,6 +88,7 @@ function createEmptySalaryConfigDraft(today: string): SalaryConfigDraft {
     id: "",
     effectiveFrom: today,
     amount: "",
+    autoGenerate: false,
     advancePercent: "50",
     advanceDay: "20",
     salaryDay: "5",
@@ -999,10 +1001,6 @@ export default function App() {
 
   function handleCheckSalaryModal() {
     const monthlySalaryAmount = toKop(salaryModalAmount);
-    if (monthlySalaryAmount <= 0) {
-      setSalaryModalCheckResult(null);
-      return;
-    }
 
     setSalaryModalCheckResult(
       estimateManualSalaryForDate({
@@ -1014,6 +1012,7 @@ export default function App() {
           ?? salaryModalDate.slice(0, 7),
         payoutKindOverride: salaryModalPayoutKind === "auto" ? null : salaryModalPayoutKind,
         title: salaryModalTitle.trim() || "Salary",
+        salaryConfigs,
         salaryEvents: allSalaryEvents,
         vacations: data?.vacations ?? [],
         workSchedule,
@@ -1345,6 +1344,7 @@ export default function App() {
       id: config.id,
       effectiveFrom: config.effectiveFrom,
       amount: String(config.amount / 100),
+      autoGenerate: config.autoGenerate === true,
       advancePercent: String(config.advancePercent),
       advanceDay: String(config.advanceDay),
       salaryDay: String(config.salaryDay),
@@ -1378,6 +1378,7 @@ export default function App() {
       ...salaryConfigDraft,
       id: salaryConfigEditId ?? salaryConfigDraft.id,
       amount,
+      autoGenerate: salaryConfigDraft.autoGenerate,
       advancePercent,
       advanceDay,
       salaryDay,
@@ -1594,10 +1595,6 @@ export default function App() {
     if (!editSalaryModalId) return;
 
     const monthlySalaryAmount = toKop(editSalaryModalAmount);
-    if (monthlySalaryAmount <= 0) {
-      setEditSalaryModalCheckResult(null);
-      return;
-    }
 
     setEditSalaryModalCheckResult(
       estimateManualSalaryForDate({
@@ -1609,6 +1606,7 @@ export default function App() {
           ?? editSalaryModalDate.slice(0, 7),
         payoutKindOverride: editSalaryModalPayoutKind === "auto" ? null : editSalaryModalPayoutKind,
         title: editSalaryModalTitle.trim() || "Salary",
+        salaryConfigs,
         salaryEvents: allSalaryEvents,
         excludedSalaryEventIds: [editSalaryModalId],
         vacations: data?.vacations ?? [],
@@ -2242,10 +2240,10 @@ export default function App() {
                 </div>
 
                 <div className="surface" style={{ padding: 10 }}>
-                  <div style={{ fontSize: 13, marginBottom: 8 }}><b>{"Fixed salary schedule"}</b></div>
+                  <div style={{ fontSize: 13, marginBottom: 8 }}><b>{"Salary rate"}</b></div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
                     <label style={{ display: "grid", gap: 6 }}>
-                      <span style={{ fontSize: 12, opacity: 0.75 }}>{"Effective from"}</span>
+                      <span style={{ fontSize: 12, opacity: 0.75 }}>{"Effective from accrual month"}</span>
                       <DateInputWithCalendar
                         value={salaryConfigDraft.effectiveFrom}
                         dateFormat={dateFormat}
@@ -2259,6 +2257,14 @@ export default function App() {
                         onChange={(e) => setSalaryConfigDraft((draft) => ({ ...draft, amount: e.target.value }))}
                         placeholder="0"
                       />
+                    </label>
+                    <label style={{ display: "flex", gap: 8, alignItems: "center", alignSelf: "end", minHeight: 40 }}>
+                      <input
+                        type="checkbox"
+                        checked={salaryConfigDraft.autoGenerate}
+                        onChange={(e) => setSalaryConfigDraft((draft) => ({ ...draft, autoGenerate: e.target.checked }))}
+                      />
+                      <span style={{ fontSize: 12 }}>{"Create automatic payout entries"}</span>
                     </label>
                     <label style={{ display: "grid", gap: 6 }}>
                       <span style={{ fontSize: 12, opacity: 0.75 }}>{"Advance share, %"}</span>
@@ -2296,22 +2302,20 @@ export default function App() {
                     {`Split preview: ${salaryConfigDraft.advancePercent || "0"}/${Math.max(
                       0,
                       100 - (Number.parseInt(salaryConfigDraft.advancePercent || "0", 10) || 0)
-                    )}. If a payout date lands on Saturday or Sunday, it moves to Friday.`}
+                    )}. ${salaryConfigDraft.autoGenerate
+                      ? "Automatic payout entries are enabled."
+                      : "Payout entries are added manually."}`}
                   </div>
 
                   <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button onClick={() => { void saveSalaryConfig(); }}>
-                      {salaryConfigEditId ? "Update salary schedule" : "Add salary schedule"}
+                      {salaryConfigEditId ? "Update salary rate" : "Add salary rate"}
                     </button>
                     {salaryConfigEditId ? (
                       <button onClick={resetSalaryConfigDraft}>
                         {"Cancel edit"}
                       </button>
                     ) : null}
-                  </div>
-
-                  <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                    {"Manual salary entries stay untouched and are added on top of this automatic schedule."}
                   </div>
 
                   {salaryConfigs.length > 0 ? (
@@ -2333,10 +2337,10 @@ export default function App() {
                           <div style={{ fontSize: 12 }}>
                             <div>
                               <b>{formatDateForDisplay(config.effectiveFrom, dateFormat)}</b>
-                              {` • ${rub(config.amount)} • ${config.advancePercent}/${100 - config.advancePercent}`}
+                              {` • ${rub(config.amount)}`}
                             </div>
                             <div style={{ opacity: 0.75, marginTop: 2 }}>
-                              {`Advance: ${config.advanceDay}, salary: ${config.salaryDay}`}
+                              {`${config.autoGenerate ? "Automatic" : "Manual payouts"} • ${config.advancePercent}/${100 - config.advancePercent} • advance: ${config.advanceDay}, salary: ${config.salaryDay}`}
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: 6 }}>
@@ -2851,7 +2855,7 @@ export default function App() {
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB; optional for salary check)"}</div>
                 <input
                   value={salaryModalAmount}
                   onChange={(e) => {
@@ -2933,7 +2937,7 @@ export default function App() {
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
                   <div style={{ fontSize: 12, opacity: 0.8 }}>
-                    {"Estimate the payout for this date from the monthly amount, using workdays, vacations and public holidays."}
+                    {"Estimate the payout from the configured salary rate or history, using workdays, vacations and public holidays."}
                   </div>
                   <button type="button" onClick={handleCheckSalaryModal}>
                     {"Check salary"}
@@ -2961,20 +2965,28 @@ export default function App() {
                       </div>
                     ) : null}
                     <div style={{ fontSize: 12, opacity: 0.8 }}>
-                      {`Monthly base: ${rub(salaryModalCheckResult.monthlySalaryAmount)} (${salaryModalCheckResult.source === "history" ? "from previous payouts" : "from entered amount"})`}
+                      {`Monthly base: ${rub(salaryModalCheckResult.monthlySalaryAmount)} (${
+                        salaryModalCheckResult.source === "config"
+                          ? "from fixed salary schedule"
+                          : salaryModalCheckResult.source === "history"
+                            ? "from previous payouts"
+                            : "from entered amount"
+                      })`}
                     </div>
                     {salaryModalCheckResult.previouslyRecordedAmount > 0 ? (
                       <div style={{ fontSize: 12, opacity: 0.8 }}>
                         {`Already recorded for ${salaryModalCheckResult.payrollMonth}: ${rub(salaryModalCheckResult.previouslyRecordedAmount)}`}
                       </div>
                     ) : null}
-                    <div style={{ fontSize: 12, opacity: 0.8 }}>
-                      {salaryModalCheckResult.deltaFromEntered === 0
-                        ? "Entered amount matches the estimate."
-                        : salaryModalCheckResult.deltaFromEntered > 0
-                          ? `Entered amount is ${rub(salaryModalCheckResult.deltaFromEntered)} above the estimate.`
-                          : `Entered amount is ${rub(Math.abs(salaryModalCheckResult.deltaFromEntered))} below the estimate.`}
-                    </div>
+                    {salaryModalCheckResult.deltaFromEntered !== null ? (
+                      <div style={{ fontSize: 12, opacity: 0.8 }}>
+                        {salaryModalCheckResult.deltaFromEntered === 0
+                          ? "Entered amount matches the estimate."
+                          : salaryModalCheckResult.deltaFromEntered > 0
+                            ? `Entered amount is ${rub(salaryModalCheckResult.deltaFromEntered)} above the estimate.`
+                            : `Entered amount is ${rub(Math.abs(salaryModalCheckResult.deltaFromEntered))} below the estimate.`}
+                      </div>
+                    ) : null}
                     <div>
                       <button type="button" onClick={applyCheckedSalaryAmount}>
                         {"Use estimated amount"}

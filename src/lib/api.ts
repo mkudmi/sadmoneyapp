@@ -30,6 +30,7 @@ export type SalaryConfig = {
   id: string;
   effectiveFrom: string;
   amount: number;
+  autoGenerate?: boolean;
   advancePercent: number;
   advanceDay: number;
   salaryDay: number;

@@ -67,11 +67,28 @@ export function normalizeSalaryConfigs(configs?: SalaryConfig[] | null) {
     .map((config) => ({
       ...config,
       amount: Math.max(0, Math.trunc(config.amount)),
+      autoGenerate: config.autoGenerate === true,
       advancePercent: Math.min(100, Math.max(0, Math.trunc(config.advancePercent))),
       advanceDay: Math.min(31, Math.max(1, Math.trunc(config.advanceDay))),
       salaryDay: Math.min(31, Math.max(1, Math.trunc(config.salaryDay))),
     }))
     .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom) || a.id.localeCompare(b.id));
+}
+
+export function findSalaryConfigForAccrualMonth(
+  configs: SalaryConfig[] | null | undefined,
+  accrualMonth: string,
+) {
+  if (!/^\d{4}-\d{2}$/.test(accrualMonth)) return null;
+
+  const normalized = normalizeSalaryConfigs(configs);
+  for (let index = normalized.length - 1; index >= 0; index -= 1) {
+    if (normalized[index].effectiveFrom.slice(0, 7) <= accrualMonth) {
+      return normalized[index];
+    }
+  }
+
+  return null;
 }
 
 export function buildAutoSalaryEvents(
@@ -88,22 +105,33 @@ export function buildAutoSalaryEvents(
 
   const start = parseYmdLocal(rangeStart);
   const end = parseYmdLocal(rangeEnd);
-  const endWithWeekendShift = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 7);
   const events: SalaryEvent[] = [];
 
-  for (let index = 0; index < normalized.length; index += 1) {
-    const config = normalized[index];
-    if (config.amount <= 0) continue;
+  // Include the previous accrual month because its final payout happens in the
+  // following calendar month (for example, August salary paid on September 5).
+  const cursor = new Date(start.getFullYear(), start.getMonth() - 1, 1);
+  const lastAccrualMonth = new Date(end.getFullYear(), end.getMonth(), 1);
 
-    const effectiveFrom = config.effectiveFrom;
-    const nextEffectiveFrom = normalized[index + 1]?.effectiveFrom ?? null;
-    const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  while (cursor <= lastAccrualMonth) {
+    const year = cursor.getFullYear();
+    const month0 = cursor.getMonth();
+    const accrualMonth = `${year}-${String(month0 + 1).padStart(2, "0")}`;
+    let config: SalaryConfig | null = null;
+    for (let index = normalized.length - 1; index >= 0; index -= 1) {
+      if (normalized[index].effectiveFrom.slice(0, 7) <= accrualMonth) {
+        config = normalized[index];
+        break;
+      }
+    }
 
-    while (cursor <= endWithWeekendShift) {
-      const year = cursor.getFullYear();
-      const month0 = cursor.getMonth();
+    if (config?.autoGenerate && config.amount > 0) {
       const advanceBase = new Date(year, month0, clampSalaryDay(year, month0, config.advanceDay));
-      const salaryBase = new Date(year, month0, clampSalaryDay(year, month0, config.salaryDay));
+      const salaryMonth = new Date(year, month0 + 1, 1);
+      const salaryBase = new Date(
+        salaryMonth.getFullYear(),
+        salaryMonth.getMonth(),
+        clampSalaryDay(salaryMonth.getFullYear(), salaryMonth.getMonth(), config.salaryDay),
+      );
       const advanceDate = ymd(shiftToPreviousWorkday(advanceBase));
       const salaryDate = ymd(shiftToPreviousWorkday(salaryBase));
       const advanceAmount = Math.floor((config.amount * config.advancePercent) / 100);
@@ -111,20 +139,22 @@ export function buildAutoSalaryEvents(
 
       const candidates: Array<SalaryEvent & { payoutType: "advance" | "salary" }> = [
         {
-          id: `auto_${config.id}_advance_${advanceDate}`,
+          id: `auto_${config.id}_advance_${accrualMonth}`,
           date: advanceDate,
           amount: advanceAmount,
           title: "Advance",
+          accrualMonth,
           generated: true,
           sourceConfigId: config.id,
           payoutType: "advance",
           kind: "regular",
         },
         {
-          id: `auto_${config.id}_salary_${salaryDate}`,
+          id: `auto_${config.id}_salary_${accrualMonth}`,
           date: salaryDate,
           amount: salaryAmount,
           title: "Salary",
+          accrualMonth,
           generated: true,
           sourceConfigId: config.id,
           payoutType: "salary",
@@ -135,13 +165,11 @@ export function buildAutoSalaryEvents(
       for (const candidate of candidates) {
         if (candidate.amount <= 0) continue;
         if (candidate.date < rangeStart || candidate.date > rangeEnd) continue;
-        if (candidate.date < effectiveFrom) continue;
-        if (nextEffectiveFrom && candidate.date >= nextEffectiveFrom) continue;
         events.push(candidate);
       }
-
-      cursor.setMonth(cursor.getMonth() + 1);
     }
+
+    cursor.setMonth(cursor.getMonth() + 1);
   }
 
   return events.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
@@ -153,6 +181,7 @@ type ManualSalaryEstimateArgs = {
   accrualMonth: string;
   payoutKindOverride?: ManualSalaryPayoutKind | null;
   title: string;
+  salaryConfigs?: SalaryConfig[] | null;
   salaryEvents: SalaryEvent[];
   excludedSalaryEventIds?: string[];
   vacations: Vacation[];
@@ -174,9 +203,9 @@ export type ManualSalaryEstimate = {
   vacationWorkingDaysExcluded: number;
   monthlySalaryAmount: number;
   previouslyRecordedAmount: number;
-  enteredAmount: number;
-  deltaFromEntered: number;
-  source: "history" | "input_fallback";
+  enteredAmount: number | null;
+  deltaFromEntered: number | null;
+  source: "config" | "history" | "input_fallback";
 };
 
 export type ManualSalaryPayoutKind = "first_half" | "second_half";
@@ -339,8 +368,7 @@ function inferMonthlySalaryAmountFromHistory(
 export function estimateManualSalaryForDate(args: ManualSalaryEstimateArgs): ManualSalaryEstimate | null {
   if (
     !/^\d{4}-\d{2}-\d{2}$/.test(args.payoutDate) ||
-    !/^\d{4}-\d{2}$/.test(args.accrualMonth) ||
-    args.enteredAmount <= 0
+    !/^\d{4}-\d{2}$/.test(args.accrualMonth)
   ) {
     return null;
   }
@@ -436,6 +464,10 @@ export function estimateManualSalaryForDate(args: ManualSalaryEstimateArgs): Man
   );
   const vacationWorkingDaysExcluded = monthWorkingDays - payableMonthWorkingDays;
 
+  const monthlySalaryAmountFromConfig = findSalaryConfigForAccrualMonth(
+    args.salaryConfigs,
+    args.accrualMonth,
+  )?.amount ?? null;
   const monthlySalaryAmountFromHistory = inferMonthlySalaryAmountFromHistory(
     relevantSalaryEvents,
     args.accrualMonth,
@@ -445,8 +477,16 @@ export function estimateManualSalaryForDate(args: ManualSalaryEstimateArgs): Man
     args.offDays,
     args.productionCalendarDays,
   );
-  const monthlySalaryAmount = monthlySalaryAmountFromHistory ?? args.enteredAmount;
-  const source: "history" | "input_fallback" = monthlySalaryAmountFromHistory ? "history" : "input_fallback";
+  const enteredAmount = args.enteredAmount > 0 ? args.enteredAmount : null;
+  const monthlySalaryAmount = monthlySalaryAmountFromConfig ?? monthlySalaryAmountFromHistory ?? enteredAmount;
+  if (monthlySalaryAmount === null || monthlySalaryAmount <= 0) {
+    return null;
+  }
+  const source: "config" | "history" | "input_fallback" = monthlySalaryAmountFromConfig !== null
+    ? "config"
+    : monthlySalaryAmountFromHistory !== null
+      ? "history"
+      : "input_fallback";
   const firstHalfAmount = Math.round((monthlySalaryAmount * payableFirstHalfWorkingDays) / monthWorkingDays);
   const previouslyRecordedAmount = relevantSalaryEvents
     .filter((salaryEvent) => recordedEventsForAccrualMonth.includes(salaryEvent))
@@ -469,8 +509,8 @@ export function estimateManualSalaryForDate(args: ManualSalaryEstimateArgs): Man
     vacationWorkingDaysExcluded,
     monthlySalaryAmount,
     previouslyRecordedAmount,
-    enteredAmount: args.enteredAmount,
-    deltaFromEntered: args.enteredAmount - amount,
+    enteredAmount,
+    deltaFromEntered: enteredAmount === null ? null : enteredAmount - amount,
     source,
   };
 }

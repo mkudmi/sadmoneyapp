@@ -68,7 +68,11 @@ export function DateInputWithCalendar({
   }
 
   return (
-    <div style={{ position: "relative" }} data-date-picker="true">
+    <div
+      style={{ position: "relative" }}
+      data-date-picker="true"
+      data-date-picker-open={open ? "true" : "false"}
+    >
       <input
         value={formatDateForDisplay(value, normalizedFormat)}
         readOnly

@@ -164,6 +164,8 @@ pub struct SalaryConfig {
     #[serde(rename = "effectiveFrom")]
     pub effective_from: String,
     pub amount: i64,
+    #[serde(rename = "autoGenerate", default)]
+    pub auto_generate: bool,
     #[serde(rename = "advancePercent")]
     pub advance_percent: i32,
     #[serde(rename = "advanceDay")]
