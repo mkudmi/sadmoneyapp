@@ -2502,6 +2502,7 @@ export default function App() {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
                 <input
+                  autoFocus
                   value={txModalAmount}
                   onChange={(e) => setTxModalAmount(e.target.value)}
                   placeholder={txModalType === "income" ? "1000" : "100"}
