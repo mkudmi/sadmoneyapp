@@ -1,5 +1,6 @@
 mod commands;
 mod models;
+mod production_calendar;
 mod storage;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -33,6 +34,7 @@ pub fn run() {
             commands::apply_daily_limit_carryover,
             commands::delete_vacation,
             commands::delete_off_day,
+            production_calendar::load_consultant_production_calendar,
             commands::upsert_debt,
             commands::delete_debt,
         ])

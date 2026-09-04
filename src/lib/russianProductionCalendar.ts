@@ -1,4 +1,5 @@
 import { parseYmdLocal, ymd } from "./date";
+import { api } from "./api";
 
 const XMLCALENDAR_BASE_URL =
   "https://raw.githubusercontent.com/xmlcalendar/xmlcalendar.github.io/main/data/ru";
@@ -25,9 +26,12 @@ type DayTone = {
   tileBackground: string;
 };
 
-type RussianProductionCalendarYear = {
+export type RussianProductionCalendarYear = {
   year: number;
   days: RussianProductionCalendarDay[];
+  source?: "xmlcalendar" | "consultant.ru";
+  isProject?: boolean;
+  fetchedAt?: number;
 };
 
 const memoryCache = new Map<number, Promise<RussianProductionCalendarYear>>();
@@ -44,6 +48,12 @@ function readYearFromStorage(year: number) {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as RussianProductionCalendarYear;
     if (parsed.year !== year || !Array.isArray(parsed.days)) return null;
+    if (
+      parsed.source === "consultant.ru" &&
+      (!parsed.fetchedAt || Date.now() - parsed.fetchedAt > 24 * 60 * 60 * 1000)
+    ) {
+      return null;
+    }
     return parsed;
   } catch {
     return null;
@@ -118,13 +128,23 @@ function parseCalendarXml(year: number, xmlText: string): RussianProductionCalen
 }
 
 async function fetchRussianProductionCalendarYear(year: number) {
-  const response = await fetch(`${XMLCALENDAR_BASE_URL}/${year}/calendar.xml`);
-  if (!response.ok) {
-    throw new Error(`Failed to load Russian production calendar for ${year}`);
+  try {
+    const response = await fetch(`${XMLCALENDAR_BASE_URL}/${year}/calendar.xml`);
+    if (response.ok) {
+      const xmlText = await response.text();
+      return {
+        ...parseCalendarXml(year, xmlText),
+        source: "xmlcalendar" as const,
+        isProject: false,
+        fetchedAt: Date.now(),
+      };
+    }
+  } catch {
+    // The native fallback below also covers temporary failures of the XML source.
   }
 
-  const xmlText = await response.text();
-  return parseCalendarXml(year, xmlText);
+  const calendar = await api.loadConsultantProductionCalendar(year);
+  return { ...calendar, fetchedAt: Date.now() };
 }
 
 export function loadRussianProductionCalendarYear(year: number) {

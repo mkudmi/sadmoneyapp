@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { DateFormat } from "./date";
 import type { SalaryEventKind } from "./salaryEvent";
+import type { RussianProductionCalendarYear } from "./russianProductionCalendar";
 
 export type TxType = "income" | "expense" | "planned_expense";
 
@@ -126,4 +127,6 @@ export const api = {
   applyDailyLimitCarryover: (amount: number, processedDate: string) =>
     invoke<AppData>("apply_daily_limit_carryover", { amount, processedDate }),
   calcDailyBudget: (fromDate: string) => invoke<DailyBudgetResult>("calc_daily_budget", { fromDate }),
+  loadConsultantProductionCalendar: (year: number) =>
+    invoke<RussianProductionCalendarYear>("load_consultant_production_calendar", { year }),
 };
