@@ -45,6 +45,8 @@ import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 import { buildTrendsData } from "./lib/trends";
 import { AppIcon } from "./components/AppIcon";
+import { YearExpenseSummaryModal } from "./components/YearExpenseSummaryModal";
+import { buildYearExpenseSummary } from "./lib/yearExpenseSummary";
 import { DateInputWithCalendar } from "./components/DateInputWithCalendar";
 import {
   calculateVacationAverageDailyPay,
@@ -193,6 +195,10 @@ export default function App() {
   const trendsData = useMemo(
     () => buildTrendsData({ data: viewData, monthKey, year, month0, today, locale }),
     [locale, month0, monthKey, today, viewData, year]
+  );
+  const yearExpenseSummary = useMemo(
+    () => buildYearExpenseSummary(viewData?.transactions ?? [], year, locale),
+    [locale, viewData?.transactions, year]
   );
 
   const storedWorkSchedule = data?.settings.workSchedule === "custom" ? "custom" : "5/2";
@@ -506,6 +512,7 @@ export default function App() {
   const [debtsPanelOpen, setDebtsPanelOpen] = useState(false);
   const [vacationsPanelOpen, setVacationsPanelOpen] = useState(false);
   const [trendsModalOpen, setTrendsModalOpen] = useState(false);
+  const [yearSummaryModalOpen, setYearSummaryModalOpen] = useState(false);
   const [trendsCategoryQuery, setTrendsCategoryQuery] = useState("");
   const [trendsIncomeCategoryQuery, setTrendsIncomeCategoryQuery] = useState("");
   const [settingsTab, setSettingsTab] = useState<"general" | "preferences" | "categories">("general");
@@ -626,6 +633,15 @@ export default function App() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [trendsModalOpen]);
+
+  useEffect(() => {
+    if (!yearSummaryModalOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setYearSummaryModalOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [yearSummaryModalOpen]);
 
   useEffect(() => {
     if (trendsModalOpen) return;
@@ -1757,6 +1773,14 @@ export default function App() {
               </span>
             </button>
 
+            <button onClick={() => setYearSummaryModalOpen(true)} className="topbar-action-button">
+              <AppIcon name="chart" />
+              <span className="topbar-action-copy">
+                <span>{"Year summary"}</span>
+                <span className="topbar-action-meta">{rub(yearExpenseSummary.total)}</span>
+              </span>
+            </button>
+
             <button
               aria-label="Settings"
               onClick={openSettingsModal}
@@ -2115,6 +2139,13 @@ export default function App() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {yearSummaryModalOpen ? (
+        <YearExpenseSummaryModal
+          summary={yearExpenseSummary}
+          onClose={() => setYearSummaryModalOpen(false)}
+        />
       ) : null}
 
       {settingsModalOpen ? (
