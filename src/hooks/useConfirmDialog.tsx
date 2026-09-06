@@ -19,6 +19,7 @@ export function useConfirmDialog() {
 
   const confirm = useCallback((message = DEFAULT_MESSAGE, confirmLabel = "Delete", cancelLabel = "Cancel") => {
     return new Promise<boolean>((resolve) => {
+      resolverRef.current?.(false);
       resolverRef.current = resolve;
       setState({
         open: true,
@@ -37,20 +38,11 @@ export function useConfirmDialog() {
   }, []);
 
   useEffect(() => {
-    if (!state.open) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        closeWith(false);
-      }
-      if (e.key === "Enter") {
-        e.preventDefault();
-        closeWith(true);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [closeWith, state.open]);
+    return () => {
+      resolverRef.current?.(false);
+      resolverRef.current = null;
+    };
+  }, []);
 
   const dialog = useMemo(
     () => (

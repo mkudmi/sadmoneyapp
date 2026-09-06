@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   dateFormatPattern,
   daysInMonth,
@@ -11,6 +11,8 @@ import type { DateFormat } from "../lib/date";
 import { useDismissible } from "../hooks/useDismissible";
 
 type DateInputWithCalendarProps = {
+  id?: string;
+  ariaLabel?: string;
   value: string;
   placeholder?: string;
   dateFormat?: DateFormat;
@@ -18,17 +20,26 @@ type DateInputWithCalendarProps = {
 };
 
 export function DateInputWithCalendar({
+  id,
+  ariaLabel = "Date",
   value,
   placeholder,
   dateFormat = "dd-mm-yyyy",
   onChange,
 }: DateInputWithCalendarProps) {
   const normalizedFormat = normalizeDateFormat(dateFormat);
+  const pickerId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
   const [viewMonth0, setViewMonth0] = useState(new Date().getMonth());
 
-  useDismissible(open, () => setOpen(false), "[data-date-picker]");
+  useDismissible(open, () => setOpen(false), `[data-date-picker="${pickerId}"]`);
+
+  function closeCalendar() {
+    inputRef.current?.focus();
+    setOpen(false);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -70,21 +81,48 @@ export function DateInputWithCalendar({
   return (
     <div
       style={{ position: "relative" }}
-      data-date-picker="true"
+      data-date-picker={pickerId}
       data-date-picker-open={open ? "true" : "false"}
+      onBlur={(event) => {
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+      onKeyDown={(event) => {
+        if (open && event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          closeCalendar();
+        }
+      }}
     >
       <input
+        ref={inputRef}
+        id={id ?? pickerId}
+        aria-label={ariaLabel}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? `${pickerId}-calendar` : undefined}
         value={formatDateForDisplay(value, normalizedFormat)}
         readOnly
         placeholder={placeholder ?? dateFormatPattern(normalizedFormat)}
-        onClick={() => setOpen(true)}
-        onFocus={() => setOpen(true)}
+        onClick={() => setOpen((previous) => !previous)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " " || event.key === "ArrowDown") {
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(true);
+          }
+        }}
         style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd", cursor: "pointer" }}
       />
 
       {open ? (
         <div
+          id={`${pickerId}-calendar`}
+          role="dialog"
+          aria-label="Choose date"
           className="menu-pop"
+          // Keep WebKit from blurring the input before the button click.
+          onMouseDown={(event) => event.preventDefault()}
           style={{
             position: "absolute",
             top: "calc(100% + 6px)",
@@ -98,11 +136,11 @@ export function DateInputWithCalendar({
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <button type="button" onClick={prevMonth}>{"<"}</button>
-            <b style={{ fontSize: 13 }}>
+            <button type="button" onClick={prevMonth} aria-label="Previous month">{"<"}</button>
+            <b aria-live="polite" style={{ fontSize: 13 }}>
               {new Date(viewYear, viewMonth0, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
             </b>
-            <button type="button" onClick={nextMonth}>{">"}</button>
+            <button type="button" onClick={nextMonth} aria-label="Next month">{">"}</button>
           </div>
 
           <div
@@ -126,9 +164,11 @@ export function DateInputWithCalendar({
                 <button
                   key={`day-${day}`}
                   type="button"
+                  aria-label={new Date(viewYear, viewMonth0, day).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}
+                  aria-pressed={isActive}
                   onClick={() => {
                     onChange(picked);
-                    setOpen(false);
+                    closeCalendar();
                   }}
                   style={{
                     width: "100%",
@@ -155,6 +195,6 @@ export function DateInputWithCalendar({
 function parseYmdSafe(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const d = parseYmdLocal(value);
-  if (Number.isNaN(d.getTime())) return null;
+  if (Number.isNaN(d.getTime()) || ymd(d) !== value) return null;
   return d;
 }

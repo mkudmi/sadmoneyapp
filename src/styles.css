@@ -44,6 +44,57 @@ body {
   position: relative;
 }
 
+.app-load-state {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.budget-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.budget-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+.budget-calendar {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.budget-sidebar {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.calendar-day-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 8px;
+  min-height: 30px;
+  padding-right: 28px;
+}
+
+.calendar-day-amount {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .app-shell::before,
 .app-shell::after {
   content: "";
@@ -913,6 +964,14 @@ select {
 }
 
 @media (max-width: 900px) {
+  .general-stats-secondary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .general-stats-secondary-card:last-child {
+    grid-column: 1 / -1;
+  }
+
   .topbar,
   .surface {
     border-radius: 14px;
@@ -922,23 +981,6 @@ select {
   button {
     min-height: 32px;
     padding: 0 10px;
-  }
-
-  .general-stats-header,
-  .general-stats-highlight-grid,
-  .general-stats-secondary-grid {
-    grid-template-columns: 1fr;
-    display: grid;
-  }
-
-  .general-stats-header {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .general-stats-date {
-    align-items: flex-start;
   }
 
   .topbar-main-row {
@@ -986,5 +1028,48 @@ select {
 
   .vacation-form-summary-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1100px), (max-height: 720px) {
+  .app-shell {
+    height: auto !important;
+    min-height: 100%;
+    overflow: visible !important;
+  }
+
+  .budget-main {
+    flex: none;
+    overflow: visible;
+  }
+
+  .budget-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(560px, auto) auto;
+    height: auto;
+  }
+
+  .budget-sidebar {
+    grid-column: 1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .selected-date-panel {
+    min-height: 240px !important;
+    max-height: 420px;
+  }
+}
+
+@media (max-width: 600px) {
+  .general-stats-secondary-grid,
+  .budget-sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-calendar {
+    min-width: 0 !important;
   }
 }

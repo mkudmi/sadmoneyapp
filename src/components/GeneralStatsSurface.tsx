@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { AppData } from "../lib/api";
-import { formatDateForDisplay, ymFromYmd } from "../lib/date";
+import { formatDateForDisplay, parseYmdLocal, ymFromYmd } from "../lib/date";
 import type { DateFormat } from "../lib/date";
 import { rub } from "../lib/money";
 import { getLatestPaidVacationAverageReference } from "../lib/russianVacation";
@@ -21,7 +21,7 @@ export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
   const monthLabel = useMemo(
     () =>
       capitalizeMonth(
-        new Date(`${monthKey}-01`).toLocaleString("en-US", {
+        parseYmdLocal(`${monthKey}-01`).toLocaleString("en-US", {
           month: "long",
           year: "numeric",
         })

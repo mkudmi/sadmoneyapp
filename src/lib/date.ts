@@ -44,7 +44,7 @@ export function formatDateForDisplay(value: string, format: DateFormat) {
 export function parseDisplayDate(value: string, format: DateFormat) {
   const trimmed = value.trim();
   if (!trimmed) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return isValidYmd(trimmed) ? trimmed : null;
 
   let year = "";
   let month = "";
@@ -70,14 +70,7 @@ export function parseDisplayDate(value: string, format: DateFormat) {
   }
 
   const normalized = `${year}-${month}-${day}`;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
-
-  const parsed = parseYmdLocal(normalized);
-  if (Number.isNaN(parsed.getTime()) || ymd(parsed) !== normalized) {
-    return null;
-  }
-
-  return normalized;
+  return isValidYmd(normalized) ? normalized : null;
 }
 
 export function ymFromYmd(s: string) {
@@ -89,16 +82,25 @@ export function parseYmdLocal(s: string) {
   return new Date(y, m - 1, d);
 }
 
+export function isValidYmd(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = parseYmdLocal(value);
+  return !Number.isNaN(parsed.getTime()) && ymd(parsed) === value;
+}
+
 export function daysInMonth(year: number, monthIndex0: number) {
   return new Date(year, monthIndex0 + 1, 0).getDate();
 }
 
 export function inclusiveDays(startYmd: string, endYmd: string) {
+  if (!isValidYmd(startYmd) || !isValidYmd(endYmd)) return 0;
   const start = parseYmdLocal(startYmd);
   const end = parseYmdLocal(endYmd);
-  const start0 = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-  const end0 = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-  const diffDays = Math.floor((end0.getTime() - start0.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  // Calendar days retain their length when the local timezone switches to or
+  // from daylight saving time; elapsed local hours do not.
+  const start0 = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const end0 = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+  const diffDays = Math.floor((end0 - start0) / (1000 * 60 * 60 * 24)) + 1;
   return Math.max(diffDays, 0);
 }
 

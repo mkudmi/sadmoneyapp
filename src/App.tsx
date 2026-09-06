@@ -44,6 +44,7 @@ import { TrendsCategoryComparisonPanel } from "./components/TrendsCategoryCompar
 import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import { usePiggyBankHotkeys } from "./hooks/usePiggyBankHotkeys";
 import { buildTrendsData } from "./lib/trends";
+import { buildMonthlyCategories } from "./lib/monthlySummary";
 import { AppIcon } from "./components/AppIcon";
 import { YearExpenseSummaryModal } from "./components/YearExpenseSummaryModal";
 import { buildYearExpenseSummary } from "./lib/yearExpenseSummary";
@@ -100,6 +101,10 @@ function createEmptySalaryConfigDraft(today: string): SalaryConfigDraft {
 export default function App() {
   const today = DEBUG_USE_CUSTOM_TODAY ? DEBUG_CUSTOM_TODAY : ymd(new Date());
   const [data, setData] = useState<AppData | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [budgetError, setBudgetError] = useState(false);
+  const [budgetAttempt, setBudgetAttempt] = useState(0);
   const [year, setYear] = useState(() => parseYmdLocal(today).getFullYear());
   const [month0, setMonth0] = useState(() => parseYmdLocal(today).getMonth()); // 0..11
   const [selectedDate, setSelectedDate] = useState(today);
@@ -157,41 +162,10 @@ export default function App() {
         return a.title.localeCompare(b.title);
       });
   }, [data?.vacations, monthKey]);
-  const topCategoriesThisMonth = useMemo(() => {
-    if (!data) return [] as Array<{ category: string; amount: number; type: "income" | "expense" }>;
-
-    const monthStart = `${monthKey}-01`;
-    const byCategory = new Map<string, { amount: number; type: "income" | "expense" }>();
-    for (const t of data.transactions) {
-      if (t.date < monthStart || t.date > today) continue;
-      if (t.type !== "income" && t.type !== "expense") continue;
-      const category = (t.category || "").trim() || "No category";
-      const prev = byCategory.get(`${t.type}:${category}`);
-      byCategory.set(`${t.type}:${category}`, {
-        type: t.type,
-        amount: (prev?.amount ?? 0) + t.amount,
-      });
-    }
-
-    for (const s of allSalaryEvents) {
-      if (s.date < monthStart || s.date > today) continue;
-      const category = (s.title || "").trim() || "Salary";
-      const key = `income:${category}`;
-      const prev = byCategory.get(key);
-      byCategory.set(key, {
-        type: "income",
-        amount: (prev?.amount ?? 0) + s.amount,
-      });
-    }
-
-    return Array.from(byCategory.entries())
-      .map(([key, value]) => ({
-        category: key.split(":").slice(1).join(":"),
-        amount: value.amount,
-        type: value.type,
-      }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [allSalaryEvents, data, monthKey, today]);
+  const topCategoriesThisMonth = useMemo(
+    () => buildMonthlyCategories(data?.transactions ?? [], allSalaryEvents, monthKey, today),
+    [allSalaryEvents, data?.transactions, monthKey, today]
+  );
   const trendsData = useMemo(
     () => buildTrendsData({ data: viewData, monthKey, year, month0, today, locale }),
     [locale, month0, monthKey, today, viewData, year]
@@ -276,8 +250,13 @@ export default function App() {
   }
 
   useEffect(() => {
-    api.getData().then(setData);
-  }, []);
+    let cancelled = false;
+    setLoadError(false);
+    api.getData()
+      .then((loaded) => { if (!cancelled) setData(loaded); })
+      .catch(() => { if (!cancelled) setLoadError(true); });
+    return () => { cancelled = true; };
+  }, [loadAttempt]);
 
   useEffect(() => {
     setWorkSchedule(storedWorkSchedule);
@@ -328,8 +307,18 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    api.calcDailyBudget(today).then(setBudget);
-  }, [today, data]);
+    if (!data) return;
+    let cancelled = false;
+    setBudgetError(false);
+    api.calcDailyBudget(today)
+      .then((result) => { if (!cancelled) setBudget(result); })
+      .catch(() => {
+        if (cancelled) return;
+        setBudget(null);
+        setBudgetError(true);
+      });
+    return () => { cancelled = true; };
+  }, [today, data, budgetAttempt]);
 
   const availableForSpending = budget?.available ?? 0;
   const spentToday = useMemo(
@@ -364,7 +353,7 @@ export default function App() {
       }
 
       const offForDay = offDays.find((o) => o.date === date) ?? null;
-      const dayOfWeek = new Date(date).getDay();
+      const dayOfWeek = parseYmdLocal(date).getDay();
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
       if (workSchedule === "custom") {
@@ -458,7 +447,7 @@ export default function App() {
 
     return nextSalaryAmount - plannedUntilSelected;
   }, [budget?.next_salary_date, selectedDate, viewData]);
-  const selectedDateWeekDay = new Date(selectedDate).getDay(); // 0 = Sunday, 6 = Saturday
+  const selectedDateWeekDay = parseYmdLocal(selectedDate).getDay(); // 0 = Sunday, 6 = Saturday
   const selectedDateIsWeekend = selectedDateWeekDay === 0 || selectedDateWeekDay === 6;
   const selectedDateDefaultWorking = workSchedule === "5/2"
     ? (
@@ -1296,7 +1285,7 @@ export default function App() {
 
   async function saveFiveTwoSchedule() {
     await persistWorkSchedule((date) => {
-      const dayOfWeek = new Date(date).getDay(); // 0 = Sunday, 6 = Saturday
+      const dayOfWeek = parseYmdLocal(date).getDay(); // 0 = Sunday, 6 = Saturday
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
       return !isWeekend;
     });
@@ -1685,9 +1674,23 @@ export default function App() {
     return trendsData.incomeCategoryComparison.filter((item) => item.category.toLowerCase().includes(q));
   }, [trendsIncomeCategoryQuery, trendsData.incomeCategoryComparison]);
 
+  if (!data) {
+    return (
+      <div className="app-load-state">
+        <div className="surface" role={loadError ? "alert" : "status"}>
+          <h2>{loadError ? "Unable to load your data" : "Loading your budget…"}</h2>
+          {loadError ? (
+            <>
+              <p>Your saved data has not been replaced. Try loading it again.</p>
+              <button onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Retry</button>
+            </>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
   return (
-
-
     <div
       className="app-shell"
       style={{
@@ -1820,33 +1823,11 @@ export default function App() {
           onDeleteSalary={handleDeleteSalary}
         />
       </div>
-      <div style={{ flex: "1 1 auto", minHeight: 0, overflow: "hidden" }}>
+      <div className="budget-main">
+        <div className="budget-layout">
+        <div className="budget-sidebar">
         <div
-          style={{
-            display: "flex",
-            gap: 12,
-            alignItems: "stretch",
-            flexDirection: "row-reverse",
-            flexWrap: "wrap",
-            height: "100%",
-            minHeight: 0,
-            overflow: "hidden",
-          }}
-        >
-        <div
-          style={{
-            flex: "0 0 320px",
-            width: "100%",
-            maxWidth: 320,
-            minWidth: 320,
-            height: "100%",
-            minHeight: 0,
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-          }}
-        >
-        <div
+          className="selected-date-panel"
           style={{
             padding: 12,
             border: "1px solid #ddd",
@@ -1878,12 +1859,17 @@ export default function App() {
             {selectedDateStatus.label}
           </div>
         </div>
-        <SelectedDateBudgetSummary
+        {budgetError ? (
+          <div role="alert" style={{ marginTop: 12 }}>
+            <p>Unable to calculate the daily budget.</p>
+            <button onClick={() => setBudgetAttempt((attempt) => attempt + 1)}>Retry</button>
+          </div>
+        ) : <SelectedDateBudgetSummary
           budget={budget}
           availableForSpending={availableForSpending}
           dailySpendLimit={dailySpendLimitFromAvailable}
           today={today}
-        />
+        />}
         <SelectedDateTransactionsList
           selectedDate={selectedDate}
           dateFormat={dateFormat}
@@ -2098,7 +2084,7 @@ export default function App() {
               </div>
 
               <div className="surface" style={{ padding: 10 }}>
-                <div style={{ marginBottom: 6, fontSize: 13 }}><b>{"Average check"}</b></div>
+                <div style={{ marginBottom: 6, fontSize: 13 }}><b>{"Average daily expense"}</b></div>
                 <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
                   {trendsData.currentLabel} {"vs"} {trendsData.previousLabel}
                 </div>

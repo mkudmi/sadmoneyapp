@@ -1,5 +1,5 @@
 import type { OffDay, SalaryConfig, SalaryEvent, Vacation } from "./api";
-import { daysInMonth, parseYmdLocal, ymd } from "./date";
+import { daysInMonth, isValidYmd, parseYmdLocal, ymd } from "./date";
 import {
   isRussianProductionCalendarDayOff,
   isRussianWorkingWeekend,
@@ -63,7 +63,7 @@ function shiftToPreviousWorkday(date: Date) {
 
 export function normalizeSalaryConfigs(configs?: SalaryConfig[] | null) {
   return [...(configs ?? [])]
-    .filter((config) => /^\d{4}-\d{2}-\d{2}$/.test(config.effectiveFrom))
+    .filter((config) => isValidYmd(config.effectiveFrom))
     .map((config) => ({
       ...config,
       amount: Math.max(0, Math.trunc(config.amount)),
@@ -79,7 +79,7 @@ export function findSalaryConfigForAccrualMonth(
   configs: SalaryConfig[] | null | undefined,
   accrualMonth: string,
 ) {
-  if (!/^\d{4}-\d{2}$/.test(accrualMonth)) return null;
+  if (!isValidYmd(`${accrualMonth}-01`)) return null;
 
   const normalized = normalizeSalaryConfigs(configs);
   for (let index = normalized.length - 1; index >= 0; index -= 1) {
@@ -96,7 +96,7 @@ export function buildAutoSalaryEvents(
   rangeStart: string,
   rangeEnd: string,
 ): SalaryEvent[] {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(rangeStart) || !/^\d{4}-\d{2}-\d{2}$/.test(rangeEnd) || rangeStart > rangeEnd) {
+  if (!isValidYmd(rangeStart) || !isValidYmd(rangeEnd) || rangeStart > rangeEnd) {
     return [];
   }
 
@@ -110,7 +110,9 @@ export function buildAutoSalaryEvents(
   // Include the previous accrual month because its final payout happens in the
   // following calendar month (for example, August salary paid on September 5).
   const cursor = new Date(start.getFullYear(), start.getMonth() - 1, 1);
-  const lastAccrualMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+  // An advance on the first weekend of the next month can move back into
+  // this range, for example February 1, 2026 -> January 30, 2026.
+  const lastAccrualMonth = new Date(end.getFullYear(), end.getMonth() + 1, 1);
 
   while (cursor <= lastAccrualMonth) {
     const year = cursor.getFullYear();
@@ -367,8 +369,8 @@ function inferMonthlySalaryAmountFromHistory(
 
 export function estimateManualSalaryForDate(args: ManualSalaryEstimateArgs): ManualSalaryEstimate | null {
   if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(args.payoutDate) ||
-    !/^\d{4}-\d{2}$/.test(args.accrualMonth)
+    !isValidYmd(args.payoutDate) ||
+    !isValidYmd(`${args.accrualMonth}-01`)
   ) {
     return null;
   }

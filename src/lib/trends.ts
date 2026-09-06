@@ -47,10 +47,8 @@ export function buildTrendsData(params: {
     };
   }
 
-  const currentMonthStart = `${monthKey}-01`;
   const prevMonthDate = new Date(year, month0 - 1, 1);
   const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, "0")}`;
-  const previousMonthStart = `${prevMonthKey}-01`;
 
   const currentLabel = capitalizeFirst(new Date(year, month0, 1).toLocaleString(locale, { month: "long", year: "numeric" }));
   const previousLabel = capitalizeFirst(prevMonthDate.toLocaleString(locale, { month: "long", year: "numeric" }));
@@ -66,6 +64,7 @@ export function buildTrendsData(params: {
   const previousIncomeByCategory = new Map<string, number>();
 
   for (const t of data.transactions ?? []) {
+    if (t.date > today) continue;
     const ym = ymFromYmd(t.date);
     if (t.type === "income") {
       const category = normalizeCategoryInput(t.category) || "No category";
@@ -79,24 +78,26 @@ export function buildTrendsData(params: {
       }
     }
     if (t.type === "expense") {
+      const category = normalizeCategoryInput(t.category) || "No category";
       if (ym === monthKey) {
         currentExpense += t.amount;
-        currentExpenseByCategory.set(t.category, (currentExpenseByCategory.get(t.category) ?? 0) + t.amount);
+        currentExpenseByCategory.set(category, (currentExpenseByCategory.get(category) ?? 0) + t.amount);
       }
       if (ym === prevMonthKey) {
         previousExpense += t.amount;
-        previousExpenseByCategory.set(t.category, (previousExpenseByCategory.get(t.category) ?? 0) + t.amount);
+        previousExpenseByCategory.set(category, (previousExpenseByCategory.get(category) ?? 0) + t.amount);
       }
     }
   }
 
   for (const s of data.salaryEvents ?? []) {
+    if (s.date > today) continue;
     const category = normalizeCategoryInput(s.title) || "Salary";
-    if (s.date >= currentMonthStart && s.date <= today) {
+    if (ymFromYmd(s.date) === monthKey) {
       currentIncome += s.amount;
       currentIncomeByCategory.set(category, (currentIncomeByCategory.get(category) ?? 0) + s.amount);
     }
-    if (s.date >= previousMonthStart && s.date < currentMonthStart) {
+    if (ymFromYmd(s.date) === prevMonthKey) {
       previousIncome += s.amount;
       previousIncomeByCategory.set(category, (previousIncomeByCategory.get(category) ?? 0) + s.amount);
     }

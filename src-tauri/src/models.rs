@@ -205,6 +205,10 @@ pub struct Transaction {
     pub note: String,
     #[serde(default)]
     pub debt_person: Option<String>,
+    /// Actual debt reduction, which can be smaller than the expense amount.
+    /// Missing in older backups, where repayments used the full amount.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub debt_repaid_amount: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

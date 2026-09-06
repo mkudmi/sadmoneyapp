@@ -4,6 +4,7 @@
   "version": "0.2.31",
   "type": "module",
   "scripts": {
+    "test": "node --test tests/domain.test.mjs tests/monthlySummary.test.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

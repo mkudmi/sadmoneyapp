@@ -113,8 +113,14 @@ fn generated_salary_events_between(
         NaiveDate::from_ymd_opt(range_start.year(), range_start.month() - 1, 1)
     }
     .unwrap_or(range_start);
-    let last_accrual_month =
-        NaiveDate::from_ymd_opt(range_end.year(), range_end.month(), 1).unwrap_or(range_end);
+    // An advance at the start of the next month may be paid in the requested
+    // month when its scheduled date falls on a weekend.
+    let last_accrual_month = if range_end.month() == 12 {
+        NaiveDate::from_ymd_opt(range_end.year() + 1, 1, 1)
+    } else {
+        NaiveDate::from_ymd_opt(range_end.year(), range_end.month() + 1, 1)
+    }
+    .unwrap_or(range_end);
 
     while cursor <= last_accrual_month {
         let year = cursor.year();
@@ -238,24 +244,31 @@ fn save(app: &AppHandle, data: &AppData) -> Result<(), String> {
     storage::save(app, data).map_err(|e| e.to_string())
 }
 
-fn reduce_debt(data: &mut AppData, person: &str, amount: i64) {
+fn same_person(left: &str, right: &str) -> bool {
+    normalize_person(left).to_lowercase() == normalize_person(right).to_lowercase()
+}
+
+fn reduce_debt(data: &mut AppData, person: &str, amount: i64) -> i64 {
     let normalized_person = normalize_person(person);
     if normalized_person.is_empty() || amount <= 0 {
-        return;
+        return 0;
     }
 
     if let Some(index) = data
         .debts
         .iter()
-        .position(|d| d.person.eq_ignore_ascii_case(&normalized_person))
+        .position(|d| same_person(&d.person, &normalized_person))
     {
-        let remaining = data.debts[index].amount.saturating_sub(amount);
+        let repaid = amount.min(data.debts[index].amount.max(0));
+        let remaining = data.debts[index].amount - repaid;
         if remaining <= 0 {
             data.debts.remove(index);
         } else {
             data.debts[index].amount = remaining;
         }
+        return repaid;
     }
+    0
 }
 
 fn restore_debt(data: &mut AppData, person: &str, amount: i64) {
@@ -267,7 +280,7 @@ fn restore_debt(data: &mut AppData, person: &str, amount: i64) {
     if let Some(debt) = data
         .debts
         .iter_mut()
-        .find(|d| d.person.eq_ignore_ascii_case(&normalized_person))
+        .find(|d| same_person(&d.person, &normalized_person))
     {
         debt.amount = debt.amount.saturating_add(amount);
     } else {
@@ -279,16 +292,71 @@ fn restore_debt(data: &mut AppData, person: &str, amount: i64) {
     }
 }
 
-fn apply_debt_payment(data: &mut AppData, tx: &Transaction) {
+fn apply_debt_payment(data: &mut AppData, tx: &mut Transaction) {
+    // Repayment bookkeeping is derived here, never accepted from the frontend.
+    tx.debt_repaid_amount = None;
     if let (TxType::Expense, Some(person)) = (&tx.r#type, tx.debt_person.as_deref()) {
-        reduce_debt(data, person, tx.amount.saturating_abs());
+        tx.debt_repaid_amount = Some(reduce_debt(data, person, tx.amount));
     }
+}
+
+fn repaid_amount(tx: &Transaction) -> i64 {
+    // Preserve the previous behavior for existing records without bookkeeping.
+    tx.debt_repaid_amount
+        .unwrap_or(tx.amount)
+        .clamp(0, tx.amount.max(0))
 }
 
 fn rollback_debt_payment(data: &mut AppData, tx: &Transaction) {
     if let (TxType::Expense, Some(person)) = (&tx.r#type, tx.debt_person.as_deref()) {
-        restore_debt(data, person, tx.amount.saturating_abs());
+        restore_debt(data, person, repaid_amount(tx));
     }
+}
+
+fn update_debt_payment(data: &mut AppData, previous: &Transaction, tx: &mut Transaction) {
+    if let (TxType::Expense, TxType::Expense, Some(previous_person), Some(person)) = (
+        &previous.r#type,
+        &tx.r#type,
+        previous.debt_person.as_deref(),
+        tx.debt_person.as_deref(),
+    ) {
+        if same_person(previous_person, person) {
+            let previous_repaid = repaid_amount(previous);
+            if tx.amount > previous.amount {
+                let additional_repaid = reduce_debt(data, person, tx.amount - previous.amount);
+                tx.debt_repaid_amount = Some(previous_repaid.saturating_add(additional_repaid));
+            } else {
+                let retained_repayment = previous_repaid.min(tx.amount);
+                restore_debt(data, person, previous_repaid - retained_repayment);
+                tx.debt_repaid_amount = Some(retained_repayment);
+            }
+            return;
+        }
+    }
+
+    rollback_debt_payment(data, previous);
+    apply_debt_payment(data, tx);
+}
+
+fn apply_carryover(data: &mut AppData, amount: i64, processed_date: &str) -> Result<(), String> {
+    let processed = parse_date(processed_date.trim())
+        .map_err(|_| "processed_date must be a valid date in YYYY-MM-DD format".to_string())?;
+    let previous = data.settings.last_daily_limit_carryover_date.trim();
+    if !previous.is_empty() {
+        let previous =
+            parse_date(previous).map_err(|_| "stored carryover date is invalid".to_string())?;
+        // Effects and retries can submit the same day more than once. Never
+        // credit a processed day twice or move the checkpoint backwards.
+        if processed <= previous {
+            return Ok(());
+        }
+    }
+    if !data.settings.save_remaining_daily_limit_to_piggy_bank {
+        return Ok(());
+    }
+    data.piggy_bank_amount = data.piggy_bank_amount.saturating_add(amount.max(0));
+    data.settings.last_daily_limit_carryover_date = processed.format("%Y-%m-%d").to_string();
+    Ok(())
 }
 
 #[tauri::command]
@@ -347,7 +415,15 @@ pub fn set_user_preferences(
         _ => return Err("work_schedule must be '5/2' or 'custom'".to_string()),
     };
     data.settings.save_remaining_daily_limit_to_piggy_bank = save_remaining_daily_limit_to_piggy_bank;
-    data.settings.last_daily_limit_carryover_date = last_daily_limit_carryover_date.trim().to_string();
+    let carryover_date = last_daily_limit_carryover_date.trim();
+    data.settings.last_daily_limit_carryover_date = if carryover_date.is_empty() {
+        String::new()
+    } else {
+        parse_date(carryover_date)
+            .map_err(|_| "last_daily_limit_carryover_date must be a valid date".to_string())?
+            .format("%Y-%m-%d")
+            .to_string()
+    };
     save(&app, &data)?;
     Ok(data)
 }
@@ -367,8 +443,7 @@ pub fn apply_daily_limit_carryover(
     processed_date: String,
 ) -> Result<AppData, String> {
     let mut data = load(&app)?;
-    data.piggy_bank_amount = data.piggy_bank_amount.saturating_add(amount.max(0));
-    data.settings.last_daily_limit_carryover_date = processed_date.trim().to_string();
+    apply_carryover(&mut data, amount, &processed_date)?;
     save(&app, &data)?;
     Ok(data)
 }
@@ -380,6 +455,13 @@ pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, S
     if tx.id.trim().is_empty() {
         tx.id = format!("tx_{}", Uuid::new_v4());
     }
+    if data.transactions.iter().any(|existing| existing.id == tx.id) {
+        return Err("transaction id already exists".to_string());
+    }
+    tx.date = parse_date(tx.date.trim())
+        .map_err(|_| "transaction date must be a valid date".to_string())?
+        .format("%Y-%m-%d")
+        .to_string();
 
     // простая нормализация: расход всегда положительный amount, тип решает знак
     tx.amount = tx.amount.saturating_abs();
@@ -391,7 +473,7 @@ pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, S
         .map(|p| normalize_person(p))
         .filter(|p| !p.is_empty());
 
-    apply_debt_payment(&mut data, &tx);
+    apply_debt_payment(&mut data, &mut tx);
     data.transactions.push(tx);
     save(&app, &data)?;
     Ok(data)
@@ -412,6 +494,10 @@ pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData
 
     let previous_tx = data.transactions[i].clone();
 
+    tx.date = parse_date(tx.date.trim())
+        .map_err(|_| "transaction date must be a valid date".to_string())?
+        .format("%Y-%m-%d")
+        .to_string();
     tx.amount = tx.amount.saturating_abs();
     tx.category = normalize_category(&tx.category);
     remember_category(&mut data.settings, &tx.r#type, &tx.category);
@@ -421,8 +507,7 @@ pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData
         .map(|p| normalize_person(p))
         .filter(|p| !p.is_empty());
 
-    rollback_debt_payment(&mut data, &previous_tx);
-    apply_debt_payment(&mut data, &tx);
+    update_debt_payment(&mut data, &previous_tx, &mut tx);
     data.transactions[i] = tx;
     save(&app, &data)?;
     Ok(data)
@@ -559,7 +644,7 @@ pub fn upsert_debt(app: AppHandle, mut debt: Debt) -> Result<AppData, String> {
         if let Some(existing) = data
             .debts
             .iter_mut()
-            .find(|d| d.person.eq_ignore_ascii_case(&debt.person))
+            .find(|d| same_person(&d.person, &debt.person))
         {
             existing.amount = existing.amount.saturating_add(debt.amount);
         } else {
@@ -616,8 +701,83 @@ pub fn save_backup_to_dir(
 
 #[tauri::command]
 pub fn import_backup(app: AppHandle, backup_json: String) -> Result<AppData, String> {
-    let data: AppData = serde_json::from_str(&backup_json).map_err(|e| e.to_string())?;
+    let data = parse_backup(&backup_json)?;
     save(&app, &data)?;
+    Ok(data)
+}
+
+fn parse_backup(raw: &str) -> Result<AppData, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(raw).map_err(|_| "backup is not valid JSON".to_string())?;
+    // AppData has serde defaults for migrations. Without a format check even
+    // `{}` or an unrelated JSON document would silently replace all user data.
+    if !value.get("settings").is_some_and(|v| v.is_object())
+        || !value.get("transactions").is_some_and(|v| v.is_array())
+        || !value.get("salaryEvents").is_some_and(|v| v.is_array())
+        || value.get("version").and_then(|v| v.as_i64()).is_none()
+    {
+        return Err("file is not a SadMoney backup".to_string());
+    }
+    if value["version"].as_i64() != Some(1) {
+        return Err("backup version is not supported".to_string());
+    }
+    let data: AppData = serde_json::from_value(value)
+        .map_err(|_| "backup contains invalid data".to_string())?;
+
+    let dates = data
+        .transactions
+        .iter()
+        .map(|v| v.date.as_str())
+        .chain(data.salary_events.iter().map(|v| v.date.as_str()))
+        .chain(data.off_days.iter().map(|v| v.date.as_str()))
+        .chain(
+            data.vacations
+                .iter()
+                .flat_map(|v| [v.start_date.as_str(), v.end_date.as_str()]),
+        )
+        .chain(
+            data.settings
+                .salary_configs
+                .iter()
+                .map(|v| v.effective_from.as_str()),
+        )
+        .chain(
+            std::iter::once(data.settings.last_daily_limit_carryover_date.as_str())
+                .filter(|v| !v.is_empty()),
+        );
+    for date in dates {
+        let parsed = parse_date(date).map_err(|_| "backup contains invalid dates".to_string())?;
+        if parsed.format("%Y-%m-%d").to_string() != date {
+            return Err("backup dates must use YYYY-MM-DD format".to_string());
+        }
+    }
+    if data.vacations.iter().any(|v| v.end_date < v.start_date) {
+        return Err("backup contains an invalid vacation range".to_string());
+    }
+    let amounts = data
+        .transactions
+        .iter()
+        .map(|v| v.amount)
+        .chain(data.salary_events.iter().map(|v| v.amount))
+        .chain(data.debts.iter().map(|v| v.amount))
+        .chain(data.settings.salary_configs.iter().map(|v| v.amount))
+        .chain([data.piggy_bank_amount, data.settings.min_balance]);
+    if amounts.into_iter().any(|amount| amount < 0)
+        || data.transactions.iter().any(|tx| {
+            tx.debt_repaid_amount
+                .is_some_and(|v| v < 0 || v > tx.amount)
+        })
+    {
+        return Err("backup contains invalid amounts".to_string());
+    }
+    let mut transaction_ids = std::collections::HashSet::new();
+    if data
+        .transactions
+        .iter()
+        .any(|tx| tx.id.trim().is_empty() || !transaction_ids.insert(&tx.id))
+    {
+        return Err("backup contains empty or duplicate transaction ids".to_string());
+    }
     Ok(data)
 }
 
@@ -753,6 +913,180 @@ pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudge
 mod tests {
     use super::*;
 
+    fn debt_expense(amount: i64) -> Transaction {
+        Transaction {
+            id: "repayment".to_string(),
+            date: "2026-09-05".to_string(),
+            r#type: TxType::Expense,
+            amount,
+            category: "Debt".to_string(),
+            note: String::new(),
+            debt_person: Some("Алексей".to_string()),
+            debt_repaid_amount: None,
+        }
+    }
+
+    #[test]
+    fn deleting_overpayment_restores_only_the_original_debt() {
+        let mut data = AppData::default();
+        restore_debt(&mut data, "Алексей", 10_000);
+        let mut tx = debt_expense(15_000);
+
+        apply_debt_payment(&mut data, &mut tx);
+        assert!(data.debts.is_empty());
+        assert_eq!(tx.debt_repaid_amount, Some(10_000));
+        rollback_debt_payment(&mut data, &tx);
+
+        assert_eq!(data.debts[0].amount, 10_000);
+    }
+
+    #[test]
+    fn deleting_expense_without_outstanding_debt_does_not_create_a_debt() {
+        let mut data = AppData::default();
+        let mut tx = debt_expense(15_000);
+        // Frontend-supplied bookkeeping must not be trusted.
+        tx.debt_repaid_amount = Some(15_000);
+
+        apply_debt_payment(&mut data, &mut tx);
+        rollback_debt_payment(&mut data, &tx);
+
+        assert_eq!(tx.debt_repaid_amount, Some(0));
+        assert!(data.debts.is_empty());
+    }
+
+    #[test]
+    fn editing_or_merging_an_overpayment_does_not_repay_new_debt_twice() {
+        let mut data = AppData::default();
+        restore_debt(&mut data, "Алексей", 10_000);
+        let mut previous = debt_expense(15_000);
+        apply_debt_payment(&mut data, &mut previous);
+        restore_debt(&mut data, "Алексей", 8_000);
+
+        let mut edited = previous.clone();
+        edited.note = "Updated note".to_string();
+        update_debt_payment(&mut data, &previous, &mut edited);
+        assert_eq!(data.debts[0].amount, 8_000);
+
+        let mut merged = edited.clone();
+        merged.amount += 5_000;
+        update_debt_payment(&mut data, &edited, &mut merged);
+        assert_eq!(data.debts[0].amount, 3_000);
+        assert_eq!(merged.debt_repaid_amount, Some(15_000));
+        rollback_debt_payment(&mut data, &merged);
+        assert_eq!(data.debts[0].amount, 18_000);
+    }
+
+    #[test]
+    fn reducing_an_overpayment_restores_only_the_repayment_difference() {
+        let mut data = AppData::default();
+        restore_debt(&mut data, "Алексей", 10_000);
+        let mut previous = debt_expense(15_000);
+        apply_debt_payment(&mut data, &mut previous);
+
+        let mut edited = previous.clone();
+        edited.amount = 12_000;
+        update_debt_payment(&mut data, &previous, &mut edited);
+        assert!(data.debts.is_empty());
+        assert_eq!(edited.debt_repaid_amount, Some(10_000));
+
+        let mut reduced = edited.clone();
+        reduced.amount = 8_000;
+        update_debt_payment(&mut data, &edited, &mut reduced);
+        assert_eq!(data.debts[0].amount, 2_000);
+        assert_eq!(reduced.debt_repaid_amount, Some(8_000));
+    }
+
+    #[test]
+    fn changing_expense_to_income_restores_its_repayment() {
+        let mut data = AppData::default();
+        restore_debt(&mut data, "Алексей", 10_000);
+        let mut previous = debt_expense(15_000);
+        apply_debt_payment(&mut data, &mut previous);
+        let mut edited = previous.clone();
+        edited.r#type = TxType::Income;
+
+        update_debt_payment(&mut data, &previous, &mut edited);
+
+        assert_eq!(data.debts[0].amount, 10_000);
+        assert_eq!(edited.debt_repaid_amount, None);
+    }
+
+    #[test]
+    fn debt_names_match_case_insensitively_in_russian() {
+        let mut data = AppData::default();
+        restore_debt(&mut data, "алексей", 10_000);
+        let mut tx = debt_expense(3_000);
+
+        apply_debt_payment(&mut data, &mut tx);
+
+        assert_eq!(data.debts.len(), 1);
+        assert_eq!(data.debts[0].amount, 7_000);
+    }
+
+    #[test]
+    fn carryover_is_idempotent_and_never_moves_backwards() {
+        let mut data = AppData::default();
+        data.settings.save_remaining_daily_limit_to_piggy_bank = true;
+        data.settings.last_daily_limit_carryover_date = "2026-09-04".to_string();
+
+        apply_carryover(&mut data, 1_000, "2026-09-05").unwrap();
+        apply_carryover(&mut data, 1_000, "2026-09-05").unwrap();
+        apply_carryover(&mut data, 9_000, "2026-09-04").unwrap();
+
+        assert_eq!(data.piggy_bank_amount, 1_000);
+        assert_eq!(data.settings.last_daily_limit_carryover_date, "2026-09-05");
+    }
+
+    #[test]
+    fn carryover_rejects_invalid_dates_and_ignores_disabled_saving() {
+        let mut data = AppData::default();
+        assert!(apply_carryover(&mut data, 1_000, "2026-02-30").is_err());
+        apply_carryover(&mut data, 1_000, "2026-09-05").unwrap();
+        assert_eq!(data.piggy_bank_amount, 0);
+        assert!(data.settings.last_daily_limit_carryover_date.is_empty());
+    }
+
+    #[test]
+    fn import_rejects_unrelated_json_and_unsupported_versions() {
+        assert!(parse_backup("{}").is_err());
+        assert!(
+            parse_backup(r#"{"settings":{},"transactions":[],"salaryEvents":[]}"#).is_err()
+        );
+        let mut backup = serde_json::to_value(AppData::default()).unwrap();
+        backup["version"] = serde_json::json!(2);
+        assert!(parse_backup(&backup.to_string()).is_err());
+    }
+
+    #[test]
+    fn import_accepts_legacy_backups_without_repayment_bookkeeping() {
+        let mut data = AppData::default();
+        data.transactions.push(debt_expense(10_000));
+        let raw = serde_json::to_string(&data).unwrap();
+        assert!(!raw.contains("debt_repaid_amount"));
+
+        let imported = parse_backup(&raw).unwrap();
+
+        assert_eq!(imported.transactions[0].debt_repaid_amount, None);
+        assert_eq!(repaid_amount(&imported.transactions[0]), 10_000);
+    }
+
+    #[test]
+    fn import_rejects_invalid_dates_amounts_and_duplicate_transactions() {
+        let mut data = AppData::default();
+        let mut tx = debt_expense(10_000);
+        tx.date = "2026-02-30".to_string();
+        data.transactions.push(tx);
+        assert!(parse_backup(&serde_json::to_string(&data).unwrap()).is_err());
+
+        data.transactions[0].date = "2026-09-05".to_string();
+        data.transactions[0].amount = -1;
+        assert!(parse_backup(&serde_json::to_string(&data).unwrap()).is_err());
+
+        data.transactions[0].amount = 10_000;
+        data.transactions.push(data.transactions[0].clone());
+        assert!(parse_backup(&serde_json::to_string(&data).unwrap()).is_err());
+    }
+
     #[test]
     fn existing_salary_config_defaults_to_manual_payouts() {
         let config: SalaryConfig = serde_json::from_str(
@@ -823,5 +1157,30 @@ mod tests {
                 ("2026-10-05", 10_000_000, Some("2026-09")),
             ]
         );
+    }
+
+    #[test]
+    fn next_month_advance_shifted_back_is_included_in_range() {
+        for (effective_from, payout_date) in [
+            ("2026-02-01", "2026-01-30"),
+            ("2023-01-01", "2022-12-30"),
+        ] {
+            let config = SalaryConfig {
+                id: "scheduled".to_string(),
+                effective_from: effective_from.to_string(),
+                amount: 10_000_000,
+                auto_generate: true,
+                advance_percent: 50,
+                advance_day: 1,
+                salary_day: 5,
+            };
+            let date = parse_date(payout_date).unwrap();
+            let events = generated_salary_events_between(&[config], date, date);
+
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].date, payout_date);
+            assert_eq!(events[0].amount, 5_000_000);
+            assert_eq!(events[0].accrual_month.as_deref(), effective_from.get(..7));
+        }
     }
 }

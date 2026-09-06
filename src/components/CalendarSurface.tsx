@@ -1,6 +1,7 @@
 import { Dispatch, RefObject, SetStateAction } from "react";
 import { AppData, OffDay, TxType } from "../lib/api";
 import { rub } from "../lib/money";
+import { parseYmdLocal } from "../lib/date";
 import {
   getRussianProductionCalendarDay,
   getRussianProductionCalendarDayTone,
@@ -68,10 +69,11 @@ export function CalendarSurface(props: CalendarSurfaceProps) {
 
   return (
     <div
+      className="budget-calendar"
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(7, 1fr)",
-        gridTemplateRows: `repeat(${calendarWeeks}, minmax(0, 1fr))`,
+        gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+        gridTemplateRows: `repeat(${calendarWeeks}, minmax(88px, 1fr))`,
         gap: 8,
         padding: 12,
         border: "1px solid #ddd",
@@ -117,7 +119,7 @@ export function CalendarSurface(props: CalendarSurfaceProps) {
           ? getRussianProductionCalendarDayTone(productionCalendarDay.type)
           : null;
 
-        const dayOfWeek = new Date(d).getDay(); // 0 = Sunday, 6 = Saturday
+        const dayOfWeek = parseYmdLocal(d).getDay(); // 0 = Sunday, 6 = Saturday
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
         const defaultWorking = workSchedule === "5/2"
           ? (
@@ -292,12 +294,12 @@ export function CalendarSurface(props: CalendarSurfaceProps) {
               </div>
             ) : null}
 
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div className="calendar-day-heading">
               <div style={{ fontSize: 12, opacity: 0.7, fontWeight: isCustomMarkedWorking ? 700 : 400, color: dayLabelColor }}>{d.slice(8, 10)}</div>
-              <div style={{ fontSize: 11, opacity: 0.7, color: dayLabelColor }}>{new Date(d).toLocaleDateString(locale, { weekday: "short" })}</div>
+              <div style={{ fontSize: 11, opacity: 0.7, color: dayLabelColor }}>{parseYmdLocal(d).toLocaleDateString(locale, { weekday: "short" })}</div>
             </div>
-            <div style={{ fontSize: 12 }}>+ {rub(s.inc)}</div>
-            <div style={{ fontSize: 12 }}>- {rub(s.exp)}</div>
+            <div className="calendar-day-amount" title={`+ ${rub(s.inc)}`}>+ {rub(s.inc)}</div>
+            <div className="calendar-day-amount" title={`- ${rub(s.exp)}`}>- {rub(s.exp)}</div>
           </div>
         );
       })}

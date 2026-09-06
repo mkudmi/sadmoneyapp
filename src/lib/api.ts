@@ -13,6 +13,7 @@ export type Transaction = {
   category: string;
   note: string;
   debt_person?: string | null;
+  debt_repaid_amount?: number | null;
 };
 
 export type SalaryEvent = {
