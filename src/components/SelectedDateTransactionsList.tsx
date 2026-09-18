@@ -102,25 +102,28 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
               padding: "6px 8px",
             }}
           >
-            <div>
-              <div style={{ fontSize: 12 }}>
-                <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "P" : "-"}</b> {rub(t.amount)}  -  {t.category}
-                {t.debt_person ? (
-                  <span style={{ marginLeft: 6, fontSize: 12, opacity: 0.75 }}>
-                    {"to"}: {t.debt_person}
-                  </span>
-                ) : null}
-                {t.type === "expense" && t.was_planned ? (
-                  <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>Paid planned expense</span>
-                ) : null}
-                {t.type === "planned_expense" ? (
-                  <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>{"(planned)"}</span>
-                ) : null}
+            <div className="transaction-row-content">
+              <div className="transaction-row-amount">
+                <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "P" : "−"} {rub(t.amount)}</b>
               </div>
-              {t.note ? <div style={{ fontSize: 12, opacity: 0.7 }}>{t.note}</div> : null}
+              <div className="transaction-row-category">
+                {t.category}
+                {t.debt_person ? <span> · to: {t.debt_person}</span> : null}
+              </div>
+              {t.type === "expense" && t.was_planned ? (
+                <div className="transaction-row-status">
+                  <span className="transaction-status-badge transaction-status-paid">Paid · planned expense</span>
+                </div>
+              ) : null}
+              {t.type === "planned_expense" ? (
+                <div className="transaction-row-status">
+                  <span className="transaction-status-badge">Planned expense</span>
+                </div>
+              ) : null}
+              {t.note ? <div className="transaction-row-note">{t.note}</div> : null}
             </div>
 
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
               {t.type === "planned_expense" ? (
                 <button
                   title={"Paid"}

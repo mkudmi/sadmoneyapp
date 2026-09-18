@@ -80,6 +80,52 @@ body {
   gap: 12px;
 }
 
+.selected-date-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.transaction-row-content {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.transaction-row-amount {
+  color: var(--text);
+}
+
+.transaction-row-category,
+.transaction-row-note {
+  color: var(--muted);
+}
+
+.transaction-row-status,
+.transaction-row-note {
+  margin-top: 4px;
+}
+
+.transaction-status-badge {
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f3f6fb;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.transaction-status-paid {
+  border-color: #c4e3d6;
+  background: #edf8f2;
+  color: #17653e;
+}
+
 .app-shell::before,
 .app-shell::after {
   content: "";

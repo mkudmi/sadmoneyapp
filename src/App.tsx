@@ -1848,13 +1848,15 @@ export default function App() {
             boxSizing: "border-box",
           }}
         >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div><b>{"Selected date:"}</b> {formatDateForDisplay(selectedDate, dateFormat)}</div>
+        <div className="selected-date-heading">
+          <div><b>{"Selected date:"}</b> <span style={{ whiteSpace: "nowrap" }}>{formatDateForDisplay(selectedDate, dateFormat)}</span></div>
           <div
             style={{
               fontSize: 12,
               padding: "2px 8px",
-              borderRadius: 999,
+              borderRadius: 6,
+              lineHeight: 1.4,
+              maxWidth: "100%",
               border: `1px solid ${selectedDateStatus.border}`,
               color: selectedDateStatus.color,
               background: selectedDateStatus.background,
