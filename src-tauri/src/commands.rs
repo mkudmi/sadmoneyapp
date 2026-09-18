@@ -930,6 +930,7 @@ mod tests {
             debt_person: Some("Алексей".to_string()),
             debt_repaid_amount: None,
             was_planned: false,
+            exclude_from_statistics: false,
         }
     }
 

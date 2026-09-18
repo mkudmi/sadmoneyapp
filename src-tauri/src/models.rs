@@ -212,6 +212,9 @@ pub struct Transaction {
     /// Paid planned expenses affect the balance, but not discretionary daily spending.
     #[serde(default)]
     pub was_planned: bool,
+    /// Balance adjustments can be excluded from analytical reports.
+    #[serde(default)]
+    pub exclude_from_statistics: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

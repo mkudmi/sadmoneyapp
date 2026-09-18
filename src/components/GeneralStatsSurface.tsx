@@ -35,6 +35,7 @@ export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
     if (!data) return { inc, exp };
 
     for (const t of data.transactions) {
+      if (t.exclude_from_statistics) continue;
       if (ymFromYmd(t.date) !== monthKey) continue;
       if (t.date > today) continue;
       if (t.type === "income") inc += t.amount;
@@ -58,6 +59,7 @@ export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
     const salaryVacationPattern = /(salary|advance|vacation|зарп|аванс|отпуск)/i;
 
     for (const t of data.transactions) {
+      if (t.exclude_from_statistics) continue;
       if (t.date < yearStart || t.date > yearEnd || t.date > today) continue;
       if (t.type !== "income") continue;
       incomeTotal += t.amount;

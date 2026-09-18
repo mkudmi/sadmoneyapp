@@ -64,7 +64,7 @@ export function buildTrendsData(params: {
   const previousIncomeByCategory = new Map<string, number>();
 
   for (const t of data.transactions ?? []) {
-    if (t.date > today) continue;
+    if (t.exclude_from_statistics || t.date > today) continue;
     const ym = ymFromYmd(t.date);
     if (t.type === "income") {
       const category = normalizeCategoryInput(t.category) || "No category";

@@ -530,6 +530,7 @@ export default function App() {
   const [editTxModalCategory, setEditTxModalCategory] = useState<string>("");
   const [editTxModalNote, setEditTxModalNote] = useState<string>("");
   const [editTxModalWasPlanned, setEditTxModalWasPlanned] = useState(false);
+  const [editTxModalExcludeFromStatistics, setEditTxModalExcludeFromStatistics] = useState(false);
   const [isPickingSalaryDate, setIsPickingSalaryDate] = useState(false);
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const [salaryModalDate, setSalaryModalDate] = useState<string>(today);
@@ -900,6 +901,7 @@ export default function App() {
 
       const existingTx = canMergeByCategory
         ? (data?.transactions ?? []).find((existing) => {
+            if (existing.exclude_from_statistics || existing.was_planned) return false;
             if (existing.date !== tx.date || existing.type !== tx.type) return false;
             if (normalizeCategoryInput(existing.category).toLowerCase() !== categoryKey) return false;
             if (shouldUseDebtPerson) {
@@ -1067,6 +1069,7 @@ export default function App() {
     setEditTxModalCategory(t.category);
     setEditTxModalNote(t.note ?? "");
     setEditTxModalWasPlanned(t.was_planned ?? false);
+    setEditTxModalExcludeFromStatistics(t.exclude_from_statistics ?? false);
     setEditTxModalOpen(true);
   }
 
@@ -1084,6 +1087,7 @@ export default function App() {
     setEditTxModalCategory("");
     setEditTxModalNote("");
     setEditTxModalWasPlanned(false);
+    setEditTxModalExcludeFromStatistics(false);
   }
 
   async function submitEditTxModal() {
@@ -1103,6 +1107,7 @@ export default function App() {
         category: editTxModalCategory,
         note: editTxModalNote,
         was_planned: original.type === "expense" && editTxModalWasPlanned,
+        exclude_from_statistics: original.type === "expense" && editTxModalExcludeFromStatistics,
       });
       setData(updated);
       closeEditTxModal();
@@ -2706,6 +2711,8 @@ export default function App() {
         showWasPlanned={editTxOriginal?.type === "expense"}
         wasPlanned={editTxModalWasPlanned}
         onWasPlannedChange={setEditTxModalWasPlanned}
+        excludeFromStatistics={editTxModalExcludeFromStatistics}
+        onExcludeFromStatisticsChange={setEditTxModalExcludeFromStatistics}
         onDateChange={setEditTxModalDate}
         onAmountChange={setEditTxModalAmount}
         onCategoryChange={setEditTxModalCategory}

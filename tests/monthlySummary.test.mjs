@@ -4,6 +4,7 @@ import { loadAppModule } from "./loadAppModule.mjs";
 
 const { buildMonthlyCategories } = await loadAppModule("/src/lib/monthlySummary.ts");
 const { buildTrendsData } = await loadAppModule("/src/lib/trends.ts");
+const { buildYearExpenseSummary } = await loadAppModule("/src/lib/yearExpenseSummary.ts");
 const transaction = (date, amount, type = "expense", category = "Food") => ({
   id: `${date}-${type}`, date, amount, type, category, note: "",
 });
@@ -63,4 +64,31 @@ test("trends match actual month-to-date income and expense categories", () => {
   assert.equal(result.currentExpense, categories.filter(c => c.type === "expense").reduce((sum, c) => sum + c.amount, 0));
   assert.equal(result.currentExpense, 250000);
   assert.equal(result.previousIncome, 8000000);
+});
+
+
+test("balance adjustments do not distort yearly or monthly expense statistics", () => {
+  const entries = [
+    transaction("2026-01-01", 175000000, "expense", "Imported total"),
+    transaction("2026-01-02", 10000),
+    transaction("2025-01-01", 90000000, "expense", "Imported total"),
+    transaction("2025-01-02", 5000),
+  ].map(tx => ({ ...tx, exclude_from_statistics: tx.category === "Imported total" }));
+  const result = buildYearExpenseSummary(entries, 2026, "en-US");
+  assert.equal(result.total, 10000);
+  assert.equal(result.previousTotal, 5000);
+  assert.equal(result.transactionCount, 1);
+  assert.equal(result.averageTransaction, 10000);
+  assert.equal(result.months[0].amount, 10000);
+  assert.deepEqual(result.categories.map(c => c.category), ["Food"]);
+  assert.deepEqual(buildMonthlyCategories(entries, [], "2026-01", "2026-09-18"), [
+    { type: "expense", category: "Food", amount: 10000 },
+  ]);
+  const trendsResult = buildTrendsData({
+    data: { transactions: entries, salaryEvents: [] }, monthKey: "2026-01",
+    month0: 0, year: 2026, today: "2026-09-18", locale: "en-US",
+  });
+  assert.equal(trendsResult.currentExpense, 10000);
+  entries[0].exclude_from_statistics = false;
+  assert.equal(buildYearExpenseSummary(entries, 2026, "en-US").total, 175010000);
 });

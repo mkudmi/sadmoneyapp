@@ -58,7 +58,7 @@ export function buildYearExpenseSummary(
   let transactionCount = 0;
 
   for (const transaction of transactions) {
-    if (transaction.type !== "expense" || transaction.amount <= 0) continue;
+    if (transaction.exclude_from_statistics || transaction.type !== "expense" || transaction.amount <= 0) continue;
     const txYear = transactionYear(transaction.date);
     const category = normalizeCategoryInput(transaction.category) || "No category";
 

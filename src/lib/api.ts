@@ -15,6 +15,7 @@ export type Transaction = {
   debt_person?: string | null;
   debt_repaid_amount?: number | null;
   was_planned?: boolean;
+  exclude_from_statistics?: boolean;
 };
 
 export type SalaryEvent = {

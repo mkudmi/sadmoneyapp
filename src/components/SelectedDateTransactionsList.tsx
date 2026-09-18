@@ -120,6 +120,11 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
                   <span className="transaction-status-badge">Planned expense</span>
                 </div>
               ) : null}
+              {t.exclude_from_statistics ? (
+                <div className="transaction-row-status">
+                  <span className="transaction-status-badge">Excluded from statistics</span>
+                </div>
+              ) : null}
               {t.note ? <div className="transaction-row-note">{t.note}</div> : null}
             </div>
 

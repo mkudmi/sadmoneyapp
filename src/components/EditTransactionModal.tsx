@@ -16,6 +16,8 @@ type EditTransactionModalProps = {
   categoryOptions: string[];
   showWasPlanned: boolean;
   wasPlanned: boolean;
+  excludeFromStatistics: boolean;
+  onExcludeFromStatisticsChange: (value: boolean) => void;
   onWasPlannedChange: (value: boolean) => void;
   onAmountChange: (value: string) => void;
   onCategoryChange: (value: string) => void;
@@ -37,6 +39,8 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
     categoryOptions,
     showWasPlanned,
     wasPlanned,
+    excludeFromStatistics,
+    onExcludeFromStatisticsChange,
     onWasPlannedChange,
     onAmountChange,
     onCategoryChange,
@@ -224,19 +228,37 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
           </div>
 
           {showWasPlanned ? (
-            <div>
-              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="transaction-options">
+              <label className="transaction-option">
+                <span className="transaction-option-copy">
+                  <span className="transaction-option-title">Was planned</span>
+                  <span id={`${fieldId}-was-planned-help`} className="transaction-option-help">
+                    Does not use the daily spend limit.
+                  </span>
+                </span>
                 <input
                   type="checkbox"
                   checked={wasPlanned}
                   onChange={(e) => onWasPlannedChange(e.target.checked)}
+                  aria-label="Was planned"
                   aria-describedby={`${fieldId}-was-planned-help`}
                 />
-                Was planned
               </label>
-              <div id={`${fieldId}-was-planned-help`} style={{ marginTop: 4, opacity: 0.75 }}>
-                Deduct from the total budget without using the daily spend limit.
-              </div>
+              <label className="transaction-option">
+                <span className="transaction-option-copy">
+                  <span className="transaction-option-title">Exclude from statistics</span>
+                  <span id={`${fieldId}-statistics-help`} className="transaction-option-help">
+                    Hidden from reports; still affects the balance.
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={excludeFromStatistics}
+                  onChange={(e) => onExcludeFromStatisticsChange(e.target.checked)}
+                  aria-label="Exclude from statistics"
+                  aria-describedby={`${fieldId}-statistics-help`}
+                />
+              </label>
             </div>
           ) : null}
 

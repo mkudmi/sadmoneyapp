@@ -22,6 +22,7 @@ export function buildMonthlyCategories(
   };
 
   for (const tx of transactions) {
+    if (tx.exclude_from_statistics) continue;
     if (ymFromYmd(tx.date) !== monthKey || tx.date > today) continue;
     if (tx.type !== "income" && tx.type !== "expense") continue;
     add(tx.type, normalizeCategoryInput(tx.category) || "No category", tx.amount);
