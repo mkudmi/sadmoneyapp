@@ -25,16 +25,16 @@ export function DebtsSurface({ debts, onAddDebt, onEditDebt, onDeleteDebt, onClo
     <section className="debts-manager" aria-labelledby="debts-title">
       <header className="debts-header">
         <div>
-          <h2 id="debts-title">Долги</h2>
-          <p>Кому нужно вернуть деньги и кто должен вам.</p>
+          <h2 id="debts-title">Debts</h2>
+          <p>Track what you owe and what others owe you.</p>
         </div>
-        <button onClick={onClose} aria-label="Закрыть долги" className="icon-button"><AppIcon name="close" /></button>
+        <button onClick={onClose} aria-label="Close debts" className="icon-button"><AppIcon name="close" /></button>
       </header>
 
-      <div className="debts-overview" role="group" aria-label="Направление долга">
+      <div className="debts-overview" role="group" aria-label="Debt direction">
         {([
-          { value: "payable", label: "Я должен", total: totalPayable, count: payable.length, hint: "Нужно вернуть" },
-          { value: "receivable", label: "Мне должны", total: totalReceivable, count: receivable.length, hint: "Ожидаю возврата" },
+          { value: "payable", label: "I owe", total: totalPayable, count: payable.length, hint: "To repay" },
+          { value: "receivable", label: "Owed to me", total: totalReceivable, count: receivable.length, hint: "Awaiting repayment" },
         ] as const).map((item) => (
           <button key={item.value} className={`debt-summary debt-summary-${item.value}`} aria-pressed={direction === item.value} onClick={() => setDirection(item.value)}>
             <span className="debt-summary-label">{item.label}<span className="debt-count">{item.count}</span></span>
@@ -46,10 +46,10 @@ export function DebtsSurface({ debts, onAddDebt, onEditDebt, onDeleteDebt, onClo
 
       <div className="debts-list-heading">
         <div>
-          <h3>{direction === "payable" ? "Кому я должен" : "Кто мне должен"}</h3>
-          <span>{visibleDebts.length > 0 ? `Записей: ${visibleDebts.length} · По убыванию суммы` : "Нет открытых долгов"}</span>
+          <h3>{direction === "payable" ? "People I owe" : "People who owe me"}</h3>
+          <span>{visibleDebts.length > 0 ? `Records: ${visibleDebts.length} · Largest amount first` : "No outstanding debts"}</span>
         </div>
-        <button className="debt-add-button" onClick={() => onAddDebt(direction)}><AppIcon name="add" />Добавить долг</button>
+        <button className="debt-add-button" onClick={() => onAddDebt(direction)}><AppIcon name="add" />Add debt</button>
       </div>
 
       {visibleDebts.length > 0 ? (
@@ -57,11 +57,11 @@ export function DebtsSurface({ debts, onAddDebt, onEditDebt, onDeleteDebt, onClo
           {visibleDebts.map((debt) => (
             <li className="debt-row" key={debt.id}>
               <span className="debt-avatar" aria-hidden="true">{Array.from(debt.person.trim())[0]?.toLocaleUpperCase()}</span>
-              <div className="debt-person"><strong>{debt.person}</strong><span>{direction === "payable" ? "Вернуть" : "Получить обратно"}</span></div>
+              <div className="debt-person"><strong>{debt.person}</strong><span>{direction === "payable" ? "To repay" : "To receive"}</span></div>
               <strong className="debt-row-amount">{rub(debt.amount)}</strong>
               <div className="debt-row-actions">
-                <button className="icon-button" title="Изменить долг" aria-label={`Изменить долг: ${debt.person}`} onClick={() => onEditDebt(debt)}><AppIcon name="edit" /></button>
-                <button className="icon-button debt-delete" title="Удалить долг" aria-label={`Удалить долг: ${debt.person}`} onClick={() => onDeleteDebt(debt.id)}><AppIcon name="delete" /></button>
+                <button className="icon-button" title="Edit debt" aria-label={`Edit debt: ${debt.person}`} onClick={() => onEditDebt(debt)}><AppIcon name="edit" /></button>
+                <button className="icon-button debt-delete" title="Delete debt" aria-label={`Delete debt: ${debt.person}`} onClick={() => onDeleteDebt(debt.id)}><AppIcon name="delete" /></button>
               </div>
             </li>
           ))}
@@ -69,11 +69,11 @@ export function DebtsSurface({ debts, onAddDebt, onEditDebt, onDeleteDebt, onClo
       ) : (
         <div className="debts-empty">
           <AppIcon name="wallet" />
-          <strong>{direction === "payable" ? "Вы никому не должны" : "Вам пока никто не должен"}</strong>
-          <p>{direction === "payable" ? "Добавьте сумму и человека, которому нужно вернуть деньги." : "Добавьте сумму и человека, от которого ждёте возврата."}</p>
+          <strong>{direction === "payable" ? "You have no outstanding debts" : "No one owes you money yet"}</strong>
+          <p>{direction === "payable" ? "Add an amount and the person you need to repay." : "Add an amount and the person you expect repayment from."}</p>
         </div>
       )}
-      <p className="debts-footnote">Запись долга не меняет баланс. Остаток можно изменить через кнопку редактирования.</p>
+      <p className="debts-footnote">Adding a debt does not change your balance. Use Edit to update the remaining amount.</p>
     </section>
   );
 }

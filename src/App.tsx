@@ -1760,17 +1760,17 @@ export default function App() {
             <button
               onClick={() => setDebtsPanelOpen(true)}
               className="topbar-action-button topbar-debts-button"
-              title={`Я должен: ${rub(totalDebt)}\nМне должны: ${rub(totalReceivable)}`}
-              aria-label={`Открыть долги. Я должен: ${rub(totalDebt)}. Мне должны: ${rub(totalReceivable)}`}
+              title={`I owe: ${rub(totalDebt)}\nOwed to me: ${rub(totalReceivable)}`}
+              aria-label={`Open debts. I owe: ${rub(totalDebt)}. Owed to me: ${rub(totalReceivable)}`}
             >
               <AppIcon name="wallet" />
               <span className="topbar-action-copy">
-                <span>Долги</span>
+                <span>Debts</span>
                 <span className="topbar-debts-meta">
-                  {hasDebts ? <span className="topbar-debts-payable">Отдать {rubCompact(totalDebt)}</span> : null}
+                  {hasDebts ? <span className="topbar-debts-payable">Owe {rubCompact(totalDebt)}</span> : null}
                   {hasDebts && totalReceivable > 0 ? <span aria-hidden="true"> · </span> : null}
-                  {totalReceivable > 0 ? <span className="topbar-debts-receivable">Вернут {rubCompact(totalReceivable)}</span> : null}
-                  {!hasDebts && totalReceivable === 0 ? <span>Нет долгов</span> : null}
+                  {totalReceivable > 0 ? <span className="topbar-debts-receivable">Owed {rubCompact(totalReceivable)}</span> : null}
+                  {!hasDebts && totalReceivable === 0 ? <span>No debts</span> : null}
                 </span>
               </span>
             </button>
@@ -2611,10 +2611,10 @@ export default function App() {
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
               <label>
-                <span style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Направление долга</span>
+                <span style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Debt direction</span>
                 <select value={debtModalDirection} onChange={(e) => setDebtModalDirection(e.target.value as DebtDirection)} style={{ width: "100%", padding: 8 }}>
-                  <option value="payable">Я должен</option>
-                  <option value="receivable">Мне должны</option>
+                  <option value="payable">I owe</option>
+                  <option value="receivable">Owed to me</option>
                 </select>
               </label>
               <div>
@@ -2629,7 +2629,7 @@ export default function App() {
                 />
               </div>
               <div>
-                <div id="debt-person-label" style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{debtModalDirection === "receivable" ? "Кто мне должен" : "Кому я должен"}</div>
+                <div id="debt-person-label" style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{debtModalDirection === "receivable" ? "People who owe me" : "People I owe"}</div>
                 <input
                   aria-labelledby="debt-person-label"
                   value={debtModalPerson}
