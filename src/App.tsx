@@ -1811,16 +1811,9 @@ export default function App() {
           </div>
         </div>
       </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-          gridAutoRows: "1fr",
-          gap: 12,
-          marginBottom: 12,
-          alignItems: "stretch",
-        }}
-      >
+      <div className="budget-main">
+        <div className="budget-layout">
+      <div className="budget-overview">
         <GeneralStatsSurface
           data={viewData}
           monthKey={monthKey}
@@ -1840,8 +1833,6 @@ export default function App() {
           onDeleteSalary={handleDeleteSalary}
         />
       </div>
-      <div className="budget-main">
-        <div className="budget-layout">
         <div className="budget-sidebar">
         <div
           className="selected-date-panel"
