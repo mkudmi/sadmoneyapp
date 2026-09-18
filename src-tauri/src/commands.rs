@@ -493,6 +493,8 @@ pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData
     };
 
     let previous_tx = data.transactions[i].clone();
+    tx.was_planned = matches!(tx.r#type, TxType::Expense)
+        && (previous_tx.was_planned || matches!(previous_tx.r#type, TxType::PlannedExpense));
 
     tx.date = parse_date(tx.date.trim())
         .map_err(|_| "transaction date must be a valid date".to_string())?
@@ -800,6 +802,10 @@ pub struct DailyBudgetResult {
 pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudgetResult, String> {
     let data = load(&app)?;
     let from = parse_date(&from_date).map_err(|e| e.to_string())?;
+    calculate_daily_budget(&data, from)
+}
+
+fn calculate_daily_budget(data: &AppData, from: NaiveDate) -> Result<DailyBudgetResult, String> {
     let generated_start = data
         .settings
         .salary_configs
@@ -864,7 +870,7 @@ pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudge
                     }
                     TxType::Expense => {
                         balance -= t.amount;
-                        if d < from {
+                        if d < from || t.was_planned {
                             balance_for_limit -= t.amount;
                         }
                     }
@@ -923,7 +929,42 @@ mod tests {
             note: String::new(),
             debt_person: Some("Алексей".to_string()),
             debt_repaid_amount: None,
+            was_planned: false,
         }
+    }
+
+    #[test]
+    fn paying_planned_expense_preserves_daily_allowance() {
+        let mut data = AppData::default();
+        data.settings.min_balance = 0;
+        let mut income = debt_expense(100_000);
+        income.r#type = TxType::Income;
+        let mut planned = debt_expense(30_000);
+        planned.r#type = TxType::PlannedExpense;
+        data.transactions = vec![income, planned];
+        data.salary_events.push(SalaryEvent {
+            id: "next".to_string(),
+            date: "2026-09-15".to_string(),
+            amount: 100_000,
+            title: "Salary".to_string(),
+            kind: Default::default(),
+            accrual_month: None,
+        });
+        let date = parse_date("2026-09-05").unwrap();
+        let before = calculate_daily_budget(&data, date).unwrap();
+        data.transactions[1].r#type = TxType::Expense;
+        data.transactions[1].was_planned = true;
+        let after = calculate_daily_budget(&data, date).unwrap();
+        assert_eq!(before.available, 70_000);
+        assert_eq!(after.available, before.available);
+        assert_eq!(before.per_day, 7_000);
+        assert_eq!(after.per_day, before.per_day);
+        let mut ordinary = debt_expense(2_000);
+        ordinary.id = "ordinary".to_string();
+        data.transactions.push(ordinary);
+        let with_spending = calculate_daily_budget(&data, date).unwrap();
+        assert_eq!(with_spending.available, 68_000);
+        assert_eq!(with_spending.per_day - 2_000, 5_000);
     }
 
     #[test]

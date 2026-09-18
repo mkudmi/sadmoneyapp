@@ -289,7 +289,7 @@ export default function App() {
     api.calcDailyBudget(lastDailyLimitCarryoverDate)
       .then((previousDayBudget) => {
         const spentOnPreviousDay = (data.transactions ?? [])
-          .filter((t) => t.date === lastDailyLimitCarryoverDate && t.type === "expense")
+          .filter((t) => t.date === lastDailyLimitCarryoverDate && t.type === "expense" && !t.was_planned)
           .reduce((sum, t) => sum + t.amount, 0);
         const carryoverAmount = Math.max(0, previousDayBudget.per_day - spentOnPreviousDay);
         return api.applyDailyLimitCarryover(carryoverAmount, today);
@@ -324,7 +324,7 @@ export default function App() {
   const spentToday = useMemo(
     () =>
       (data?.transactions ?? [])
-        .filter((t) => t.date === today && t.type === "expense")
+        .filter((t) => t.date === today && t.type === "expense" && !t.was_planned)
         .reduce((sum, t) => sum + t.amount, 0),
     [data?.transactions, today],
   );

@@ -14,6 +14,7 @@ export type Transaction = {
   note: string;
   debt_person?: string | null;
   debt_repaid_amount?: number | null;
+  was_planned?: boolean;
 };
 
 export type SalaryEvent = {

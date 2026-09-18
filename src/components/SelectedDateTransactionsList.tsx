@@ -110,6 +110,9 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
                     {"to"}: {t.debt_person}
                   </span>
                 ) : null}
+                {t.type === "expense" && t.was_planned ? (
+                  <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>Paid planned expense</span>
+                ) : null}
                 {t.type === "planned_expense" ? (
                   <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>{"(planned)"}</span>
                 ) : null}

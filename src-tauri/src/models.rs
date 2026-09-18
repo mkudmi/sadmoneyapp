@@ -209,6 +209,9 @@ pub struct Transaction {
     /// Missing in older backups, where repayments used the full amount.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub debt_repaid_amount: Option<i64>,
+    /// Paid planned expenses affect the balance, but not discretionary daily spending.
+    #[serde(default)]
+    pub was_planned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
