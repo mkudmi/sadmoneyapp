@@ -494,7 +494,7 @@ pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData
 
     let previous_tx = data.transactions[i].clone();
     tx.was_planned = matches!(tx.r#type, TxType::Expense)
-        && (previous_tx.was_planned || matches!(previous_tx.r#type, TxType::PlannedExpense));
+        && (tx.was_planned || matches!(previous_tx.r#type, TxType::PlannedExpense));
 
     tx.date = parse_date(tx.date.trim())
         .map_err(|_| "transaction date must be a valid date".to_string())?

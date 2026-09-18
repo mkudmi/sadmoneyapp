@@ -529,6 +529,7 @@ export default function App() {
   const [editTxModalAmount, setEditTxModalAmount] = useState<string>("");
   const [editTxModalCategory, setEditTxModalCategory] = useState<string>("");
   const [editTxModalNote, setEditTxModalNote] = useState<string>("");
+  const [editTxModalWasPlanned, setEditTxModalWasPlanned] = useState(false);
   const [isPickingSalaryDate, setIsPickingSalaryDate] = useState(false);
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const [salaryModalDate, setSalaryModalDate] = useState<string>(today);
@@ -1065,6 +1066,7 @@ export default function App() {
     setEditTxModalAmount(String(t.amount / 100));
     setEditTxModalCategory(t.category);
     setEditTxModalNote(t.note ?? "");
+    setEditTxModalWasPlanned(t.was_planned ?? false);
     setEditTxModalOpen(true);
   }
 
@@ -1081,6 +1083,7 @@ export default function App() {
     setEditTxModalAmount("");
     setEditTxModalCategory("");
     setEditTxModalNote("");
+    setEditTxModalWasPlanned(false);
   }
 
   async function submitEditTxModal() {
@@ -1099,6 +1102,7 @@ export default function App() {
         amount,
         category: editTxModalCategory,
         note: editTxModalNote,
+        was_planned: original.type === "expense" && editTxModalWasPlanned,
       });
       setData(updated);
       closeEditTxModal();
@@ -2697,6 +2701,9 @@ export default function App() {
         category={editTxModalCategory}
         note={editTxModalNote}
         categoryOptions={editTxCategoryOptions}
+        showWasPlanned={editTxOriginal?.type === "expense"}
+        wasPlanned={editTxModalWasPlanned}
+        onWasPlannedChange={setEditTxModalWasPlanned}
         onDateChange={setEditTxModalDate}
         onAmountChange={setEditTxModalAmount}
         onCategoryChange={setEditTxModalCategory}

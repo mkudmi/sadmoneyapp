@@ -14,6 +14,9 @@ type EditTransactionModalProps = {
   dateFormat?: DateFormat;
   showDateField?: boolean;
   categoryOptions: string[];
+  showWasPlanned: boolean;
+  wasPlanned: boolean;
+  onWasPlannedChange: (value: boolean) => void;
   onAmountChange: (value: string) => void;
   onCategoryChange: (value: string) => void;
   onNoteChange: (value: string) => void;
@@ -32,6 +35,9 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
     dateFormat = "dd-mm-yyyy",
     showDateField = false,
     categoryOptions,
+    showWasPlanned,
+    wasPlanned,
+    onWasPlannedChange,
     onAmountChange,
     onCategoryChange,
     onNoteChange,
@@ -216,6 +222,23 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
               ) : null}
             </div>
           </div>
+
+          {showWasPlanned ? (
+            <div>
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={wasPlanned}
+                  onChange={(e) => onWasPlannedChange(e.target.checked)}
+                  aria-describedby={`${fieldId}-was-planned-help`}
+                />
+                Was planned
+              </label>
+              <div id={`${fieldId}-was-planned-help`} style={{ marginTop: 4, opacity: 0.75 }}>
+                Deduct from the total budget without using the daily spend limit.
+              </div>
+            </div>
+          ) : null}
 
           <div style={{ minWidth: 0 }}>
             <label htmlFor={`${fieldId}-note`} style={{ display: "block", fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Comment"}</label>
