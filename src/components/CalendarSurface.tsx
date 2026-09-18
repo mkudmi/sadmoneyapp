@@ -294,12 +294,12 @@ export function CalendarSurface(props: CalendarSurfaceProps) {
               </div>
             ) : null}
 
-            <div className="calendar-day-heading">
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <div style={{ fontSize: 12, opacity: 0.7, fontWeight: isCustomMarkedWorking ? 700 : 400, color: dayLabelColor }}>{d.slice(8, 10)}</div>
               <div style={{ fontSize: 11, opacity: 0.7, color: dayLabelColor }}>{parseYmdLocal(d).toLocaleDateString(locale, { weekday: "short" })}</div>
             </div>
-            <div className="calendar-day-amount" title={`+ ${rub(s.inc)}`}>+ {rub(s.inc)}</div>
-            <div className="calendar-day-amount" title={`- ${rub(s.exp)}`}>- {rub(s.exp)}</div>
+            <div style={{ fontSize: 12 }}>+ {rub(s.inc)}</div>
+            <div style={{ fontSize: 12 }}>- {rub(s.exp)}</div>
           </div>
         );
       })}

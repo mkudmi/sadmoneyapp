@@ -80,21 +80,6 @@ body {
   gap: 12px;
 }
 
-.calendar-day-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 8px;
-  min-height: 30px;
-  padding-right: 28px;
-}
-
-.calendar-day-amount {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
 .app-shell::before,
 .app-shell::after {
   content: "";
