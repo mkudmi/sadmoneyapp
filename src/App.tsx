@@ -1,3 +1,4 @@
+import { AutocompleteInput } from "./components/AutocompleteInput";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -518,7 +519,6 @@ export default function App() {
   const [txModalAmount, setTxModalAmount] = useState<string>("");
   const [txModalCategory, setTxModalCategory] = useState<string>("");
   const [txModalDebtPerson, setTxModalDebtPerson] = useState<string>("");
-  const [txCategoryMenuOpen, setTxCategoryMenuOpen] = useState(false);
   const [debtModalDirection, setDebtModalDirection] = useState<DebtDirection>("payable");
   const [debtModalOpen, setDebtModalOpen] = useState(false);
   const [debtModalAmount, setDebtModalAmount] = useState<string>("");
@@ -595,7 +595,6 @@ export default function App() {
     };
   }, [dayMenuOpen]);
 
-  useDismissible(txCategoryMenuOpen, () => setTxCategoryMenuOpen(false), "[data-tx-category]");
   useDismissible(vacationTypeMenuOpen, () => setVacationTypeMenuOpen(false), "[data-vacation-type-menu]");
 
   useEffect(() => {
@@ -863,7 +862,6 @@ export default function App() {
     setTxModalAmount("");
     setTxModalCategory("");
     setTxModalDebtPerson("");
-    setTxCategoryMenuOpen(false);
     setTxModalOpen(true);
   }
 
@@ -872,7 +870,6 @@ export default function App() {
     setTxModalAmount("");
     setTxModalCategory("");
     setTxModalDebtPerson("");
-    setTxCategoryMenuOpen(false);
   }
 
   async function submitTxModal() {
@@ -2544,68 +2541,8 @@ export default function App() {
                 />
               </div>
 
-              <div style={{ minWidth: 0 }} data-tx-category="true">
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Category"}</div>
-                <div style={{ position: "relative" }}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input
-                      value={txModalCategory}
-                      onChange={(e) => setTxModalCategory(e.target.value)}
-                      onFocus={() => setTxCategoryMenuOpen(true)}
-                      placeholder={txModalType === "income" ? "e.g. Salary" : "e.g. Groceries"}
-                      style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setTxCategoryMenuOpen((v) => !v)}
-                      aria-label={"Show category list"}
-                      className="icon-button"
-                      style={{ minWidth: 34, padding: 0 }}
-                    >
-                      <AppIcon name="chevronDown" />
-                    </button>
-                  </div>
-
-                  {txCategoryMenuOpen && txCategoryOptions.length > 0 ? (
-                    <div
-                      className="menu-pop"
-                      style={{
-                        position: "absolute",
-                        top: "calc(100% + 4px)",
-                        left: 0,
-                        right: 0,
-                        zIndex: 20,
-                        maxHeight: 180,
-                        overflowY: "auto",
-                        padding: 4,
-                        boxSizing: "border-box",
-                      }}
-                    >
-                      {txCategoryOptions.map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => {
-                            setTxModalCategory(c);
-                            setTxCategoryMenuOpen(false);
-                          }}
-                          style={{
-                            width: "100%",
-                            textAlign: "left",
-                            padding: "6px 8px",
-                            border: "none",
-                            borderRadius: 6,
-                            background: "transparent",
-                            cursor: "pointer",
-                          }}
-                        >
-                          {c}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+              <AutocompleteInput label="Category" value={txModalCategory} options={txCategoryOptions}
+                onChange={setTxModalCategory} placeholder={txModalType === "income" ? "e.g. Salary" : "e.g. Groceries"} />
               {txModalType === "expense" && isDebtCategory(txModalCategory) ? (
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"To whom"}</div>

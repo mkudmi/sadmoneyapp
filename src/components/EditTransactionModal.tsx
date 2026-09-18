@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { useDismissible } from "../hooks/useDismissible";
+import { useId } from "react";
+import { AutocompleteInput } from "./AutocompleteInput";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import { DateInputWithCalendar } from "./DateInputWithCalendar";
 import type { DateFormat } from "../lib/date";
@@ -50,21 +50,8 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
     onSubmit,
   } = props;
 
-  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const dialogRef = useDialogFocus(open, "[data-edit-tx-amount]");
-  const categoryInputRef = useRef<HTMLInputElement>(null);
   const fieldId = useId();
-
-  useDismissible(open && categoryMenuOpen, () => setCategoryMenuOpen(false), "[data-edit-tx-category]");
-
-  useEffect(() => {
-    if (!open) setCategoryMenuOpen(false);
-  }, [open]);
-
-  function closeCategoryMenu() {
-    categoryInputRef.current?.focus();
-    setCategoryMenuOpen(false);
-  }
 
   if (!open) return null;
 
@@ -139,93 +126,8 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
             />
           </div>
 
-          <div
-            style={{ minWidth: 0 }}
-            data-edit-tx-category="true"
-            onBlur={(e) => {
-              if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget)) setCategoryMenuOpen(false);
-            }}
-            onKeyDown={(e) => {
-              if (categoryMenuOpen && e.key === "Escape") {
-                e.preventDefault();
-                e.stopPropagation();
-                closeCategoryMenu();
-              }
-            }}
-          >
-            <label htmlFor={`${fieldId}-category`} style={{ display: "block", fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Category"}</label>
-            <div style={{ position: "relative" }}>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  ref={categoryInputRef}
-                  id={`${fieldId}-category`}
-                  value={category}
-                  onChange={(e) => onCategoryChange(e.target.value)}
-                  onFocus={() => setCategoryMenuOpen(true)}
-                  placeholder={"e.g. Groceries"}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      onSubmit();
-                    }
-                  }}
-                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
-                />
-                <button
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => setCategoryMenuOpen((v) => !v)}
-                  aria-label={"Show category list"}
-                  aria-expanded={categoryMenuOpen && categoryOptions.length > 0}
-                  className="icon-button"
-                  style={{ minWidth: 34, padding: 0 }}
-                >
-                  <AppIcon name="chevronDown" />
-                </button>
-              </div>
-
-              {categoryMenuOpen && categoryOptions.length > 0 ? (
-                <div
-                  className="menu-pop"
-                  // Keep WebKit from closing the menu on blur before the option click.
-                  onMouseDown={(event) => event.preventDefault()}
-                  style={{
-                    position: "absolute",
-                    top: "calc(100% + 4px)",
-                    left: 0,
-                    right: 0,
-                    zIndex: 20,
-                    maxHeight: 180,
-                    overflowY: "auto",
-                    padding: 4,
-                    boxSizing: "border-box",
-                  }}
-                >
-                  {categoryOptions.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => {
-                        onCategoryChange(c);
-                        closeCategoryMenu();
-                      }}
-                      style={{
-                        width: "100%",
-                        textAlign: "left",
-                        padding: "6px 8px",
-                        border: "none",
-                        borderRadius: 6,
-                        background: "transparent",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </div>
+          <AutocompleteInput id={`${fieldId}-category`} label="Category" value={category} options={categoryOptions}
+            onChange={onCategoryChange} placeholder="e.g. Groceries" onSubmit={onSubmit} />
 
           {showWasPlanned ? (
             <div className="transaction-options">

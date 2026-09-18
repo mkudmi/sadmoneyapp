@@ -1210,3 +1210,7 @@ select {
 .topbar-debts-receivable { color: var(--brand); }
 .topbar-debts-button { max-width: 280px; padding-top: 5px; padding-bottom: 5px; }
 .topbar-debts-button > svg { flex-shrink: 0; }
+
+.autocomplete-options { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20; max-height: 180px; overflow-y: auto; padding: 4px; box-sizing: border-box; }
+.autocomplete-options > button { display: block; width: 100%; text-align: left; padding: 6px 8px; border: none; border-radius: 6px; background: transparent; cursor: pointer; }
+.autocomplete-options > button[aria-selected="true"] { background: var(--bg-strong); color: var(--brand-2); box-shadow: inset 3px 0 var(--brand-2); }
