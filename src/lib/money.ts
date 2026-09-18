@@ -1,3 +1,9 @@
+export function rubCompact(kop: number) {
+  return (kop / 100).toLocaleString("ru-RU", {
+    style: "currency", currency: "RUB", minimumFractionDigits: 0, maximumFractionDigits: 2,
+  });
+}
+
 export function rub(kop: number) {
   const v = kop / 100;
   return v.toLocaleString("ru-RU", { style: "currency", currency: "RUB" });

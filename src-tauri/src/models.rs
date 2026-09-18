@@ -217,8 +217,18 @@ pub struct Transaction {
     pub exclude_from_statistics: bool,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DebtDirection {
+    #[default]
+    Payable,
+    Receivable,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Debt {
+    #[serde(default)]
+    pub direction: DebtDirection,
     pub id: String,
     pub person: String,
     pub amount: i64,

@@ -55,7 +55,10 @@ export type OffDay = {
   is_working?: boolean;
 };
 
+export type DebtDirection = "payable" | "receivable";
+
 export type Debt = {
+  direction?: DebtDirection;
   id: string;
   person: string;
   amount: number; // kopecks

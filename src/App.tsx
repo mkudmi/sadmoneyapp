@@ -3,8 +3,8 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
-import { api, AppData, Debt, OffDay, SalaryConfig, SalaryEvent, Transaction, Vacation } from "./lib/api";
-import { rub, toKop } from "./lib/money";
+import { api, AppData, Debt, DebtDirection, OffDay, SalaryConfig, SalaryEvent, Transaction, Vacation } from "./lib/api";
+import { rubCompact, rub, toKop } from "./lib/money";
 import { capitalizeFirst } from "./lib/text";
 import {
   buildAutoSalaryEvents,
@@ -519,6 +519,7 @@ export default function App() {
   const [txModalCategory, setTxModalCategory] = useState<string>("");
   const [txModalDebtPerson, setTxModalDebtPerson] = useState<string>("");
   const [txCategoryMenuOpen, setTxCategoryMenuOpen] = useState(false);
+  const [debtModalDirection, setDebtModalDirection] = useState<DebtDirection>("payable");
   const [debtModalOpen, setDebtModalOpen] = useState(false);
   const [debtModalAmount, setDebtModalAmount] = useState<string>("");
   const [debtModalPerson, setDebtModalPerson] = useState<string>("");
@@ -812,11 +813,12 @@ export default function App() {
       return a.person.localeCompare(b.person, locale);
     });
   }, [data?.debts, locale]);
-  const totalDebt = useMemo(() => debts.reduce((sum, debt) => sum + debt.amount, 0), [debts]);
+  const totalDebt = useMemo(() => debts.reduce((sum, debt) => sum + (debt.direction === "receivable" ? 0 : debt.amount), 0), [debts]);
+  const totalReceivable = debts.reduce((sum, debt) => sum + (debt.direction === "receivable" ? debt.amount : 0), 0);
   const hasDebts = totalDebt > 0;
 
   const debtPeople = useMemo(() => {
-    return Array.from(new Set(debts.map((d) => normalizeCategoryInput(d.person)).filter((p) => p.length > 0)));
+    return Array.from(new Set(debts.filter((d) => d.direction !== "receivable").map((d) => normalizeCategoryInput(d.person)).filter((p) => p.length > 0)));
   }, [debts]);
   const vacationModalRange = useMemo(() => {
     const start = vacationModalStart <= vacationModalEnd ? vacationModalStart : vacationModalEnd;
@@ -934,7 +936,8 @@ export default function App() {
     return Number.isInteger(value) ? String(value) : value.toFixed(2);
   }
 
-  function openDebtModal(debt?: Debt) {
+  function openDebtModal(debt?: Debt, direction: DebtDirection = "payable") {
+    setDebtModalDirection(debt?.direction ?? direction);
     if (debt) {
       setDebtModalEditId(debt.id);
       setDebtModalAmount(formatDebtAmountInput(debt.amount));
@@ -963,6 +966,7 @@ export default function App() {
     try {
       const updated = await api.upsertDebt({
         id: debtModalEditId ?? "",
+        direction: debtModalDirection,
         person,
         amount,
       });
@@ -1758,12 +1762,19 @@ export default function App() {
 
             <button
               onClick={() => setDebtsPanelOpen(true)}
-              className={hasDebts ? "topbar-action-button topbar-action-button-danger" : "topbar-action-button"}
+              className="topbar-action-button topbar-debts-button"
+              title={`Я должен: ${rub(totalDebt)}\nМне должны: ${rub(totalReceivable)}`}
+              aria-label={`Открыть долги. Я должен: ${rub(totalDebt)}. Мне должны: ${rub(totalReceivable)}`}
             >
               <AppIcon name="wallet" />
               <span className="topbar-action-copy">
-                <span>{"Debts"}</span>
-                <span className="topbar-action-meta">{hasDebts ? rub(totalDebt) : "No debts"}</span>
+                <span>Долги</span>
+                <span className="topbar-debts-meta">
+                  {hasDebts ? <span className="topbar-debts-payable">Отдать {rubCompact(totalDebt)}</span> : null}
+                  {hasDebts && totalReceivable > 0 ? <span aria-hidden="true"> · </span> : null}
+                  {totalReceivable > 0 ? <span className="topbar-debts-receivable">Вернут {rubCompact(totalReceivable)}</span> : null}
+                  {!hasDebts && totalReceivable === 0 ? <span>Нет долгов</span> : null}
+                </span>
               </span>
             </button>
 
@@ -1942,23 +1953,17 @@ export default function App() {
           }}
         >
           <div
-            className="modal-panel"
-            style={{
-              width: "min(720px, 100%)",
-              maxHeight: "80vh",
-              overflowY: "auto",
-              padding: 12,
-            }}
+            className="modal-panel debts-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="debts-title"
+            onKeyDown={(e) => { if (e.key === "Escape") setDebtsPanelOpen(false); }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-              <button onClick={() => setDebtsPanelOpen(false)} aria-label={"Close"} className="icon-button">
-                <AppIcon name="close" />
-              </button>
-            </div>
             <DebtsSurface
               debts={debts}
-              onAddDebt={() => openDebtModal()}
+              onAddDebt={(direction) => openDebtModal(undefined, direction)}
+              onClose={() => setDebtsPanelOpen(false)}
               onEditDebt={(debt) => openDebtModal(debt)}
               onDeleteDebt={(debtId) => {
                 void (async () => {
@@ -2668,9 +2673,17 @@ export default function App() {
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+              <label>
+                <span style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Направление долга</span>
+                <select value={debtModalDirection} onChange={(e) => setDebtModalDirection(e.target.value as DebtDirection)} style={{ width: "100%", padding: 8 }}>
+                  <option value="payable">Я должен</option>
+                  <option value="receivable">Мне должны</option>
+                </select>
+              </label>
               <div>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
+                <div id="debt-amount-label" style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
                 <input
+                  aria-labelledby="debt-amount-label"
                   value={debtModalAmount}
                   onChange={(e) => setDebtModalAmount(e.target.value)}
                   placeholder="1000"
@@ -2679,8 +2692,9 @@ export default function App() {
                 />
               </div>
               <div>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"To whom you owe"}</div>
+                <div id="debt-person-label" style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{debtModalDirection === "receivable" ? "Кто мне должен" : "Кому я должен"}</div>
                 <input
+                  aria-labelledby="debt-person-label"
                   value={debtModalPerson}
                   onChange={(e) => setDebtModalPerson(e.target.value)}
                   placeholder={"e.g. Ivan"}

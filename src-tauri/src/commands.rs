@@ -1,4 +1,4 @@
-use crate::models::{AppData, Debt, OffDay, SalaryConfig, SalaryEvent, Transaction, TxType, Vacation, WorkSchedule};
+use crate::models::{AppData, Debt, DebtDirection, OffDay, SalaryConfig, SalaryEvent, Transaction, TxType, Vacation, WorkSchedule};
 use crate::storage;
 use anyhow::Result;
 use chrono::{Datelike, Duration, NaiveDate, Weekday};
@@ -257,7 +257,7 @@ fn reduce_debt(data: &mut AppData, person: &str, amount: i64) -> i64 {
     if let Some(index) = data
         .debts
         .iter()
-        .position(|d| same_person(&d.person, &normalized_person))
+        .position(|d| d.direction == DebtDirection::Payable && same_person(&d.person, &normalized_person))
     {
         let repaid = amount.min(data.debts[index].amount.max(0));
         let remaining = data.debts[index].amount - repaid;
@@ -280,11 +280,12 @@ fn restore_debt(data: &mut AppData, person: &str, amount: i64) {
     if let Some(debt) = data
         .debts
         .iter_mut()
-        .find(|d| same_person(&d.person, &normalized_person))
+        .find(|d| d.direction == DebtDirection::Payable && same_person(&d.person, &normalized_person))
     {
         debt.amount = debt.amount.saturating_add(amount);
     } else {
         data.debts.push(Debt {
+            direction: DebtDirection::Payable,
             id: format!("debt_{}", Uuid::new_v4()),
             person: normalized_person,
             amount,
@@ -646,7 +647,7 @@ pub fn upsert_debt(app: AppHandle, mut debt: Debt) -> Result<AppData, String> {
         if let Some(existing) = data
             .debts
             .iter_mut()
-            .find(|d| same_person(&d.person, &debt.person))
+            .find(|d| d.direction == debt.direction && same_person(&d.person, &debt.person))
         {
             existing.amount = existing.amount.saturating_add(debt.amount);
         } else {
@@ -918,6 +919,38 @@ fn calculate_daily_budget(data: &AppData, from: NaiveDate) -> Result<DailyBudget
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_debts_default_to_payable_and_directions_round_trip() {
+        let legacy: Debt = serde_json::from_str(r#"{"id":"old","person":"Иван","amount":100}"#).unwrap();
+        assert_eq!(legacy.direction, DebtDirection::Payable);
+        let receivable = Debt { direction: DebtDirection::Receivable, ..legacy };
+        let restored: Debt = serde_json::from_str(&serde_json::to_string(&receivable).unwrap()).unwrap();
+        assert_eq!(restored.direction, DebtDirection::Receivable);
+        assert!(serde_json::from_str::<Debt>(r#"{"id":"bad","person":"Иван","amount":100,"direction":"invalid"}"#).is_err());
+    }
+
+    #[test]
+    fn expense_repayment_and_rollback_leave_receivables_unchanged() {
+        let mut data = AppData::default();
+        data.debts.push(Debt {
+            id: "receivable".to_string(),
+            person: "Алексей".to_string(),
+            amount: 20_000,
+            direction: DebtDirection::Receivable,
+        });
+        restore_debt(&mut data, "Алексей", 10_000);
+        let mut tx = debt_expense(15_000);
+        apply_debt_payment(&mut data, &mut tx);
+        assert_eq!(data.debts.len(), 1);
+        assert_eq!(data.debts[0].amount, 20_000);
+        assert_eq!(tx.debt_repaid_amount, Some(10_000));
+        rollback_debt_payment(&mut data, &tx);
+        assert_eq!(data.debts.len(), 2);
+        assert_eq!(data.debts[0].amount, 20_000);
+        assert_eq!(data.debts[1].direction, DebtDirection::Payable);
+        assert_eq!(data.debts[1].amount, 10_000);
+    }
 
     fn debt_expense(amount: i64) -> Transaction {
         Transaction {
