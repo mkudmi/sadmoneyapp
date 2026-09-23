@@ -5,6 +5,29 @@ import { loadAppModule } from "./loadAppModule.mjs";
 const dates = await loadAppModule("/src/lib/date.ts");
 const money = await loadAppModule("/src/lib/money.ts");
 const salary = await loadAppModule("/src/lib/salary.ts");
+const savingsPlan = await loadAppModule("/src/lib/savingsPlan.ts");
+
+test("savings card limit follows income and stays between 1,000 and 5,000 rubles", () => {
+  const base = {
+    settings: { salaryConfigs: [{ effectiveFrom: "2026-01-01", amount: 9_000_000 }] },
+    transactions: [],
+  };
+  assert.equal(savingsPlan.buildSavingsPlan(base, [], "2026-09-23").maxCardAmount, 270_000);
+  assert.equal(savingsPlan.buildSavingsPlan({ ...base, settings: { salaryConfigs: [] } }, [], "2026-09-23").maxCardAmount, 100_000);
+  assert.equal(savingsPlan.buildSavingsPlan({ ...base, settings: { salaryConfigs: [{ effectiveFrom: "2026-01-01", amount: 30_000_000 }] } }, [], "2026-09-23").maxCardAmount, 500_000);
+});
+
+test("savings forecast uses recent closures on different days", () => {
+  const goal = {
+    createdAt: "2026-09-01", targetAmount: 120_000_00,
+    cards: [
+      { amount: 100_000, completed: true, completedAt: "2026-09-02" },
+      { amount: 100_000, completed: true, completedAt: "2026-09-03" },
+    ],
+  };
+  assert.equal(savingsPlan.estimateSavingsDays(goal, 200_000, "2026-09-03"), 177);
+  assert.equal(savingsPlan.estimateSavingsDays(goal, 200_000, "2026-09-02"), null);
+});
 
 function config(overrides = {}) {
   return {

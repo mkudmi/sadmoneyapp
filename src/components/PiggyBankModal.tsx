@@ -1,5 +1,8 @@
 import { rub } from "../lib/money";
 import { AppIcon } from "./AppIcon";
+import type { SavingsGoal } from "../lib/api";
+import type { SavingsPlan } from "../lib/savingsPlan";
+import { SavingsGoalSection } from "./SavingsGoalSection";
 
 export type PiggyBankModalType = "add" | "withdraw";
 
@@ -8,6 +11,12 @@ type PiggyBankModalProps = {
   type: PiggyBankModalType;
   amountInput: string;
   balance: number;
+  goal: SavingsGoal | null;
+  plan: SavingsPlan;
+  today: string;
+  onSaveGoal: (title: string, note: string, targetAmount: number, maxCardAmount: number) => Promise<void>;
+  onClearGoal: () => Promise<void>;
+  onToggleCard: (index: number) => Promise<void>;
   onClose: () => void;
   onTypeChange: (type: PiggyBankModalType) => void;
   onAmountInputChange: (value: string) => void;
@@ -21,6 +30,12 @@ export function PiggyBankModal(props: PiggyBankModalProps) {
     type,
     amountInput,
     balance,
+    goal,
+    plan,
+    today,
+    onSaveGoal,
+    onClearGoal,
+    onToggleCard,
     onClose,
     onTypeChange,
     onAmountInputChange,
@@ -50,8 +65,10 @@ export function PiggyBankModal(props: PiggyBankModalProps) {
       <div
         className="modal-panel"
         style={{
-          width: "min(420px, 100%)",
+          width: "min(620px, 100%)",
           padding: 12,
+          maxHeight: "min(90vh, 850px)",
+          overflowY: "auto",
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -85,6 +102,7 @@ export function PiggyBankModal(props: PiggyBankModalProps) {
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
             <input
+              id="piggy-bank-amount"
               value={amountInput}
               onChange={(e) => onAmountInputChange(e.target.value)}
               placeholder={"1000"}
@@ -109,6 +127,15 @@ export function PiggyBankModal(props: PiggyBankModalProps) {
             {type === "add" ? "Add" : "Withdraw"}
           </button>
         </div>
+        <SavingsGoalSection
+          goal={goal}
+          balance={balance}
+          plan={plan}
+          today={today}
+          onSave={onSaveGoal}
+          onClear={onClearGoal}
+          onToggleCard={onToggleCard}
+        />
       </div>
     </div>
   );

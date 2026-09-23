@@ -17,6 +17,7 @@ export function usePiggyBankHotkeys({ open, onClose, onSubmit }: UsePiggyBankHot
         return;
       }
       if (e.key === "Enter") {
+        if (!(e.target instanceof HTMLInputElement) || e.target.id !== "piggy-bank-amount") return;
         e.preventDefault();
         onSubmit();
       }

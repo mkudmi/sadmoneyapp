@@ -33,6 +33,7 @@ import { useVacationDaysCount } from "./hooks/useVacationDaysCount";
 import { VacationsPanel } from "./components/VacationsPanel";
 import { SalariesPanel } from "./components/SalariesPanel";
 import { PiggyBankModal, PiggyBankModalType } from "./components/PiggyBankModal";
+import { buildSavingsPlan } from "./lib/savingsPlan";
 import { SelectedDateBudgetSummary } from "./components/SelectedDateBudgetSummary";
 import { SelectedDateTransactionsList } from "./components/SelectedDateTransactionsList";
 import { TopCategoriesPanel } from "./components/TopCategoriesPanel";
@@ -143,6 +144,10 @@ export default function App() {
   const viewData = useMemo(
     () => (data ? { ...data, salaryEvents: allSalaryEvents } : null),
     [allSalaryEvents, data]
+  );
+  const savingsPlan = useMemo(
+    () => data ? buildSavingsPlan(data, allSalaryEvents, today) : { maxCardAmount: 100_000 },
+    [allSalaryEvents, data, today]
   );
   const salaryThisMonth = allSalaryEvents
     .filter((s) => ymFromYmd(s.date) === monthKey)
@@ -1158,6 +1163,21 @@ export default function App() {
     } catch (err) {
       alert(String(err));
     }
+  }
+
+  async function saveSavingsGoal(title: string, note: string, targetAmount: number, maxCardAmount: number) {
+    const updated = await api.setSavingsGoal(title, note, targetAmount, maxCardAmount);
+    setData(updated);
+  }
+
+  async function clearSavingsGoal() {
+    const updated = await api.clearSavingsGoal();
+    setData(updated);
+  }
+
+  async function toggleSavingsCard(index: number) {
+    const updated = await api.toggleSavingsCard(index);
+    setData(updated);
   }
 
   async function withdrawAllFromPiggyBank() {
@@ -3026,6 +3046,12 @@ export default function App() {
         type={piggyBankModalType}
         amountInput={piggyBankModalAmount}
         balance={piggyBankAmount}
+        goal={data?.savingsGoal ?? null}
+        plan={savingsPlan}
+        today={today}
+        onSaveGoal={saveSavingsGoal}
+        onClearGoal={clearSavingsGoal}
+        onToggleCard={toggleSavingsCard}
         onClose={closePiggyBankModal}
         onTypeChange={setPiggyBankModalType}
         onAmountInputChange={setPiggyBankModalAmount}

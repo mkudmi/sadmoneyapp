@@ -1,7 +1,7 @@
-use crate::models::{AppData, Debt, DebtDirection, OffDay, SalaryConfig, SalaryEvent, Transaction, TxType, Vacation, WorkSchedule};
+use crate::models::{AppData, Debt, DebtDirection, OffDay, SalaryConfig, SalaryEvent, SavingsCard, SavingsGoal, Transaction, TxType, Vacation, WorkSchedule};
 use crate::storage;
 use anyhow::Result;
-use chrono::{Datelike, Duration, NaiveDate, Weekday};
+use chrono::{Datelike, Duration, Local, NaiveDate, Weekday};
 use tauri::AppHandle;
 use uuid::Uuid;
 
@@ -237,7 +237,20 @@ fn normalize_category_list(items: Vec<String>) -> Vec<String> {
 }
 
 fn load(app: &AppHandle) -> Result<AppData, String> {
-    storage::load_or_init(app).map_err(|e| e.to_string())
+    let mut data = storage::load_or_init(app).map_err(|e| e.to_string())?;
+    let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
+    let monthly_income = data.settings.salary_configs.iter()
+        .filter(|config| config.amount > 0 && config.effective_from.as_str() <= today.as_str())
+        .max_by_key(|config| &config.effective_from)
+        .map(|config| config.amount)
+        .unwrap_or(0);
+    let suggested_card_limit = (monthly_income.saturating_mul(3) / 100 / 10_000 * 10_000).clamp(100_000, 500_000);
+    if let Some(goal) = data.savings_goal.as_mut() {
+        if migrate_savings_goal_cards(goal, data.piggy_bank_amount, suggested_card_limit, &today) {
+            save(app, &data)?;
+        }
+    }
+    Ok(data)
 }
 
 fn save(app: &AppHandle, data: &AppData) -> Result<(), String> {
@@ -567,6 +580,244 @@ pub fn delete_salary_event(app: AppHandle, id: String) -> Result<AppData, String
 pub fn set_piggy_bank_amount(app: AppHandle, amount: i64) -> Result<AppData, String> {
     let mut data = load(&app)?;
     data.piggy_bank_amount = amount.max(0);
+    if let Some(goal) = data.savings_goal.as_mut() {
+        goal.starting_amount = goal.starting_amount.min(data.piggy_bank_amount);
+        let mut card_total: i64 = goal.cards.iter().filter(|card| card.completed).map(|card| card.amount).sum();
+        for card in goal.cards.iter_mut().rev() {
+            if card_total <= data.piggy_bank_amount - goal.starting_amount {
+                break;
+            }
+            if card.completed {
+                card.completed = false;
+                card.completed_at = None;
+                card_total -= card.amount;
+            }
+        }
+    }
+    save(&app, &data)?;
+    Ok(data)
+}
+
+fn split_completed_card(card: &SavingsCard, max_card_amount: i64) -> Vec<SavingsCard> {
+    if card.amount > max_card_amount.saturating_mul(600) {
+        return vec![card.clone()];
+    }
+    let mut remaining = card.amount;
+    let mut cards = Vec::new();
+    while remaining > 0 {
+        let amount = remaining.min(max_card_amount);
+        cards.push(SavingsCard { amount, completed: true, completed_at: card.completed_at.clone() });
+        remaining -= amount;
+    }
+    cards
+}
+
+fn migrate_savings_goal_cards(goal: &mut SavingsGoal, balance: i64, suggested_card_limit: i64, today: &str) -> bool {
+    if goal.card_scheme_version >= 3 {
+        return false;
+    }
+    let max_card_amount = if goal.max_card_amount == 0 { suggested_card_limit } else { goal.max_card_amount };
+    if let Ok(pending) = savings_cards(goal.target_amount.saturating_sub(balance), max_card_amount) {
+        let mut completed: Vec<SavingsCard> = goal.cards.iter().filter(|card| card.completed)
+            .flat_map(|card| split_completed_card(card, max_card_amount)).collect();
+        completed.extend(pending);
+        goal.cards = completed;
+    }
+    goal.max_card_amount = max_card_amount;
+    if goal.created_at.is_empty() {
+        goal.created_at = today.to_string();
+    }
+    goal.card_scheme_version = 3;
+    true
+}
+
+fn savings_cards(amount: i64, max_card_amount: i64) -> Result<Vec<SavingsCard>, String> {
+    savings_cards_with_seed(amount, max_card_amount, Uuid::new_v4().as_u128() as u64)
+}
+
+fn next_card_random(seed: &mut u64) -> u64 {
+    *seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+    *seed >> 32
+}
+
+fn shuffle_card_values<T>(items: &mut [T], seed: &mut u64) {
+    for index in (1..items.len()).rev() {
+        let other = (next_card_random(seed) as usize) % (index + 1);
+        items.swap(index, other);
+    }
+}
+
+fn savings_cards_with_seed(amount: i64, max_card_amount: i64, mut seed: u64) -> Result<Vec<SavingsCard>, String> {
+    if amount <= 0 {
+        return Ok(vec![]);
+    }
+    const MIN_CARD: i64 = 50_000;
+    if max_card_amount < MIN_CARD {
+        return Err("Card limit is too small".to_string());
+    }
+    if amount < MIN_CARD {
+        return Ok(vec![SavingsCard { amount, completed: false, completed_at: None }]);
+    }
+    let minimum_count = (amount + max_card_amount - 1) / max_card_amount;
+    if minimum_count > 600 {
+        return Err("Goal needs more than 600 cards at this card size".to_string());
+    }
+    let maximum_count = (amount / MIN_CARD).min(600);
+    let average = (MIN_CARD + max_card_amount) / 2;
+    let count = ((amount + average / 2) / average).clamp(minimum_count, maximum_count) as usize;
+    let steps = (max_card_amount - MIN_CARD) / 10_000;
+    let mut values: Vec<i64> = (0..count)
+        .map(|_| MIN_CARD + (next_card_random(&mut seed) % (steps as u64 + 1)) as i64 * 10_000)
+        .collect();
+    let mut difference = amount - values.iter().sum::<i64>();
+    let mut order: Vec<usize> = (0..count).collect();
+    shuffle_card_values(&mut order, &mut seed);
+    for index in order {
+        if difference > 0 {
+            let added = difference.min(max_card_amount - values[index]);
+            values[index] += added;
+            difference -= added;
+        } else if difference < 0 {
+            let removed = (-difference).min(values[index] - MIN_CARD);
+            values[index] -= removed;
+            difference += removed;
+        }
+    }
+    if difference != 0 {
+        return Err("Could not distribute savings cards".to_string());
+    }
+    for _ in 0..128 {
+        shuffle_card_values(&mut values, &mut seed);
+        if values.windows(2).all(|pair| pair[0] != pair[1]) {
+            break;
+        }
+    }
+    if values.windows(2).any(|pair| pair[0] == pair[1]) {
+        let mut counts = std::collections::HashMap::new();
+        for value in values {
+            *counts.entry(value).or_insert(0usize) += 1;
+        }
+        let mut heap: std::collections::BinaryHeap<(usize, u64, i64)> = counts.into_iter()
+            .map(|(value, count)| (count, next_card_random(&mut seed), value)).collect();
+        values = Vec::with_capacity(count);
+        while let Some(mut selected) = heap.pop() {
+            if values.last().is_some_and(|last| *last == selected.2) {
+                if let Some(alternative) = heap.pop() {
+                    heap.push(selected);
+                    selected = alternative;
+                }
+            }
+            values.push(selected.2);
+            selected.0 -= 1;
+            if selected.0 > 0 {
+                selected.1 = next_card_random(&mut seed);
+                heap.push(selected);
+            }
+        }
+    }
+    Ok(values.into_iter().map(|amount| SavingsCard { amount, completed: false, completed_at: None }).collect())
+}
+
+#[tauri::command]
+pub fn set_savings_goal(app: AppHandle, title: String, note: String, target_amount: i64, max_card_amount: i64) -> Result<AppData, String> {
+    let title = title.trim();
+    if title.is_empty() || title.chars().count() > 120 {
+        return Err("Goal title must contain 1–120 characters".to_string());
+    }
+    if note.chars().count() > 500 {
+        return Err("Goal note is too long".to_string());
+    }
+    if !(100..=100_000_000_000).contains(&target_amount) {
+        return Err("Goal amount is out of range".to_string());
+    }
+    if !(100_000..=500_000).contains(&max_card_amount) {
+        return Err("Card limit must be between 1,000 and 5,000 rubles".to_string());
+    }
+    let mut data = load(&app)?;
+    if let Some(goal) = data.savings_goal.as_mut() {
+        if goal.target_amount == target_amount {
+            if goal.max_card_amount != max_card_amount {
+                let mut completed: Vec<SavingsCard> = goal.cards.iter().filter(|card| card.completed)
+                    .flat_map(|card| split_completed_card(card, max_card_amount)).collect();
+                if completed.len() > 600 {
+                    completed = completed.split_off(completed.len() - 600);
+                }
+                completed.extend(savings_cards(target_amount.saturating_sub(data.piggy_bank_amount), max_card_amount)?);
+                goal.cards = completed;
+                goal.max_card_amount = max_card_amount;
+            }
+            goal.title = title.to_string();
+            goal.note = note.trim().to_string();
+            save(&app, &data)?;
+            return Ok(data);
+        }
+    }
+    let remaining = (target_amount - data.piggy_bank_amount).max(0);
+    let mut cards = data.savings_goal.as_ref().map(|goal| goal.cards.iter()
+        .filter(|card| card.completed)
+        .flat_map(|card| split_completed_card(card, max_card_amount))
+        .collect::<Vec<_>>()).unwrap_or_default();
+    if cards.len() > 600 {
+        cards = cards.split_off(cards.len() - 600);
+    }
+    cards.extend(savings_cards(remaining, max_card_amount)?);
+    let starting_amount = data.savings_goal.as_ref()
+        .map(|goal| goal.starting_amount.min(data.piggy_bank_amount))
+        .unwrap_or(data.piggy_bank_amount);
+    let created_at = data.savings_goal.as_ref()
+        .map(|goal| goal.created_at.clone())
+        .filter(|date| !date.is_empty())
+        .unwrap_or_else(|| Local::now().date_naive().format("%Y-%m-%d").to_string());
+    data.savings_goal = Some(SavingsGoal {
+        title: title.to_string(),
+        note: note.trim().to_string(),
+        target_amount,
+        starting_amount,
+        max_card_amount,
+        created_at,
+        card_scheme_version: 3,
+        cards,
+    });
+    save(&app, &data)?;
+    Ok(data)
+}
+
+#[tauri::command]
+pub fn clear_savings_goal(app: AppHandle) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    data.savings_goal = None;
+    save(&app, &data)?;
+    Ok(data)
+}
+
+fn toggle_savings_card_in_data(data: &mut AppData, index: usize, today: &str) -> Result<(), String> {
+    let goal = data.savings_goal.as_mut().ok_or("Savings goal is missing")?;
+    let card = goal.cards.get_mut(index).ok_or("Savings card is missing")?;
+    if card.amount <= 0 {
+        return Err("Savings card is unavailable".to_string());
+    }
+    if card.completed {
+        data.piggy_bank_amount = data.piggy_bank_amount.checked_sub(card.amount)
+            .filter(|amount| *amount >= 0).ok_or("Savings balance is too low to undo this card")?;
+        card.completed = false;
+        card.completed_at = None;
+    } else {
+        if card.amount > goal.target_amount.saturating_sub(data.piggy_bank_amount) {
+            return Err("Savings card is unavailable".to_string());
+        }
+        data.piggy_bank_amount = data.piggy_bank_amount.checked_add(card.amount)
+            .ok_or("Savings amount is too large")?;
+        card.completed = true;
+        card.completed_at = Some(today.to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn toggle_savings_card(app: AppHandle, index: usize) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
+    toggle_savings_card_in_data(&mut data, index, &today)?;
     save(&app, &data)?;
     Ok(data)
 }
@@ -764,7 +1015,12 @@ fn parse_backup(raw: &str) -> Result<AppData, String> {
         .chain(data.salary_events.iter().map(|v| v.amount))
         .chain(data.debts.iter().map(|v| v.amount))
         .chain(data.settings.salary_configs.iter().map(|v| v.amount))
-        .chain([data.piggy_bank_amount, data.settings.min_balance]);
+        .chain([data.piggy_bank_amount, data.settings.min_balance])
+        .chain(data.savings_goal.iter().flat_map(|goal| {
+            [goal.target_amount, goal.max_card_amount, goal.starting_amount]
+                .into_iter()
+                .chain(goal.cards.iter().map(|card| card.amount))
+        }));
     if amounts.into_iter().any(|amount| amount < 0)
         || data.transactions.iter().any(|tx| {
             tx.debt_repaid_amount
@@ -772,6 +1028,22 @@ fn parse_backup(raw: &str) -> Result<AppData, String> {
         })
     {
         return Err("backup contains invalid amounts".to_string());
+    }
+    if let Some(goal) = &data.savings_goal {
+        if goal.title.trim().is_empty()
+            || goal.title.chars().count() > 120
+            || goal.note.chars().count() > 500
+            || !(100..=100_000_000_000).contains(&goal.target_amount)
+            || (goal.max_card_amount != 0 && !(100_000..=500_000).contains(&goal.max_card_amount))
+            || goal.starting_amount > data.piggy_bank_amount
+            || goal.cards.len() > 1200
+            || goal.cards.iter().any(|card| card.amount <= 0)
+            || (goal.max_card_amount > 0 && goal.cards.iter().any(|card| card.amount > goal.max_card_amount))
+            || (!goal.created_at.is_empty() && parse_date(&goal.created_at).is_err())
+            || goal.cards.iter().any(|card| card.completed_at.as_ref().is_some_and(|date| parse_date(date).is_err()))
+        {
+            return Err("backup contains an invalid savings goal".to_string());
+        }
     }
     let mut transaction_ids = std::collections::HashSet::new();
     if data
@@ -1257,5 +1529,92 @@ mod tests {
             assert_eq!(events[0].amount, 5_000_000);
             assert_eq!(events[0].accrual_month.as_deref(), effective_from.get(..7));
         }
+    }
+
+    #[test]
+    fn savings_cards_cover_the_goal_without_exceeding_the_limit() {
+        for amount in [100, 5_000, 50_000, 300_000, 12_000_000] {
+            let cards = savings_cards_with_seed(amount, 100_000, 42).unwrap();
+            assert!(!cards.is_empty());
+            assert!(cards.len() <= 600);
+            assert!(cards.iter().all(|card| card.amount > 0 && card.amount <= 100_000 && !card.completed));
+            if amount >= 50_000 {
+                assert!(cards.iter().all(|card| card.amount >= 50_000));
+            }
+            assert_eq!(cards.iter().map(|card| card.amount).sum::<i64>(), amount);
+        }
+        assert!(savings_cards(12_000_000, 270_000).unwrap().len() > 12);
+        assert!(savings_cards(1_000_000_000, 100_000).is_err());
+    }
+
+    #[test]
+    fn savings_cards_have_varied_order_without_repeating_rows() {
+        for seed in 0..256 {
+            let cards = savings_cards_with_seed(12_000_000, 500_000, seed).unwrap();
+            let amounts: Vec<i64> = cards.iter().map(|card| card.amount).collect();
+            assert!(amounts.iter().collect::<std::collections::HashSet<_>>().len() > 10);
+            assert!(amounts.windows(2).all(|pair| pair[0] != pair[1]), "seed {seed}");
+            assert_ne!(&amounts[..6], &amounts[6..12]);
+            assert_eq!(amounts.iter().sum::<i64>(), 12_000_000);
+        }
+    }
+
+    #[test]
+    fn tapping_a_savings_card_twice_restores_the_balance_and_card() {
+        let mut data = AppData::default();
+        data.savings_goal = Some(SavingsGoal {
+            title: "Bike".to_string(),
+            note: String::new(),
+            target_amount: 100_000,
+            starting_amount: 0,
+            max_card_amount: 100_000,
+            created_at: "2026-09-23".to_string(),
+            card_scheme_version: 3,
+            cards: vec![SavingsCard { amount: 50_000, completed: false, completed_at: None }],
+        });
+
+        toggle_savings_card_in_data(&mut data, 0, "2026-09-23").unwrap();
+        assert_eq!(data.piggy_bank_amount, 50_000);
+        assert_eq!(data.savings_goal.as_ref().unwrap().cards[0].completed_at.as_deref(), Some("2026-09-23"));
+
+        toggle_savings_card_in_data(&mut data, 0, "2026-09-24").unwrap();
+        assert_eq!(data.piggy_bank_amount, 0);
+        let card = &data.savings_goal.as_ref().unwrap().cards[0];
+        assert!(!card.completed);
+        assert!(card.completed_at.is_none());
+    }
+
+    #[test]
+    fn saved_old_card_board_is_rebuilt_with_small_cards() {
+        let mut goal = SavingsGoal {
+            title: "Phone".to_string(),
+            note: String::new(),
+            target_amount: 12_000_000,
+            starting_amount: 0,
+            max_card_amount: 500_000,
+            created_at: "2026-09-23".to_string(),
+            card_scheme_version: 2,
+            cards: vec![SavingsCard { amount: 250_000, completed: false, completed_at: None }],
+        };
+
+        assert!(migrate_savings_goal_cards(&mut goal, 0, 100_000, "2026-09-23"));
+        assert_eq!(goal.card_scheme_version, 3);
+        assert!(goal.cards.iter().map(|card| card.amount).collect::<std::collections::HashSet<_>>().len() > 10);
+        assert_eq!(goal.cards.iter().map(|card| card.amount).sum::<i64>(), 12_000_000);
+        assert!(!migrate_savings_goal_cards(&mut goal, 0, 100_000, "2026-09-23"));
+    }
+
+    #[test]
+    fn savings_goal_backup_is_backward_compatible_and_validated() {
+        let mut legacy = serde_json::to_value(AppData::default()).unwrap();
+        legacy.as_object_mut().unwrap().remove("savingsGoal");
+        assert!(parse_backup(&legacy.to_string()).unwrap().savings_goal.is_none());
+
+        legacy["savingsGoal"] = serde_json::json!({
+            "title": "Bike", "targetAmount": 30_000_00,
+            "startingAmount": 0, "maxCardAmount": 100_000,
+            "createdAt": "2026-09-23", "cards": [{"amount": 4_000_00, "completed": false}]
+        });
+        assert!(parse_backup(&legacy.to_string()).is_err());
     }
 }

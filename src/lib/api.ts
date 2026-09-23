@@ -80,11 +80,23 @@ export type AppData = {
     salaryConfigs?: SalaryConfig[];
   };
   piggyBankAmount?: number;
+  savingsGoal?: SavingsGoal | null;
   salaryEvents: SalaryEvent[];
   vacations: Vacation[];
   offDays: OffDay[];
   debts?: Debt[];
   transactions: Transaction[];
+};
+
+export type SavingsGoal = {
+  title: string;
+  note: string;
+  targetAmount: number;
+  startingAmount: number;
+  maxCardAmount: number;
+  createdAt: string;
+  cardSchemeVersion: number;
+  cards: { amount: number; completed: boolean; completedAt?: string | null }[];
 };
 
 export type DailyBudgetResult = {
@@ -102,6 +114,9 @@ export const api = {
   upsertSalaryEvent: (ev: SalaryEvent) => invoke<AppData>("upsert_salary_event", { ev }),
   deleteSalaryEvent: (id: string) => invoke<AppData>("delete_salary_event", { id }),
   setPiggyBankAmount: (amount: number) => invoke<AppData>("set_piggy_bank_amount", { amount }),
+  setSavingsGoal: (title: string, note: string, targetAmount: number, maxCardAmount: number) => invoke<AppData>("set_savings_goal", { title, note, targetAmount, maxCardAmount }),
+  clearSavingsGoal: () => invoke<AppData>("clear_savings_goal"),
+  toggleSavingsCard: (index: number) => invoke<AppData>("toggle_savings_card", { index }),
   upsertVacation: (vac: Vacation) => invoke<AppData>("upsert_vacation", { ev: vac }),
   deleteVacation: (id: string) => invoke<AppData>("delete_vacation", { id }),
   upsertOffDay: (od: OffDay) => invoke<AppData>("upsert_off_day", { ev: od }),

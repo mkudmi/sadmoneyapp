@@ -8,6 +8,8 @@ pub struct AppData {
     #[serde(rename = "piggyBankAmount")]
     #[serde(default)]
     pub piggy_bank_amount: i64,
+    #[serde(rename = "savingsGoal")]
+    pub savings_goal: Option<SavingsGoal>,
     #[serde(rename = "salaryEvents")]
     pub salary_events: Vec<SalaryEvent>,
     pub vacations: Vec<Vacation>,
@@ -16,6 +18,33 @@ pub struct AppData {
     #[serde(default)]
     pub debts: Vec<Debt>,
     pub transactions: Vec<Transaction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavingsGoal {
+    pub title: String,
+    #[serde(default)]
+    pub note: String,
+    #[serde(rename = "targetAmount")]
+    pub target_amount: i64,
+    #[serde(rename = "startingAmount")]
+    pub starting_amount: i64,
+    #[serde(rename = "maxCardAmount", default)]
+    pub max_card_amount: i64,
+    #[serde(rename = "createdAt", default)]
+    pub created_at: String,
+    #[serde(rename = "cardSchemeVersion", default)]
+    pub card_scheme_version: u8,
+    pub cards: Vec<SavingsCard>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavingsCard {
+    pub amount: i64,
+    #[serde(default)]
+    pub completed: bool,
+    #[serde(rename = "completedAt", default)]
+    pub completed_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -240,6 +269,7 @@ impl Default for AppData {
             version: 1,
             settings: Settings::default(),
             piggy_bank_amount: 0,
+            savings_goal: None,
             salary_events: vec![],
             vacations: vec![],
             off_days: vec![],
