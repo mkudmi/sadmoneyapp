@@ -8,11 +8,12 @@ type Props = {
   value: string;
   options: string[];
   placeholder?: string;
+  autoFocus?: boolean;
   onChange: (value: string) => void;
   onSubmit?: () => void;
 };
 
-export function AutocompleteInput({ id, label, value, options, placeholder, onChange, onSubmit }: Props) {
+export function AutocompleteInput({ id, label, value, options, placeholder, autoFocus, onChange, onSubmit }: Props) {
   const uid = useId();
   const inputId = id ?? `${uid}-input`;
   const listId = `${uid}-list`;
@@ -63,7 +64,7 @@ export function AutocompleteInput({ id, label, value, options, placeholder, onCh
     }}>
       <label htmlFor={inputId} style={{ display: "block", fontSize: 12, opacity: .8, marginBottom: 4 }}>{label}</label>
       <div style={{ display: "flex", gap: 8 }}>
-        <input ref={inputRef} id={inputId} role="combobox" aria-autocomplete="list" aria-expanded={expanded} aria-controls={expanded ? listId : undefined} aria-activedescendant={expanded && activeIndex >= 0 ? `${uid}-option-${activeIndex}` : undefined}
+        <input ref={inputRef} id={inputId} autoFocus={autoFocus} role="combobox" aria-autocomplete="list" aria-expanded={expanded} aria-controls={expanded ? listId : undefined} aria-activedescendant={expanded && activeIndex >= 0 ? `${uid}-option-${activeIndex}` : undefined}
           value={value} placeholder={placeholder}
           onFocus={() => { setOpen(true); setActive(null); }}
           onClick={() => setOpen(true)}

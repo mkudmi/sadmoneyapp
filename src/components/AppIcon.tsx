@@ -13,6 +13,7 @@ import {
   IconPigMoney,
   IconPlus,
   IconSettings,
+  IconSparkles,
   IconTrash,
   IconWallet,
   IconX,
@@ -34,6 +35,7 @@ export type AppIconName =
   | "piggyBank"
   | "remove"
   | "settings"
+  | "sparkles"
   | "wallet";
 
 type AppIconProps = {
@@ -82,6 +84,8 @@ export function AppIcon({ name, size = 16, stroke = 1.8, style }: AppIconProps) 
       return <IconMinus {...commonProps} />;
     case "settings":
       return <IconSettings {...commonProps} />;
+    case "sparkles":
+      return <IconSparkles {...commonProps} />;
     case "wallet":
       return <IconWallet {...commonProps} />;
     default:

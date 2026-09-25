@@ -26,6 +26,7 @@ import {
 } from "./lib/date";
 import type { DateFormat } from "./lib/date";
 import { isDebtCategory, normalizeCategoryInput } from "./lib/category";
+import { averageExpenseAmount } from "./lib/plannedExpenseEstimate";
 import { normalizeVacationType, VacationType } from "./lib/vacation";
 import { useDismissible } from "./hooks/useDismissible";
 import { useRussianProductionCalendar } from "./hooks/useRussianProductionCalendar";
@@ -523,6 +524,7 @@ export default function App() {
   const [txModalDate, setTxModalDate] = useState<string>(today);
   const [txModalAmount, setTxModalAmount] = useState<string>("");
   const [txModalCategory, setTxModalCategory] = useState<string>("");
+  const [txModalEstimateMessage, setTxModalEstimateMessage] = useState<string>("");
   const [txModalDebtPerson, setTxModalDebtPerson] = useState<string>("");
   const [debtModalDirection, setDebtModalDirection] = useState<DebtDirection>("payable");
   const [debtModalOpen, setDebtModalOpen] = useState(false);
@@ -866,6 +868,7 @@ export default function App() {
     setTxModalDate(date);
     setTxModalAmount("");
     setTxModalCategory("");
+    setTxModalEstimateMessage("");
     setTxModalDebtPerson("");
     setTxModalOpen(true);
   }
@@ -874,7 +877,18 @@ export default function App() {
     setTxModalOpen(false);
     setTxModalAmount("");
     setTxModalCategory("");
+    setTxModalEstimateMessage("");
     setTxModalDebtPerson("");
+  }
+
+  function estimatePlannedExpenseAmount() {
+    const average = averageExpenseAmount(data?.transactions ?? [], txModalCategory, txModalDate);
+    if (average === null) {
+      setTxModalEstimateMessage("No previous expenses in this category.");
+      return;
+    }
+    setTxModalAmount((average / 100).toFixed(2).replace(/\.00$/, ""));
+    setTxModalEstimateMessage("");
   }
 
   async function submitTxModal() {
@@ -2540,20 +2554,38 @@ export default function App() {
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+              {txModalType === "planned_expense" ? (
+                <AutocompleteInput label="Category" value={txModalCategory} options={txCategoryOptions} autoFocus
+                  onChange={(value) => { setTxModalCategory(value); setTxModalEstimateMessage(""); }} placeholder="e.g. Groceries" />
+              ) : null}
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</div>
-                <input
-                  autoFocus
-                  value={txModalAmount}
-                  onChange={(e) => setTxModalAmount(e.target.value)}
-                  placeholder={txModalType === "income" ? "1000" : "100"}
-                  inputMode="decimal"
-                  style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
-                />
+                <label htmlFor="tx-modal-amount" style={{ display: "block", fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    id="tx-modal-amount"
+                    autoFocus={txModalType !== "planned_expense"}
+                    value={txModalAmount}
+                    onChange={(e) => setTxModalAmount(e.target.value)}
+                    placeholder={txModalType === "income" ? "1000" : "100"}
+                    inputMode="decimal"
+                    style={{ width: "100%", minWidth: 0, boxSizing: "border-box", padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+                  />
+                  {txModalType === "planned_expense" ? (
+                    <button type="button" className="icon-button" style={{ minWidth: 34, padding: 0 }}
+                      onClick={estimatePlannedExpenseAmount} disabled={!normalizeCategoryInput(txModalCategory)}
+                      aria-label="Estimate amount from previous expenses" title="Estimate using the planned date and previous expenses">
+                      <AppIcon name="sparkles" />
+                    </button>
+                  ) : null}
+                </div>
+                {txModalType === "planned_expense" && txModalEstimateMessage ? (
+                  <div role="status" style={{ marginTop: 4, fontSize: 11, opacity: 0.75 }}>{txModalEstimateMessage}</div>
+                ) : null}
               </div>
 
-              <AutocompleteInput label="Category" value={txModalCategory} options={txCategoryOptions}
+              {txModalType !== "planned_expense" ? <AutocompleteInput label="Category" value={txModalCategory} options={txCategoryOptions}
                 onChange={setTxModalCategory} placeholder={txModalType === "income" ? "e.g. Salary" : "e.g. Groceries"} />
+                : null}
               {txModalType === "expense" && isDebtCategory(txModalCategory) ? (
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"To whom"}</div>

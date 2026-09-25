@@ -4,6 +4,7 @@ import { loadAppModule } from "./loadAppModule.mjs";
 
 const dates = await loadAppModule("/src/lib/date.ts");
 const money = await loadAppModule("/src/lib/money.ts");
+const plannedExpenseEstimate = await loadAppModule("/src/lib/plannedExpenseEstimate.ts");
 const salary = await loadAppModule("/src/lib/salary.ts");
 const savingsPlan = await loadAppModule("/src/lib/savingsPlan.ts");
 
@@ -64,6 +65,30 @@ test("invalid and unsafe amounts cannot enter integer money calculations", () =>
     assert.equal(money.toKop(input), 0, input);
   }
   assert.equal(money.toKop("90071992547409.91"), Number.MAX_SAFE_INTEGER);
+});
+
+test("planned expense estimate follows weekday and week of month, then falls back", () => {
+  const transactions = [
+    { type: "expense", date: "2026-07-02", category: " Badminton ", amount: 1188000 },
+    { type: "expense", date: "2026-08-06", category: "badminton", amount: 1188000 },
+    { type: "expense", date: "2026-09-03", category: "Badminton", amount: 1188000 },
+    { type: "expense", date: "2026-07-05", category: "Badminton", amount: 600000 },
+    { type: "expense", date: "2026-08-02", category: "Badminton", amount: 600000 },
+    { type: "expense", date: "2026-09-06", category: "Badminton", amount: 600000 },
+    { type: "expense", date: "2026-07-09", category: "Badminton", amount: 2000000 },
+    { type: "planned_expense", date: "2026-09-10", category: "Badminton", amount: 9000000 },
+    { type: "expense", date: "2026-09-11", category: "Badminton", amount: 8000000, exclude_from_statistics: true },
+    { type: "expense", date: "2026-09-12", category: "Transport", amount: 500000 },
+    { type: "expense", date: "2026-11-05", category: "Badminton", amount: 9000000 },
+  ];
+  assert.equal(plannedExpenseEstimate.averageExpenseAmount(transactions, "BADMINTON", "2026-10-01"), 1188000);
+  assert.equal(plannedExpenseEstimate.averageExpenseAmount(transactions, "Badminton", "2026-10-04"), 600000);
+  assert.equal(plannedExpenseEstimate.averageExpenseAmount(transactions, "Badminton", "2026-10-08"), 2000000);
+  assert.equal(plannedExpenseEstimate.averageExpenseAmount(transactions, "Badminton", "2026-10-15"), 1391000);
+  assert.equal(plannedExpenseEstimate.averageExpenseAmount(transactions, "Badminton", "2026-10-06"), 1052000);
+  assert.equal(plannedExpenseEstimate.averageExpenseAmount(transactions, "Unknown", "2026-10-01"), null);
+  assert.equal(plannedExpenseEstimate.averageExpenseAmount(transactions, "  ", "2026-10-01"), null);
+  assert.equal(plannedExpenseEstimate.averageExpenseAmount(transactions, "Badminton", "invalid"), null);
 });
 
 test("date parsing validates ISO dates and dates in the selected display format", () => {
