@@ -222,6 +222,7 @@ pub enum TxType {
     Income,
     Expense,
     PlannedExpense,
+    CurrencyExchange,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,6 +233,10 @@ pub struct Transaction {
     pub amount: i64, // копейки
     pub category: String,
     pub note: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub currency: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub foreign_amount: Option<i64>,
     #[serde(default)]
     pub debt_person: Option<String>,
     /// Actual debt reduction, which can be smaller than the expense amount.

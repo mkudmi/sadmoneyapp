@@ -264,6 +264,9 @@ export function CalendarSurface(props: CalendarSurfaceProps) {
                         {"Add expense"}
                       </button>
                     ) : null}
+                    {!isFutureDate ? <button style={{ fontSize: 12, padding: "4px 8px" }} onClick={() => {
+                      onSelectDate(d); onOpenTx("currency_exchange", d); setDayMenuOpen(null);
+                    }}>Currency exchange</button> : null}
                     <button
                       style={{ fontSize: 12, padding: "4px 8px" }}
                       onClick={() => {

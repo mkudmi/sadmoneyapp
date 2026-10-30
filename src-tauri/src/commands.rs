@@ -212,6 +212,7 @@ fn remember_category(settings: &mut crate::models::Settings, tx_type: &TxType, c
             }
             settings.income_categories.push(category.to_string());
         }
+        TxType::CurrencyExchange => {}
         TxType::Expense | TxType::PlannedExpense => {
             if settings.tx_categories.iter().any(|c| c == category) {
                 return;
@@ -462,6 +463,24 @@ pub fn apply_daily_limit_carryover(
     Ok(data)
 }
 
+fn validate_transaction_currency(tx: &mut Transaction) -> Result<(), String> {
+    if let Some(currency) = &mut tx.currency {
+        *currency = currency.trim().to_ascii_uppercase();
+        if currency.len() != 3 || !currency.bytes().all(|b| b.is_ascii_uppercase()) || currency == "RUB" {
+            return Err("Currency must be a three-letter code other than RUB".into());
+        }
+    }
+    match tx.r#type {
+        TxType::CurrencyExchange if tx.currency.is_none() || tx.foreign_amount.is_none_or(|v| v <= 0) => return Err("Enter the currency and received amount".into()),
+        TxType::Expense | TxType::Income if tx.currency.is_some() && tx.foreign_amount.is_none() && tx.debt_person.is_none() => {},
+        TxType::CurrencyExchange => {},
+        _ if tx.currency.is_some() || tx.foreign_amount.is_some() => return Err("Invalid currency transaction".into()),
+        _ => {},
+    }
+    if tx.currency.is_some() && tx.amount <= 0 { return Err("Amount must be positive".into()); }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, String> {
     let mut data = load(&app)?;
@@ -479,6 +498,7 @@ pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, S
 
     // простая нормализация: расход всегда положительный amount, тип решает знак
     tx.amount = tx.amount.saturating_abs();
+    validate_transaction_currency(&mut tx)?;
     tx.category = normalize_category(&tx.category);
     remember_category(&mut data.settings, &tx.r#type, &tx.category);
     tx.debt_person = tx
@@ -515,6 +535,7 @@ pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData
         .format("%Y-%m-%d")
         .to_string();
     tx.amount = tx.amount.saturating_abs();
+    validate_transaction_currency(&mut tx)?;
     tx.category = normalize_category(&tx.category);
     remember_category(&mut data.settings, &tx.r#type, &tx.category);
     tx.debt_person = tx
@@ -1029,6 +1050,10 @@ fn parse_backup(raw: &str) -> Result<AppData, String> {
     {
         return Err("backup contains invalid amounts".to_string());
     }
+    for tx in &data.transactions {
+        let mut tx = tx.clone();
+        validate_transaction_currency(&mut tx).map_err(|_| "backup contains invalid currency transaction".to_string())?;
+    }
     if let Some(goal) = &data.savings_goal {
         if goal.title.trim().is_empty()
             || goal.title.chars().count() > 120
@@ -1137,17 +1162,18 @@ fn calculate_daily_budget(data: &AppData, from: NaiveDate) -> Result<DailyBudget
         if let Ok(d) = parse_date(&t.date) {
             if d <= from {
                 match t.r#type {
-                    TxType::Income => {
+                    TxType::Income if t.currency.is_none() => {
                         balance += t.amount;
                         balance_for_limit += t.amount;
                     }
-                    TxType::Expense => {
+                    TxType::Expense if t.currency.is_none() => {
                         balance -= t.amount;
                         if d < from || t.was_planned {
                             balance_for_limit -= t.amount;
                         }
                     }
-                    TxType::PlannedExpense => {}
+                    TxType::CurrencyExchange => { balance -= t.amount; balance_for_limit -= t.amount; }
+                    TxType::Income | TxType::Expense | TxType::PlannedExpense => {}
                 }
             }
         }
@@ -1232,6 +1258,8 @@ mod tests {
             amount,
             category: "Debt".to_string(),
             note: String::new(),
+            currency: None,
+            foreign_amount: None,
             debt_person: Some("Алексей".to_string()),
             debt_repaid_amount: None,
             was_planned: false,
@@ -1271,6 +1299,40 @@ mod tests {
         let with_spending = calculate_daily_budget(&data, date).unwrap();
         assert_eq!(with_spending.available, 68_000);
         assert_eq!(with_spending.per_day - 2_000, 5_000);
+    }
+
+    #[test]
+    fn currency_exchange_reduces_ruble_balance_but_foreign_spending_does_not() {
+        let mut data = AppData::default();
+        data.settings.min_balance = 0;
+        let mut income = debt_expense(100_000);
+        income.r#type = TxType::Income;
+        let mut exchange = debt_expense(25_000);
+        exchange.r#type = TxType::CurrencyExchange;
+        exchange.currency = Some("USD".into());
+        exchange.foreign_amount = Some(300);
+        exchange.debt_person = None;
+        let mut spending = debt_expense(100);
+        spending.currency = Some("USD".into());
+        spending.debt_person = None;
+        assert!(validate_transaction_currency(&mut exchange).is_ok());
+        assert!(validate_transaction_currency(&mut spending).is_ok());
+        let mut foreign_income = debt_expense(50_000);
+        foreign_income.r#type = TxType::Income;
+        foreign_income.currency = Some("EUR".into());
+        foreign_income.debt_person = None;
+        assert!(validate_transaction_currency(&mut foreign_income).is_ok());
+        for (i, tx) in [&mut income, &mut exchange, &mut spending, &mut foreign_income].iter_mut().enumerate() { tx.id = format!("tx-{i}"); }
+        data.transactions = vec![income, exchange, spending, foreign_income];
+        data.salary_events.push(SalaryEvent {
+            id: "next".into(), date: "2026-09-15".into(), amount: 100_000,
+            title: "Salary".into(), kind: Default::default(), accrual_month: None,
+        });
+        let result = calculate_daily_budget(&data, NaiveDate::from_ymd_opt(2026, 9, 5).unwrap()).unwrap();
+        assert_eq!(result.available, 75_000);
+        let json = serde_json::to_string(&data).unwrap();
+        let restored = parse_backup(&json).unwrap();
+        assert_eq!(restored.transactions[3].currency.as_deref(), Some("EUR"));
     }
 
     #[test]

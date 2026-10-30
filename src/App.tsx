@@ -1,10 +1,13 @@
+import { SelectInput } from "./components/SelectInput";
+import { currencyBalances, exchangeRate, recentCurrencyExchanges, POPULAR_CURRENCIES } from "./lib/currencyBalance";
+import { CurrencyHistoryModal } from "./components/CurrencyHistoryModal";
 import { AutocompleteInput } from "./components/AutocompleteInput";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
-import { api, AppData, Debt, DebtDirection, OffDay, SalaryConfig, SalaryEvent, Transaction, Vacation } from "./lib/api";
+import { api, AppData, Debt, DebtDirection, OffDay, SalaryConfig, SalaryEvent, Transaction, TxType, Vacation } from "./lib/api";
 import { rubCompact, rub, toKop } from "./lib/money";
 import { capitalizeFirst } from "./lib/text";
 import {
@@ -296,7 +299,7 @@ export default function App() {
     api.calcDailyBudget(lastDailyLimitCarryoverDate)
       .then((previousDayBudget) => {
         const spentOnPreviousDay = (data.transactions ?? [])
-          .filter((t) => t.date === lastDailyLimitCarryoverDate && t.type === "expense" && !t.was_planned)
+          .filter((t) => t.date === lastDailyLimitCarryoverDate && t.type === "expense" && !t.currency && !t.was_planned)
           .reduce((sum, t) => sum + t.amount, 0);
         const carryoverAmount = Math.max(0, previousDayBudget.per_day - spentOnPreviousDay);
         return api.applyDailyLimitCarryover(carryoverAmount, today);
@@ -331,7 +334,7 @@ export default function App() {
   const spentToday = useMemo(
     () =>
       (data?.transactions ?? [])
-        .filter((t) => t.date === today && t.type === "expense" && !t.was_planned)
+        .filter((t) => t.date === today && t.type === "expense" && !t.currency && !t.was_planned)
         .reduce((sum, t) => sum + t.amount, 0),
     [data?.transactions, today],
   );
@@ -401,8 +404,8 @@ export default function App() {
     if (!viewData) return map;
     for (const t of viewData.transactions) {
       const cur = map.get(t.date) ?? { inc: 0, exp: 0 };
-      if (t.type === "income") cur.inc += t.amount;
-      if (t.type === "expense" || t.type === "planned_expense") cur.exp += t.amount;
+      if (t.type === "income" && !t.currency) cur.inc += t.amount;
+      if ((t.type === "expense" && !t.currency) || t.type === "planned_expense" || t.type === "currency_exchange") cur.exp += t.amount;
       map.set(t.date, cur);
     }
 
@@ -508,6 +511,7 @@ export default function App() {
   const [debtsPanelOpen, setDebtsPanelOpen] = useState(false);
   const [vacationsPanelOpen, setVacationsPanelOpen] = useState(false);
   const [trendsModalOpen, setTrendsModalOpen] = useState(false);
+  const [currencyHistoryOpen, setCurrencyHistoryOpen] = useState(false);
   const [yearSummaryModalOpen, setYearSummaryModalOpen] = useState(false);
   const [trendsCategoryQuery, setTrendsCategoryQuery] = useState("");
   const [trendsIncomeCategoryQuery, setTrendsIncomeCategoryQuery] = useState("");
@@ -520,9 +524,12 @@ export default function App() {
   const [salaryConfigEditId, setSalaryConfigEditId] = useState<string | null>(null);
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   const [txModalOpen, setTxModalOpen] = useState(false);
-  const [txModalType, setTxModalType] = useState<"income" | "expense" | "planned_expense">("expense");
+  const [txModalType, setTxModalType] = useState<TxType>("expense");
   const [txModalDate, setTxModalDate] = useState<string>(today);
   const [txModalAmount, setTxModalAmount] = useState<string>("");
+  const [txCurrency, setTxCurrency] = useState("RUB");
+  const [txForeignAmount, setTxForeignAmount] = useState("");
+  const [editForeignAmount, setEditForeignAmount] = useState("");
   const [txModalCategory, setTxModalCategory] = useState<string>("");
   const [txModalEstimateMessage, setTxModalEstimateMessage] = useState<string>("");
   const [txModalDebtPerson, setTxModalDebtPerson] = useState<string>("");
@@ -857,13 +864,16 @@ export default function App() {
     return Math.round(latestPaidVacationAverageReference.averageDailyPay * vacationModalRange.days);
   }, [latestPaidVacationAverageReference, vacationModalRange.days, vacationModalType]);
 
-  function txModalTitle(type: "income" | "expense" | "planned_expense") {
+  function txModalTitle(type: TxType) {
+    if (type === "currency_exchange") return "Currency exchange";
     if (type === "income") return "Add income";
     if (type === "planned_expense") return "Add planned expense";
     return "Add expense";
   }
 
-  function openTxModal(type: "income" | "expense" | "planned_expense", date: string) {
+  function openTxModal(type: TxType, date: string) {
+    setTxCurrency(type === "currency_exchange" ? "USD" : "RUB");
+    setTxForeignAmount("");
     setTxModalType(type);
     setTxModalDate(date);
     setTxModalAmount("");
@@ -892,7 +902,7 @@ export default function App() {
   }
 
   async function submitTxModal() {
-    const category = normalizeCategoryInput(txModalCategory);
+    const category = txModalType === "currency_exchange" ? "Currency exchange" : normalizeCategoryInput(txModalCategory);
     const debtPerson = normalizeCategoryInput(txModalDebtPerson);
     const shouldUseDebtPerson = txModalType === "expense" && isDebtCategory(category);
     if (!txModalAmount.trim()) return;
@@ -903,6 +913,9 @@ export default function App() {
       const amount = toKop(txModalAmount);
       if (amount <= 0) return;
 
+      const currency = txCurrency.trim().toUpperCase();
+      if (txModalType === "currency_exchange" && (!/^[A-Z]{3}$/.test(currency) || currency === "RUB" || toKop(txForeignAmount) <= 0)) { alert("Enter a currency code and the received amount."); return; }
+      if (txModalType === "expense" && currency !== "RUB" && shouldUseDebtPerson) { alert("A foreign currency expense cannot be linked to a debt."); return; }
       const tx: Transaction = {
         id: "",
         date: txModalDate,
@@ -911,15 +924,17 @@ export default function App() {
         category,
         note: "",
         debt_person: shouldUseDebtPerson ? debtPerson : null,
+        currency: txModalType === "currency_exchange" || ((txModalType === "expense" || txModalType === "income") && currency !== "RUB") ? currency : null,
+        foreign_amount: txModalType === "currency_exchange" ? toKop(txForeignAmount) : null,
       };
 
-      const canMergeByCategory = tx.type === "income" || tx.type === "expense";
+      const canMergeByCategory = !tx.currency && (tx.type === "income" || tx.type === "expense");
       const categoryKey = normalizeCategoryInput(tx.category).toLowerCase();
       const debtPersonKey = normalizeCategoryInput(tx.debt_person ?? "").toLowerCase();
 
       const existingTx = canMergeByCategory
         ? (data?.transactions ?? []).find((existing) => {
-            if (existing.exclude_from_statistics || existing.was_planned) return false;
+            if (existing.exclude_from_statistics || existing.was_planned || existing.currency) return false;
             if (existing.date !== tx.date || existing.type !== tx.type) return false;
             if (normalizeCategoryInput(existing.category).toLowerCase() !== categoryKey) return false;
             if (shouldUseDebtPerson) {
@@ -1086,6 +1101,7 @@ export default function App() {
     setEditTxModalId(t.id);
     setEditTxModalDate(t.date);
     setEditTxModalAmount(String(t.amount / 100));
+    setEditForeignAmount(String((t.foreign_amount ?? 0) / 100));
     setEditTxModalCategory(t.category);
     setEditTxModalNote(t.note ?? "");
     setEditTxModalWasPlanned(t.was_planned ?? false);
@@ -1124,6 +1140,7 @@ export default function App() {
         ...original,
         date: editTxModalDate,
         amount,
+        foreign_amount: original.type === "currency_exchange" ? toKop(editForeignAmount) : original.foreign_amount,
         category: editTxModalCategory,
         note: editTxModalNote,
         was_planned: original.type === "expense" && editTxModalWasPlanned,
@@ -1783,7 +1800,7 @@ export default function App() {
               </div>
             ) : null}
 
-            <button onClick={() => openPiggyBankModal("add")} className="topbar-action-button">
+            <button onClick={() => openPiggyBankModal("add")} className="topbar-action-button" aria-label={`Piggy bank: ${rub(piggyBankAmount)}`} title={`Piggy bank: ${rub(piggyBankAmount)}`}>
               <AppIcon name="piggyBank" />
               <span className="topbar-action-copy">
                 <span>{"Piggy bank"}</span>
@@ -1809,7 +1826,7 @@ export default function App() {
               </span>
             </button>
 
-            <button onClick={() => setVacationsPanelOpen(true)} className="topbar-action-button">
+            <button onClick={() => setVacationsPanelOpen(true)} className="topbar-action-button" aria-label="Vacations" title="Vacations">
               <AppIcon name="beach" />
               <span className="topbar-action-copy">
                 <span>{"Vacations"}</span>
@@ -1819,7 +1836,12 @@ export default function App() {
               </span>
             </button>
 
-            <button onClick={() => setTrendsModalOpen(true)} className="topbar-action-button">
+            <button onClick={() => setCurrencyHistoryOpen(true)} className="topbar-action-button" aria-label="Currency" title="Currency">
+              <AppIcon name="currency" />
+              <span className="topbar-action-copy"><span>Currency</span><span className="topbar-action-meta">Exchange history</span></span>
+            </button>
+
+            <button onClick={() => setTrendsModalOpen(true)} className="topbar-action-button" aria-label="Trends" title="Trends">
               <AppIcon name="chart" />
               <span className="topbar-action-copy">
                 <span>{"Trends"}</span>
@@ -1827,8 +1849,8 @@ export default function App() {
               </span>
             </button>
 
-            <button onClick={() => setYearSummaryModalOpen(true)} className="topbar-action-button">
-              <AppIcon name="chart" />
+            <button onClick={() => setYearSummaryModalOpen(true)} className="topbar-action-button" aria-label="Year summary" title="Year summary">
+              <AppIcon name="yearSummary" />
               <span className="topbar-action-copy">
                 <span>{"Year summary"}</span>
                 <span className="topbar-action-meta">{rub(yearExpenseSummary.total)}</span>
@@ -1837,6 +1859,7 @@ export default function App() {
 
             <button
               aria-label="Settings"
+              title="Settings"
               onClick={openSettingsModal}
               style={{ width: 40, height: 40, display: "grid", placeItems: "center", boxSizing: "border-box" }}
             >
@@ -1914,6 +1937,7 @@ export default function App() {
           dailySpendLimit={dailySpendLimitFromAvailable}
           today={today}
         />}
+        {Object.entries(currencyBalances(data?.transactions ?? [], today)).map(([currency, amount]) => <div key={currency}><b>Balance {currency}:</b> {(amount / 100).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}</div>)}
         <SelectedDateTransactionsList
           selectedDate={selectedDate}
           dateFormat={dateFormat}
@@ -2519,6 +2543,8 @@ export default function App() {
         </div>
       ) : null}
 
+      <CurrencyHistoryModal open={currencyHistoryOpen} transactions={data?.transactions ?? []} dateFormat={dateFormat} onClose={() => setCurrencyHistoryOpen(false)} />
+
       {txModalOpen ? (
         <div
           className="modal-backdrop"
@@ -2559,7 +2585,7 @@ export default function App() {
                   onChange={(value) => { setTxModalCategory(value); setTxModalEstimateMessage(""); }} placeholder="e.g. Groceries" />
               ) : null}
               <div style={{ minWidth: 0 }}>
-                <label htmlFor="tx-modal-amount" style={{ display: "block", fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</label>
+                <label htmlFor="tx-modal-amount" style={{ display: "block", fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{txModalType === "currency_exchange" ? "Spent (RUB)" : `Amount (${(txModalType === "expense" || txModalType === "income") ? txCurrency : "RUB"})`}</label>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     id="tx-modal-amount"
@@ -2583,7 +2609,24 @@ export default function App() {
                 ) : null}
               </div>
 
-              {txModalType !== "planned_expense" ? <AutocompleteInput label="Category" value={txModalCategory} options={txCategoryOptions}
+              {txModalType === "currency_exchange" ? <>
+                <SelectInput label="Currency code" value={txCurrency} onChange={setTxCurrency}
+                  options={[...new Set([...POPULAR_CURRENCIES, ...(data?.transactions ?? []).flatMap((t) => t.currency ? [t.currency] : [])])]} />
+                {(() => {
+                  const last = recentCurrencyExchanges(data?.transactions ?? [], txModalDate)[txCurrency]?.[0];
+                  return last ? <div style={{ fontSize: 12, opacity: 0.75 }}>Last rate: {exchangeRate(last)} · {formatDateForDisplay(last.date, dateFormat)}</div> : <div style={{ fontSize: 12, opacity: 0.75 }}>No previous exchanges for {txCurrency}.</div>;
+                })()}
+                <label>Amount received
+                  <input value={txForeignAmount} onChange={(e) => setTxForeignAmount(e.target.value)} inputMode="decimal" style={{ width: "100%" }} />
+                </label>
+              </> : null}
+              {txModalType === "expense" || txModalType === "income" ? <SelectInput
+                label={txModalType === "income" ? "Income currency" : "Expense currency"} value={txCurrency} onChange={setTxCurrency}
+                options={["RUB", ...[...new Set([
+                  ...(txModalType === "income" ? POPULAR_CURRENCIES : []),
+                  ...(data?.transactions ?? []).filter((t) => (t.type === "currency_exchange" || t.type === "income") && t.date <= txModalDate && t.currency).map((t) => t.currency!),
+                ])].sort()]} /> : null}
+              {txModalType !== "planned_expense" && txModalType !== "currency_exchange" ? <AutocompleteInput label="Category" value={txModalCategory} options={txCategoryOptions}
                 onChange={setTxModalCategory} placeholder={txModalType === "income" ? "e.g. Salary" : "e.g. Groceries"} />
                 : null}
               {txModalType === "expense" && isDebtCategory(txModalCategory) ? (
@@ -2702,7 +2745,11 @@ export default function App() {
         category={editTxModalCategory}
         note={editTxModalNote}
         categoryOptions={editTxCategoryOptions}
-        showWasPlanned={editTxOriginal?.type === "expense"}
+        currency={editTxOriginal?.currency ?? undefined}
+        isExchange={editTxOriginal?.type === "currency_exchange"}
+        foreignAmount={editForeignAmount}
+        onForeignAmountChange={setEditForeignAmount}
+        showWasPlanned={editTxOriginal?.type === "expense" && !editTxOriginal.currency}
         wasPlanned={editTxModalWasPlanned}
         onWasPlannedChange={setEditTxModalWasPlanned}
         excludeFromStatistics={editTxModalExcludeFromStatistics}

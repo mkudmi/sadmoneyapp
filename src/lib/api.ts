@@ -3,7 +3,7 @@ import type { DateFormat } from "./date";
 import type { SalaryEventKind } from "./salaryEvent";
 import type { RussianProductionCalendarYear } from "./russianProductionCalendar";
 
-export type TxType = "income" | "expense" | "planned_expense";
+export type TxType = "income" | "expense" | "planned_expense" | "currency_exchange";
 
 export type Transaction = {
   id: string;
@@ -12,6 +12,8 @@ export type Transaction = {
   amount: number; // kopecks
   category: string;
   note: string;
+  currency?: string | null;
+  foreign_amount?: number | null;
   debt_person?: string | null;
   debt_repaid_amount?: number | null;
   was_planned?: boolean;

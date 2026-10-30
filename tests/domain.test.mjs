@@ -163,3 +163,9 @@ test("invalid payroll dates are rejected before they roll into another month", (
   assert.equal(salary.estimateManualSalaryForDate({ ...estimate, payoutDate: "2026-02-31" }), null);
   assert.equal(salary.estimateManualSalaryForDate({ ...estimate, accrualMonth: "2026-13" }), null);
 });
+
+
+test("foreign income does not affect ruble savings plan", () => {
+  const data = { settings: { salaryConfigs: [] }, transactions: [{ type: "income", date: "2026-09-01", amount: 30000000, currency: "USD" }] };
+  assert.equal(savingsPlan.buildSavingsPlan(data, [], "2026-09-23").maxCardAmount, 100000);
+});

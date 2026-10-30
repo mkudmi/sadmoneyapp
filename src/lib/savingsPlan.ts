@@ -15,7 +15,7 @@ export function buildSavingsPlan(data: AppData, salaryEvents: SalaryEvent[], tod
     const salaries = salaryEvents.filter((event) => event.date.startsWith(monthKey));
     const manual = salaries.filter((event) => !event.generated).reduce((sum, event) => sum + event.amount, 0);
     const generated = salaries.filter((event) => event.generated).reduce((sum, event) => sum + event.amount, 0);
-    const recorded = data.transactions.filter((tx) => tx.type === "income" && tx.date.startsWith(monthKey))
+    const recorded = data.transactions.filter((tx) => tx.type === "income" && !tx.currency && tx.date.startsWith(monthKey))
       .reduce((sum, tx) => sum + tx.amount, 0);
     return Math.max(manual, generated, recorded);
   }).filter((value) => value > 0);

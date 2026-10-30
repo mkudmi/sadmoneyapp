@@ -7,6 +7,10 @@ import { AppIcon } from "./AppIcon";
 
 type EditTransactionModalProps = {
   open: boolean;
+  currency?: string;
+  isExchange: boolean;
+  foreignAmount: string;
+  onForeignAmountChange: (value: string) => void;
   amount: string;
   category: string;
   note: string;
@@ -30,6 +34,7 @@ type EditTransactionModalProps = {
 export function EditTransactionModal(props: EditTransactionModalProps) {
   const {
     open,
+    currency, isExchange, foreignAmount, onForeignAmountChange,
     amount,
     category,
     note,
@@ -108,7 +113,7 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
           ) : null}
 
           <div style={{ minWidth: 0 }}>
-            <label htmlFor={`${fieldId}-amount`} style={{ display: "block", fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{"Amount (RUB)"}</label>
+            <label htmlFor={`${fieldId}-amount`} style={{ display: "block", fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{`Amount (${isExchange ? "RUB" : currency ?? "RUB"})`}</label>
             <input
               id={`${fieldId}-amount`}
               data-edit-tx-amount
@@ -126,6 +131,7 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
             />
           </div>
 
+          {isExchange ? <label>Received ({currency})<input value={foreignAmount} onChange={(e) => onForeignAmountChange(e.target.value)} inputMode="decimal" style={{ width: "100%" }} /></label> : null}
           <AutocompleteInput id={`${fieldId}-category`} label="Category" value={category} options={categoryOptions}
             onChange={onCategoryChange} placeholder="e.g. Groceries" onSubmit={onSubmit} />
 

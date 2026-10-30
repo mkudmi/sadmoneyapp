@@ -3,6 +3,8 @@ import {
   IconArrowsMaximize,
   IconBeach,
   IconChartDots,
+  IconCalendarStats,
+  IconArrowsExchange,
   IconChevronLeft,
   IconChevronRight,
   IconChevronDown,
@@ -23,6 +25,8 @@ export type AppIconName =
   | "add"
   | "beach"
   | "chart"
+  | "currency"
+  | "yearSummary"
   | "check"
   | "chevronDown"
   | "chevronLeft"
@@ -60,6 +64,10 @@ export function AppIcon({ name, size = 16, stroke = 1.8, style }: AppIconProps) 
       return <IconBeach {...commonProps} />;
     case "chart":
       return <IconChartDots {...commonProps} />;
+    case "currency":
+      return <IconArrowsExchange {...commonProps} />;
+    case "yearSummary":
+      return <IconCalendarStats {...commonProps} />;
     case "check":
       return <IconCheck {...commonProps} />;
     case "chevronDown":

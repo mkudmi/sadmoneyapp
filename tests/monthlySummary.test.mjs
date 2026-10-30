@@ -92,3 +92,45 @@ test("balance adjustments do not distort yearly or monthly expense statistics", 
   entries[0].exclude_from_statistics = false;
   assert.equal(buildYearExpenseSummary(entries, 2026, "en-US").total, 175010000);
 });
+
+
+test("foreign currency operations stay out of ruble reports and update their own balance", async () => {
+  const { currencyBalances } = await loadAppModule("/src/lib/currencyBalance.ts");
+  const entries = [
+    { ...transaction("2026-08-01", 900000, "currency_exchange"), currency: "USD", foreign_amount: 10000 },
+    { ...transaction("2026-08-02", 2500), currency: "USD" },
+    { ...transaction("2026-09-01", 1000), currency: "USD" },
+  ];
+  assert.deepEqual(currencyBalances(entries, "2026-08-31"), { USD: 7500 });
+  assert.deepEqual(currencyBalances(entries, "2026-09-01"), { USD: 6500 });
+  assert.deepEqual(buildMonthlyCategories(entries, [], "2026-08", "2026-08-31"), []);
+  assert.equal(buildYearExpenseSummary(entries, 2026, "en-US").total, 0);
+});
+
+
+test("exchange history groups currencies, keeps five newest and calculates the actual rate", async () => {
+  const { recentCurrencyExchanges, exchangeRate } = await loadAppModule("/src/lib/currencyBalance.ts");
+  const exchanges = Array.from({ length: 6 }, (_, i) => ({
+    ...transaction(`2026-08-0${i + 1}`, 900000 + i * 10000, "currency_exchange"),
+    id: `usd-${i}`, currency: "USD", foreign_amount: 10000,
+  }));
+  exchanges.push({ ...transaction("2026-08-06", 400000, "currency_exchange"), id: "eur", currency: "EUR", foreign_amount: 5000 });
+  exchanges.push({ ...transaction("2026-08-06", 100), currency: "USD" });
+  const groups = recentCurrencyExchanges(exchanges);
+  assert.deepEqual(groups.USD.map((tx) => tx.id), ["usd-5", "usd-4", "usd-3", "usd-2", "usd-1"]);
+  assert.equal(exchangeRate(groups.USD[0]), "1 USD = 95 RUB");
+  assert.equal(exchangeRate(groups.EUR[0]), "1 EUR = 80 RUB");
+  assert.equal(recentCurrencyExchanges(exchanges, "2026-08-03").USD[0].id, "usd-2");
+  assert.equal(recentCurrencyExchanges(exchanges.slice(0, 2).reverse()).USD[0].id, "usd-1");
+});
+
+
+test("foreign income changes its currency balance without affecting ruble reports", async () => {
+  const { currencyBalances } = await loadAppModule("/src/lib/currencyBalance.ts");
+  const income = { ...transaction("2026-08-01", 10000, "income"), currency: "EUR" };
+  const expense = { ...transaction("2026-08-02", 2500), currency: "EUR" };
+  assert.deepEqual(currencyBalances([income, expense], "2026-08-02"), { EUR: 7500 });
+  assert.deepEqual(currencyBalances([{ ...income, amount: 20000 }, expense], "2026-08-02"), { EUR: 17500 });
+  assert.deepEqual(currencyBalances([expense], "2026-08-02"), { EUR: -2500 });
+  assert.deepEqual(buildMonthlyCategories([income, expense], [], "2026-08", "2026-08-02"), []);
+});

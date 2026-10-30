@@ -11,7 +11,7 @@ export function averageExpenseAmount(transactions: Transaction[], category: stri
   const plannedWeekOfMonth = Math.floor((plannedDate.getDate() - 1) / 7);
 
   const matchingExpenses = transactions.filter((transaction) =>
-    transaction.type === "expense" &&
+    transaction.type === "expense" && !transaction.currency &&
     !transaction.exclude_from_statistics &&
     isValidYmd(transaction.date) &&
     transaction.date < date &&
