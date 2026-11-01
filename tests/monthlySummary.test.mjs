@@ -134,3 +134,33 @@ test("foreign income changes its currency balance without affecting ruble report
   assert.deepEqual(currencyBalances([expense], "2026-08-02"), { EUR: -2500 });
   assert.deepEqual(buildMonthlyCategories([income, expense], [], "2026-08", "2026-08-02"), []);
 });
+
+
+test("cross rates use the last eligible expense for each pair without changing balances", async () => {
+  const { recentCrossRates, currencyBalances } = await loadAppModule("/src/lib/currencyBalance.ts");
+  const items = [
+    { ...transaction("2026-08-01", 10000, "income"), currency: "USD" },
+    { ...transaction("2026-08-02", 800), currency: "USD", purchase_currency: "ILS", purchase_amount: 2500 },
+    { ...transaction("2026-08-03", 400), currency: "USD", purchase_currency: "ILS", purchase_amount: 1400 },
+    { ...transaction("2026-08-04", 300), currency: "USD", purchase_currency: "EUR", purchase_amount: 270 },
+    { ...transaction("2026-09-01", 400), currency: "USD", purchase_currency: "ILS", purchase_amount: 2000 },
+  ];
+  const rates = recentCrossRates(items, "2026-08-31");
+  assert.equal(rates.find((rate) => rate.target === "ILS").rate, 3.5);
+  assert.equal(rates.find((rate) => rate.target === "ILS").date, "2026-08-03");
+  assert.equal(rates.find((rate) => rate.target === "EUR").rate, 0.9);
+  assert.deepEqual(currencyBalances(items, "2026-08-31"), { USD: 8500 });
+  assert.equal(recentCrossRates(items.filter((item) => item.date !== "2026-08-03"), "2026-08-31").find((rate) => rate.target === "ILS").rate, 3.125);
+});
+
+
+test("default balance currencies include holdings and purchase estimates", async () => {
+  const { defaultBalanceCurrencies, balanceCurrencyOptions } = await loadAppModule("/src/lib/currencyBalance.ts");
+  const items = [
+    { ...transaction("2026-08-01", 10000, "income"), currency: "USD" },
+    { ...transaction("2026-08-02", 800), currency: "USD", purchase_currency: "ILS", purchase_amount: 2500 },
+    { ...transaction("2026-09-01", 100), currency: "USD", purchase_currency: "EUR", purchase_amount: 100 },
+  ];
+  assert.deepEqual(defaultBalanceCurrencies(items, "2026-08-31"), ["ILS", "USD"]);
+  assert.ok(balanceCurrencyOptions(items, "2026-08-31").includes("ILS"));
+});

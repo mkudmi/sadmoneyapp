@@ -4,11 +4,18 @@ import { useDialogFocus } from "../hooks/useDialogFocus";
 import { DateInputWithCalendar } from "./DateInputWithCalendar";
 import type { DateFormat } from "../lib/date";
 import { AppIcon } from "./AppIcon";
+import { PurchaseCurrencyFields } from "./PurchaseCurrencyFields";
 
 type EditTransactionModalProps = {
   open: boolean;
   currency?: string;
   isExchange: boolean;
+  showPurchaseCurrency: boolean;
+  purchaseCurrency: string;
+  purchaseAmount: string;
+  purchaseCurrencyOptions: string[];
+  onPurchaseCurrencyChange: (value: string) => void;
+  onPurchaseAmountChange: (value: string) => void;
   foreignAmount: string;
   onForeignAmountChange: (value: string) => void;
   amount: string;
@@ -35,6 +42,7 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
   const {
     open,
     currency, isExchange, foreignAmount, onForeignAmountChange,
+    showPurchaseCurrency, purchaseCurrency, purchaseAmount, purchaseCurrencyOptions, onPurchaseCurrencyChange, onPurchaseAmountChange,
     amount,
     category,
     note,
@@ -87,6 +95,8 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
         style={{
           width: "min(520px, 100%)",
           padding: 12,
+          maxHeight: "90vh",
+          overflowY: "auto",
         }}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
@@ -132,6 +142,8 @@ export function EditTransactionModal(props: EditTransactionModalProps) {
           </div>
 
           {isExchange ? <label>Received ({currency})<input value={foreignAmount} onChange={(e) => onForeignAmountChange(e.target.value)} inputMode="decimal" style={{ width: "100%" }} /></label> : null}
+          {showPurchaseCurrency ? <PurchaseCurrencyFields currency={purchaseCurrency} amount={purchaseAmount} sourceCurrency={currency ?? "RUB"}
+            extraCurrencies={purchaseCurrencyOptions} onCurrencyChange={onPurchaseCurrencyChange} onAmountChange={onPurchaseAmountChange} /> : null}
           <AutocompleteInput id={`${fieldId}-category`} label="Category" value={category} options={categoryOptions}
             onChange={onCategoryChange} placeholder="e.g. Groceries" onSubmit={onSubmit} />
 

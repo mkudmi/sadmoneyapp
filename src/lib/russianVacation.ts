@@ -188,34 +188,37 @@ export function getLatestPaidVacationAverageReference(args: {
   productionCalendarDays?: ReadonlyMap<string, RussianProductionCalendarDay> | null;
 }): LatestPaidVacationAverageReference | null {
   const paidVacations = [...args.vacations]
-    .filter((vacation) => vacation.vacation_type !== "unpaid" && vacation.start_date <= args.today)
-    .sort((a, b) => b.start_date.localeCompare(a.start_date));
+    .filter((vacation) => vacation.vacation_type !== "unpaid")
+    .sort((a, b) => a.start_date.localeCompare(b.start_date));
 
   const vacationPayEvents = [...args.salaryEvents]
     .filter((event) => normalizeSalaryEventKind(event.kind) === "vacation_pay" && event.date <= args.today)
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  for (const vacation of paidVacations) {
-    const matchingEvent = vacationPayEvents.find((event) => {
-      if (event.date > vacation.start_date) return false;
-      const diffMs = parseYmdLocal(vacation.start_date).getTime() - parseYmdLocal(event.date).getTime();
-      const diffDays = diffMs / (24 * 60 * 60 * 1000);
-      return diffDays >= 0 && diffDays <= 31;
+  // Match each received payment to the nearest paid vacation that starts after it.
+  // Compare calendar days in UTC to avoid daylight-saving shifts on macOS.
+  const dayNumber = (date: string) => {
+    const [year, month, day] = date.split("-").map(Number);
+    return Date.UTC(year, month - 1, day) / 86_400_000;
+  };
+  for (const vacationPayEvent of vacationPayEvents) {
+    const paymentDay = dayNumber(vacationPayEvent.date);
+    const vacation = paidVacations.find((candidate) => {
+      const diffDays = dayNumber(candidate.start_date) - paymentDay;
+      return diffDays >= 0 && diffDays <= 31 && getVacationChargeableDays(
+        candidate.start_date, candidate.end_date, args.productionCalendarDays,
+      ) > 0;
     });
-    if (!matchingEvent) continue;
+    if (!vacation) continue;
 
     const chargeableDays = getVacationChargeableDays(
-      vacation.start_date,
-      vacation.end_date,
-      args.productionCalendarDays,
+      vacation.start_date, vacation.end_date, args.productionCalendarDays,
     );
-    if (chargeableDays <= 0) continue;
-
     return {
       vacation,
-      vacationPayEvent: matchingEvent,
+      vacationPayEvent,
       chargeableDays,
-      averageDailyPay: matchingEvent.amount / chargeableDays,
+      averageDailyPay: vacationPayEvent.amount / chargeableDays,
     };
   }
 

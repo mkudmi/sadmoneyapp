@@ -35,11 +35,11 @@ export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
     if (!data) return { inc, exp };
 
     for (const t of data.transactions) {
-      if (t.exclude_from_statistics || t.currency) continue;
+      if (t.exclude_from_statistics) continue;
       if (ymFromYmd(t.date) !== monthKey) continue;
       if (t.date > today) continue;
-      if (t.type === "income") inc += t.amount;
-      if (t.type === "expense") exp += t.amount;
+      if (t.type === "income" && !t.currency) inc += t.amount;
+      if ((t.type === "expense" && !t.currency) || t.type === "currency_exchange") exp += t.amount;
     }
 
     for (const s of data.salaryEvents ?? []) {
@@ -123,7 +123,7 @@ export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
           <div className="general-stats-secondary-value">{rub(yearTotals.incomeTotal)}</div>
         </div>
         <div className="general-stats-secondary-card">
-          <div className="general-stats-secondary-label">{"Vacation average per day"}</div>
+          <div className="general-stats-secondary-label" title="Vacation average per day">{"Vacation avg/day"}</div>
           <div className="general-stats-secondary-value">
             {rub(vacationAverageDailyPay)}
             {latestPaidVacationAverageReference ? (

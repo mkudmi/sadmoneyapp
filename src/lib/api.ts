@@ -14,6 +14,8 @@ export type Transaction = {
   note: string;
   currency?: string | null;
   foreign_amount?: number | null;
+  purchase_currency?: string | null;
+  purchase_amount?: number | null;
   debt_person?: string | null;
   debt_repaid_amount?: number | null;
   was_planned?: boolean;
@@ -70,6 +72,7 @@ export type AppData = {
   version: number;
   settings: {
     currency: string;
+    visibleBalanceCurrencies?: string[] | null;
     minBalance: number;
     dailyCalcMode: "exclude_payday" | "include_payday";
     txCategories: string[];
@@ -132,6 +135,7 @@ export const api = {
   importBackup: (backupJson: string) => invoke<AppData>("import_backup", { backupJson }),
   importBackupFromPath: (path: string) => invoke<AppData>("import_backup_from_path", { path }),
   setLanguage: (language: "ru" | "en") => invoke<AppData>("set_language", { language }),
+  setVisibleBalanceCurrencies: (currencies: string[]) => invoke<AppData>("set_visible_balance_currencies", { currencies }),
   setDateFormat: (dateFormat: DateFormat) => invoke<AppData>("set_date_format", { dateFormat }),
   setTxCategories: (expenseCategories: string[], incomeCategories: string[]) =>
     invoke<AppData>("set_tx_categories", { expenseCategories, incomeCategories }),

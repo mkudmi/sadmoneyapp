@@ -14,6 +14,7 @@ pub fn run() {
             commands::get_data,
             commands::set_language,
             commands::set_date_format,
+            commands::set_visible_balance_currencies,
             commands::set_tx_categories,
             commands::set_user_preferences,
             commands::set_salary_configs,

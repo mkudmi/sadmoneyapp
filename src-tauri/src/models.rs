@@ -112,6 +112,8 @@ pub struct Settings {
     #[serde(rename = "salaryConfigs")]
     #[serde(default)]
     pub salary_configs: Vec<SalaryConfig>,
+    #[serde(rename = "visibleBalanceCurrencies", default, skip_serializing_if = "Option::is_none")]
+    pub visible_balance_currencies: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -170,6 +172,7 @@ impl Default for Settings {
             language: default_language(),
             date_format: default_date_format(),
             salary_configs: vec![],
+            visible_balance_currencies: None,
         }
     }
 }
@@ -237,6 +240,10 @@ pub struct Transaction {
     pub currency: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub foreign_amount: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purchase_currency: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purchase_amount: Option<i64>,
     #[serde(default)]
     pub debt_person: Option<String>,
     /// Actual debt reduction, which can be smaller than the expense amount.

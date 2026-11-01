@@ -1,5 +1,8 @@
+import { BalanceCurrencySettings } from "./components/BalanceCurrencySettings";
+import { VisibleCurrencyBalances } from "./components/VisibleCurrencyBalances";
+import { PurchaseCurrencyFields } from "./components/PurchaseCurrencyFields";
 import { SelectInput } from "./components/SelectInput";
-import { currencyBalances, exchangeRate, recentCurrencyExchanges, POPULAR_CURRENCIES } from "./lib/currencyBalance";
+import { balanceCurrencyOptions, defaultBalanceCurrencies, exchangeRate, recentCurrencyExchanges, POPULAR_CURRENCIES } from "./lib/currencyBalance";
 import { CurrencyHistoryModal } from "./components/CurrencyHistoryModal";
 import { AutocompleteInput } from "./components/AutocompleteInput";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -512,6 +515,7 @@ export default function App() {
   const [vacationsPanelOpen, setVacationsPanelOpen] = useState(false);
   const [trendsModalOpen, setTrendsModalOpen] = useState(false);
   const [currencyHistoryOpen, setCurrencyHistoryOpen] = useState(false);
+  const [balanceSettingsOpen, setBalanceSettingsOpen] = useState(false);
   const [yearSummaryModalOpen, setYearSummaryModalOpen] = useState(false);
   const [trendsCategoryQuery, setTrendsCategoryQuery] = useState("");
   const [trendsIncomeCategoryQuery, setTrendsIncomeCategoryQuery] = useState("");
@@ -529,6 +533,10 @@ export default function App() {
   const [txModalAmount, setTxModalAmount] = useState<string>("");
   const [txCurrency, setTxCurrency] = useState("RUB");
   const [txForeignAmount, setTxForeignAmount] = useState("");
+  const [purchaseCurrency, setPurchaseCurrency] = useState("");
+  const [purchaseAmount, setPurchaseAmount] = useState("");
+  const [editPurchaseCurrency, setEditPurchaseCurrency] = useState("");
+  const [editPurchaseAmount, setEditPurchaseAmount] = useState("");
   const [editForeignAmount, setEditForeignAmount] = useState("");
   const [txModalCategory, setTxModalCategory] = useState<string>("");
   const [txModalEstimateMessage, setTxModalEstimateMessage] = useState<string>("");
@@ -874,6 +882,8 @@ export default function App() {
   function openTxModal(type: TxType, date: string) {
     setTxCurrency(type === "currency_exchange" ? "USD" : "RUB");
     setTxForeignAmount("");
+    setPurchaseCurrency("");
+    setPurchaseAmount("");
     setTxModalType(type);
     setTxModalDate(date);
     setTxModalAmount("");
@@ -916,6 +926,9 @@ export default function App() {
       const currency = txCurrency.trim().toUpperCase();
       if (txModalType === "currency_exchange" && (!/^[A-Z]{3}$/.test(currency) || currency === "RUB" || toKop(txForeignAmount) <= 0)) { alert("Enter a currency code and the received amount."); return; }
       if (txModalType === "expense" && currency !== "RUB" && shouldUseDebtPerson) { alert("A foreign currency expense cannot be linked to a debt."); return; }
+      if (txModalType === "expense" && purchaseCurrency && (purchaseCurrency === currency || toKop(purchaseAmount) <= 0)) {
+        alert("Enter a positive purchase amount and choose a different currency."); return;
+      }
       const tx: Transaction = {
         id: "",
         date: txModalDate,
@@ -926,15 +939,17 @@ export default function App() {
         debt_person: shouldUseDebtPerson ? debtPerson : null,
         currency: txModalType === "currency_exchange" || ((txModalType === "expense" || txModalType === "income") && currency !== "RUB") ? currency : null,
         foreign_amount: txModalType === "currency_exchange" ? toKop(txForeignAmount) : null,
+        purchase_currency: txModalType === "expense" ? purchaseCurrency || null : null,
+        purchase_amount: txModalType === "expense" && purchaseCurrency ? toKop(purchaseAmount) : null,
       };
 
-      const canMergeByCategory = !tx.currency && (tx.type === "income" || tx.type === "expense");
+      const canMergeByCategory = !tx.currency && !tx.purchase_currency && (tx.type === "income" || tx.type === "expense");
       const categoryKey = normalizeCategoryInput(tx.category).toLowerCase();
       const debtPersonKey = normalizeCategoryInput(tx.debt_person ?? "").toLowerCase();
 
       const existingTx = canMergeByCategory
         ? (data?.transactions ?? []).find((existing) => {
-            if (existing.exclude_from_statistics || existing.was_planned || existing.currency) return false;
+            if (existing.exclude_from_statistics || existing.was_planned || existing.currency || existing.purchase_currency) return false;
             if (existing.date !== tx.date || existing.type !== tx.type) return false;
             if (normalizeCategoryInput(existing.category).toLowerCase() !== categoryKey) return false;
             if (shouldUseDebtPerson) {
@@ -1102,6 +1117,8 @@ export default function App() {
     setEditTxModalDate(t.date);
     setEditTxModalAmount(String(t.amount / 100));
     setEditForeignAmount(String((t.foreign_amount ?? 0) / 100));
+    setEditPurchaseCurrency(t.purchase_currency ?? "");
+    setEditPurchaseAmount(t.purchase_amount != null ? String(t.purchase_amount / 100) : "");
     setEditTxModalCategory(t.category);
     setEditTxModalNote(t.note ?? "");
     setEditTxModalWasPlanned(t.was_planned ?? false);
@@ -1135,12 +1152,17 @@ export default function App() {
     const amount = toKop(editTxModalAmount);
     if (amount <= 0) return;
 
+    if (original.type === "expense" && editPurchaseCurrency && (editPurchaseCurrency === (original.currency ?? "RUB") || toKop(editPurchaseAmount) <= 0)) {
+      alert("Enter a positive purchase amount and choose a different currency."); return;
+    }
     try {
       const updated = await api.updateTransaction({
         ...original,
         date: editTxModalDate,
         amount,
         foreign_amount: original.type === "currency_exchange" ? toKop(editForeignAmount) : original.foreign_amount,
+        purchase_currency: original.type === "expense" ? editPurchaseCurrency || null : null,
+        purchase_amount: original.type === "expense" && editPurchaseCurrency ? toKop(editPurchaseAmount) : null,
         category: editTxModalCategory,
         note: editTxModalNote,
         was_planned: original.type === "expense" && editTxModalWasPlanned,
@@ -1909,7 +1931,11 @@ export default function App() {
             boxSizing: "border-box",
           }}
         >
-        <div className="selected-date-heading">
+        <button type="button" className="icon-button" aria-label="Balance currency settings" title="Balance currency settings"
+          onClick={() => setBalanceSettingsOpen(true)} style={{ position: "absolute", right: 12, top: 12, width: 32, height: 32, minHeight: 32, padding: 0 }}>
+          <AppIcon name="settings" />
+        </button>
+        <div className="selected-date-heading" style={{ paddingRight: 38 }}>
           <div><b>{"Selected date:"}</b> <span style={{ whiteSpace: "nowrap" }}>{formatDateForDisplay(selectedDate, dateFormat)}</span></div>
           <div
             style={{
@@ -1937,7 +1963,8 @@ export default function App() {
           dailySpendLimit={dailySpendLimitFromAvailable}
           today={today}
         />}
-        {Object.entries(currencyBalances(data?.transactions ?? [], today)).map(([currency, amount]) => <div key={currency}><b>Balance {currency}:</b> {(amount / 100).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}</div>)}
+        <VisibleCurrencyBalances transactions={data?.transactions ?? []} today={today} dateFormat={dateFormat}
+          currencies={data?.settings.visibleBalanceCurrencies ?? defaultBalanceCurrencies(data?.transactions ?? [], today)} />
         <SelectedDateTransactionsList
           selectedDate={selectedDate}
           dateFormat={dateFormat}
@@ -2543,7 +2570,12 @@ export default function App() {
         </div>
       ) : null}
 
-      <CurrencyHistoryModal open={currencyHistoryOpen} transactions={data?.transactions ?? []} dateFormat={dateFormat} onClose={() => setCurrencyHistoryOpen(false)} />
+      {balanceSettingsOpen ? <BalanceCurrencySettings
+        options={[...new Set([...balanceCurrencyOptions(data?.transactions ?? [], today), ...(data?.settings.visibleBalanceCurrencies ?? [])])].sort()}
+        selected={data?.settings.visibleBalanceCurrencies ?? defaultBalanceCurrencies(data?.transactions ?? [], today)}
+        onClose={() => setBalanceSettingsOpen(false)}
+        onSave={async (currencies) => { setData(await api.setVisibleBalanceCurrencies(currencies)); }} /> : null}
+      <CurrencyHistoryModal open={currencyHistoryOpen} transactions={data?.transactions ?? []} today={today} dateFormat={dateFormat} onClose={() => setCurrencyHistoryOpen(false)} />
 
       {txModalOpen ? (
         <div
@@ -2567,6 +2599,8 @@ export default function App() {
             style={{
               width: "min(520px, 100%)",
               padding: 12,
+              maxHeight: "90vh",
+              overflowY: "auto",
             }}
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -2621,11 +2655,17 @@ export default function App() {
                 </label>
               </> : null}
               {txModalType === "expense" || txModalType === "income" ? <SelectInput
-                label={txModalType === "income" ? "Income currency" : "Expense currency"} value={txCurrency} onChange={setTxCurrency}
+                label={txModalType === "income" ? "Income currency" : "Expense currency"} value={txCurrency} onChange={(value) => {
+                  setTxCurrency(value);
+                  if (purchaseCurrency === value) setPurchaseCurrency(value === "ILS" ? "USD" : "ILS");
+                }}
                 options={["RUB", ...[...new Set([
                   ...(txModalType === "income" ? POPULAR_CURRENCIES : []),
                   ...(data?.transactions ?? []).filter((t) => (t.type === "currency_exchange" || t.type === "income") && t.date <= txModalDate && t.currency).map((t) => t.currency!),
                 ])].sort()]} /> : null}
+              {txModalType === "expense" ? <PurchaseCurrencyFields currency={purchaseCurrency} amount={purchaseAmount} sourceCurrency={txCurrency}
+                extraCurrencies={(data?.transactions ?? []).flatMap((t) => [t.currency, t.purchase_currency].filter((c): c is string => Boolean(c)))}
+                onCurrencyChange={setPurchaseCurrency} onAmountChange={setPurchaseAmount} /> : null}
               {txModalType !== "planned_expense" && txModalType !== "currency_exchange" ? <AutocompleteInput label="Category" value={txModalCategory} options={txCategoryOptions}
                 onChange={setTxModalCategory} placeholder={txModalType === "income" ? "e.g. Salary" : "e.g. Groceries"} />
                 : null}
@@ -2746,6 +2786,10 @@ export default function App() {
         note={editTxModalNote}
         categoryOptions={editTxCategoryOptions}
         currency={editTxOriginal?.currency ?? undefined}
+        showPurchaseCurrency={editTxOriginal?.type === "expense"}
+        purchaseCurrency={editPurchaseCurrency} purchaseAmount={editPurchaseAmount}
+        onPurchaseCurrencyChange={setEditPurchaseCurrency} onPurchaseAmountChange={setEditPurchaseAmount}
+        purchaseCurrencyOptions={(data?.transactions ?? []).flatMap((t) => [t.currency, t.purchase_currency].filter((c): c is string => Boolean(c)))}
         isExchange={editTxOriginal?.type === "currency_exchange"}
         foreignAmount={editForeignAmount}
         onForeignAmountChange={setEditForeignAmount}

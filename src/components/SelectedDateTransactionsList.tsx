@@ -108,6 +108,7 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
                 <b>{t.type === "income" ? "+" : t.type === "planned_expense" ? "P" : "−"} {(t.type === "expense" || t.type === "income") && t.currency ? `${(t.amount / 100).toLocaleString("ru-RU")} ${t.currency}` : rub(t.amount)}{t.type === "currency_exchange" ? ` → ${((t.foreign_amount ?? 0) / 100).toLocaleString("ru-RU")} ${t.currency}` : ""}</b>
               </div>
               {t.type === "currency_exchange" ? <div className="transaction-row-note">{exchangeRate(t)}</div> : null}
+              {t.purchase_currency && t.purchase_amount ? <div className="transaction-row-note">Purchase: {(t.purchase_amount / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })} {t.purchase_currency}</div> : null}
               <div className="transaction-row-category">
                 {t.category}
                 {t.debt_person ? <span> · to: {t.debt_person}</span> : null}

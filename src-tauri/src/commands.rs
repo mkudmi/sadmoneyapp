@@ -402,6 +402,28 @@ pub fn set_date_format(app: AppHandle, date_format: String) -> Result<AppData, S
     Ok(data)
 }
 
+fn normalize_balance_currencies(currencies: Vec<String>) -> Result<Vec<String>, String> {
+    if currencies.len() > 100 { return Err("Too many currencies".into()); }
+    let mut result = Vec::new();
+    for currency in currencies {
+        let currency = currency.trim().to_ascii_uppercase();
+        if currency.len() != 3 || !currency.bytes().all(|b| b.is_ascii_uppercase()) || currency == "RUB" {
+            return Err("Invalid balance currency".into());
+        }
+        if !result.contains(&currency) { result.push(currency); }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn set_visible_balance_currencies(app: AppHandle, currencies: Vec<String>) -> Result<AppData, String> {
+    let currencies = normalize_balance_currencies(currencies)?;
+    let mut data = load(&app)?;
+    data.settings.visible_balance_currencies = Some(currencies);
+    save(&app, &data)?;
+    Ok(data)
+}
+
 #[tauri::command]
 pub fn set_tx_categories(
     app: AppHandle,
@@ -476,6 +498,18 @@ fn validate_transaction_currency(tx: &mut Transaction) -> Result<(), String> {
         TxType::CurrencyExchange => {},
         _ if tx.currency.is_some() || tx.foreign_amount.is_some() => return Err("Invalid currency transaction".into()),
         _ => {},
+    }
+    if let Some(currency) = &mut tx.purchase_currency {
+        *currency = currency.trim().to_ascii_uppercase();
+        if currency.len() != 3 || !currency.bytes().all(|b| b.is_ascii_uppercase()) {
+            return Err("Purchase currency must be a three-letter code".into());
+        }
+    }
+    match (&tx.purchase_currency, tx.purchase_amount) {
+        (None, None) => {},
+        (Some(currency), Some(amount)) if matches!(tx.r#type, TxType::Expense)
+            && amount > 0 && tx.amount > 0 && currency != tx.currency.as_deref().unwrap_or("RUB") => {},
+        _ => return Err("Invalid purchase currency or amount".into()),
     }
     if tx.currency.is_some() && tx.amount <= 0 { return Err("Amount must be positive".into()); }
     Ok(())
@@ -1050,6 +1084,11 @@ fn parse_backup(raw: &str) -> Result<AppData, String> {
     {
         return Err("backup contains invalid amounts".to_string());
     }
+    if let Some(currencies) = &data.settings.visible_balance_currencies {
+        let normalized = normalize_balance_currencies(currencies.clone())
+            .map_err(|_| "backup contains invalid balance currencies".to_string())?;
+        if &normalized != currencies { return Err("backup contains invalid balance currencies".to_string()); }
+    }
     for tx in &data.transactions {
         let mut tx = tx.clone();
         validate_transaction_currency(&mut tx).map_err(|_| "backup contains invalid currency transaction".to_string())?;
@@ -1260,6 +1299,8 @@ mod tests {
             note: String::new(),
             currency: None,
             foreign_amount: None,
+            purchase_currency: None,
+            purchase_amount: None,
             debt_person: Some("Алексей".to_string()),
             debt_repaid_amount: None,
             was_planned: false,
@@ -1333,6 +1374,43 @@ mod tests {
         let json = serde_json::to_string(&data).unwrap();
         let restored = parse_backup(&json).unwrap();
         assert_eq!(restored.transactions[3].currency.as_deref(), Some("EUR"));
+    }
+
+    #[test]
+    fn balance_currency_preferences_validate_and_survive_backup() {
+        assert_eq!(normalize_balance_currencies(vec!["usd".into(), "USD".into(), "ILS".into()]).unwrap(), vec!["USD", "ILS"]);
+        assert!(normalize_balance_currencies(vec!["RUB".into()]).is_err());
+        assert!(normalize_balance_currencies(vec!["US!".into()]).is_err());
+        let mut data = AppData::default();
+        data.settings.visible_balance_currencies = Some(vec!["USD".into(), "ILS".into()]);
+        let restored = parse_backup(&serde_json::to_string(&data).unwrap()).unwrap();
+        assert_eq!(restored.settings.visible_balance_currencies, data.settings.visible_balance_currencies);
+        data.settings.visible_balance_currencies = Some(vec![]);
+        let restored = parse_backup(&serde_json::to_string(&data).unwrap()).unwrap();
+        assert_eq!(restored.settings.visible_balance_currencies, Some(vec![]));
+    }
+
+    #[test]
+    fn purchase_currency_is_validated_and_round_trips_in_backups() {
+        let mut tx = debt_expense(800);
+        tx.currency = Some("USD".into());
+        tx.debt_person = None;
+        tx.purchase_currency = Some("ils".into());
+        tx.purchase_amount = Some(2500);
+        assert!(validate_transaction_currency(&mut tx).is_ok());
+        assert_eq!(tx.purchase_currency.as_deref(), Some("ILS"));
+        let mut data = AppData::default();
+        data.transactions.push(tx.clone());
+        let restored = parse_backup(&serde_json::to_string(&data).unwrap()).unwrap();
+        assert_eq!(restored.transactions[0].purchase_amount, Some(2500));
+        tx.purchase_currency = Some("USD".into());
+        assert!(validate_transaction_currency(&mut tx).is_err());
+        tx.purchase_currency = Some("ILS".into());
+        tx.purchase_amount = None;
+        assert!(validate_transaction_currency(&mut tx).is_err());
+        tx.purchase_amount = Some(2500);
+        tx.r#type = TxType::Income;
+        assert!(validate_transaction_currency(&mut tx).is_err());
     }
 
     #[test]

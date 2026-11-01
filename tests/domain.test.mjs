@@ -169,3 +169,25 @@ test("foreign income does not affect ruble savings plan", () => {
   const data = { settings: { salaryConfigs: [] }, transactions: [{ type: "income", date: "2026-09-01", amount: 30000000, currency: "USD" }] };
   assert.equal(savingsPlan.buildSavingsPlan(data, [], "2026-09-23").maxCardAmount, 100000);
 });
+
+
+test("received vacation pay is shown before vacation starts and matches the nearest vacation", async () => {
+  const { getLatestPaidVacationAverageReference } = await loadAppModule("/src/lib/russianVacation.ts");
+  const vacations = [
+    { id: "old", start_date: "2026-07-27", end_date: "2026-08-09", vacation_type: "paid" },
+    { id: "next", start_date: "2026-11-03", end_date: "2026-11-03", vacation_type: "paid" },
+    { id: "later", start_date: "2026-11-20", end_date: "2026-11-20", vacation_type: "paid" },
+  ];
+  const salaryEvents = [
+    { id: "old-pay", date: "2026-07-14", amount: 7611956, kind: "vacation_pay" },
+    { id: "next-pay", date: "2026-10-29", amount: 578098, kind: "vacation_pay" },
+    { id: "future-pay", date: "2026-11-10", amount: 1000000, kind: "vacation_pay" },
+  ];
+  const result = getLatestPaidVacationAverageReference({ vacations, salaryEvents, today: "2026-11-01" });
+  assert.equal(result.vacation.id, "next");
+  assert.equal(result.vacationPayEvent.id, "next-pay");
+  assert.equal(result.chargeableDays, 1);
+  assert.equal(result.averageDailyPay, 578098);
+  const beforePayment = getLatestPaidVacationAverageReference({ vacations, salaryEvents, today: "2026-10-28" });
+  assert.equal(beforePayment.vacation.id, "old");
+});
