@@ -68,6 +68,8 @@ export type Debt = {
   amount: number; // kopecks
 };
 
+export type RecurringPayment = { id: string; title: string; amount: number; startDate: string; frequency: "weekly" | "monthly" | "yearly" };
+
 export type AppData = {
   version: number;
   settings: {
@@ -91,6 +93,7 @@ export type AppData = {
   offDays: OffDay[];
   debts?: Debt[];
   transactions: Transaction[];
+  recurringPayments?: RecurringPayment[];
 };
 
 export type SavingsGoal = {
@@ -113,6 +116,10 @@ export type DailyBudgetResult = {
 
 export const api = {
   getData: () => invoke<AppData>("get_data"),
+  getRecurringOccurrences: (start: string, end: string) => invoke<Transaction[]>("get_recurring_occurrences", { start, end }),
+  saveRecurringPayment: (payment: RecurringPayment) => invoke<AppData>("save_recurring_payment", { payment }),
+  deleteRecurringPayment: (id: string) => invoke<AppData>("delete_recurring_payment", { id }),
+  payRecurringPayment: (id: string, date: string, amount: number) => invoke<AppData>("pay_recurring_payment", { id, date, amount }),
   addTransaction: (tx: Transaction) => invoke<AppData>("add_transaction", { tx }),
   updateTransaction: (tx: Transaction) => invoke<AppData>("update_transaction", { tx }),
   deleteTransaction: (id: string) => invoke<AppData>("delete_transaction", { id }),

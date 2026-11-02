@@ -1,4 +1,4 @@
-use crate::models::{AppData, Debt, DebtDirection, OffDay, SalaryConfig, SalaryEvent, SavingsCard, SavingsGoal, Transaction, TxType, Vacation, WorkSchedule};
+use crate::models::{AppData, RecurringPayment, RecurringFrequency, Debt, DebtDirection, OffDay, SalaryConfig, SalaryEvent, SavingsCard, SavingsGoal, Transaction, TxType, Vacation, WorkSchedule};
 use crate::storage;
 use anyhow::Result;
 use chrono::{Datelike, Duration, Local, NaiveDate, Weekday};
@@ -1033,6 +1033,12 @@ fn parse_backup(raw: &str) -> Result<AppData, String> {
     let data: AppData = serde_json::from_value(value)
         .map_err(|_| "backup contains invalid data".to_string())?;
 
+    if data.recurring_payments.iter().any(|p| p.id.trim().is_empty() || p.title.trim().is_empty() || p.title.chars().count() > 120 || !(1..=100_000_000_000).contains(&p.amount) || parse_date(&p.start_date).map_or(true, |d| d.format("%Y-%m-%d").to_string() != p.start_date)) {
+        return Err("backup contains an invalid recurring payment".into());
+    }
+    let mut recurring_ids = std::collections::HashSet::new();
+    if data.recurring_payments.iter().any(|p| !recurring_ids.insert(&p.id)) { return Err("backup contains duplicate recurring payment ids".into()); }
+
     let dates = data
         .transactions
         .iter()
@@ -1135,6 +1141,82 @@ pub struct DailyBudgetResult {
 }
 
 /// Расчёт “сколько можно тратить в день” от указанной даты (YYYY-MM-DD)
+fn recurring_dates(payment: &RecurringPayment, start: NaiveDate, end: NaiveDate) -> Vec<NaiveDate> {
+    let Ok(first) = parse_date(&payment.start_date) else { return vec![] };
+    let mut result = Vec::new();
+    let mut date = start.max(first);
+    while date <= end {
+        let occurs = match payment.frequency {
+            RecurringFrequency::Weekly => (date - first).num_days() % 7 == 0,
+            RecurringFrequency::Monthly => date.day() == clamp_salary_day(date.year(), date.month(), first.day()),
+            RecurringFrequency::Yearly => date.month() == first.month() && date.day() == clamp_salary_day(date.year(), date.month(), first.day()),
+        };
+        if occurs { result.push(date); }
+        let Some(next) = date.succ_opt() else { break }; date = next;
+    }
+    result
+}
+
+fn recurring_id(payment: &RecurringPayment, date: NaiveDate) -> String {
+    format!("recurring_{}_{}", payment.id, date.format("%Y-%m-%d"))
+}
+
+fn recurring_occurrences(data: &AppData, start: NaiveDate, end: NaiveDate) -> Vec<Transaction> {
+    let mut result = Vec::new();
+    for payment in &data.recurring_payments {
+        for date in recurring_dates(payment, start, end) {
+            let id = recurring_id(payment, date);
+            if data.transactions.iter().any(|tx| tx.id == id) { continue; }
+            result.push(Transaction {
+                id, date: date.format("%Y-%m-%d").to_string(), r#type: TxType::PlannedExpense,
+                amount: payment.amount, category: payment.title.clone(), note: "Recurring payment".into(),
+                currency: None, foreign_amount: None, purchase_currency: None, purchase_amount: None,
+                debt_person: None, debt_repaid_amount: None, was_planned: false, exclude_from_statistics: false,
+            });
+        }
+    }
+    result
+}
+
+#[tauri::command]
+pub fn get_recurring_occurrences(app: AppHandle, start: String, end: String) -> Result<Vec<Transaction>, String> {
+    let start = parse_date(&start).map_err(|_| "Invalid start date")?;
+    let end = parse_date(&end).map_err(|_| "Invalid end date")?;
+    if end < start || (end - start).num_days() > 800 { return Err("Invalid date range".into()); }
+    Ok(recurring_occurrences(&load(&app)?, start, end))
+}
+
+#[tauri::command]
+pub fn save_recurring_payment(app: AppHandle, mut payment: RecurringPayment) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    payment.title = payment.title.trim().to_string();
+    let date = parse_date(&payment.start_date).map_err(|_| "Invalid start date")?;
+    if date.format("%Y-%m-%d").to_string() != payment.start_date || payment.title.is_empty() || payment.title.chars().count() > 120 || !(1..=100_000_000_000).contains(&payment.amount) {
+        return Err("Enter a valid title, date and amount".into());
+    }
+    if payment.id.is_empty() { payment.id = Uuid::new_v4().to_string(); data.recurring_payments.push(payment); }
+    else if let Some(existing) = data.recurring_payments.iter_mut().find(|p| p.id == payment.id) { *existing = payment; }
+    else { return Err("Recurring payment not found".into()); }
+    save(&app, &data)?; Ok(data)
+}
+
+#[tauri::command]
+pub fn delete_recurring_payment(app: AppHandle, id: String) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    data.recurring_payments.retain(|p| p.id != id);
+    save(&app, &data)?; Ok(data)
+}
+
+#[tauri::command]
+pub fn pay_recurring_payment(app: AppHandle, id: String, date: String, amount: i64) -> Result<AppData, String> {
+    let mut data = load(&app)?;
+    let day = parse_date(&date).map_err(|_| "Invalid date")?;
+    if day > Local::now().date_naive() || !(1..=100_000_000_000).contains(&amount) { return Err("Invalid payment date or amount".into()); }
+    let mut tx = recurring_occurrences(&data, day, day).into_iter().find(|tx| tx.id == id).ok_or("Payment not found or already paid")?;
+    tx.r#type = TxType::Expense; tx.was_planned = true; tx.amount = amount;
+    data.transactions.push(tx); save(&app, &data)?; Ok(data)
+}
+
 #[tauri::command]
 pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudgetResult, String> {
     let data = load(&app)?;
@@ -1230,6 +1312,8 @@ fn calculate_daily_budget(data: &AppData, from: NaiveDate) -> Result<DailyBudget
         }
     }
 
+    planned_reserve = planned_reserve.saturating_add(recurring_occurrences(data, start, end).iter().map(|tx| tx.amount).sum::<i64>());
+
     // Подушка и резерв по запланированным расходам.
     let blocked_amount = data.settings.min_balance + data.piggy_bank_amount + planned_reserve;
 
@@ -1287,6 +1371,32 @@ mod tests {
         assert_eq!(data.debts[0].amount, 20_000);
         assert_eq!(data.debts[1].direction, DebtDirection::Payable);
         assert_eq!(data.debts[1].amount, 10_000);
+    }
+
+    #[test]
+    fn recurring_reserves_and_paid_occurrences_are_not_counted_twice() {
+        let mut data = AppData::default();
+        let mut income = debt_expense(100_000); income.date = "2026-03-01".into(); income.r#type = TxType::Income; income.debt_person = None;
+        data.transactions.push(income);
+        data.salary_events.push(SalaryEvent { id: "salary".into(), date: "2026-03-10".into(), amount: 100_000, title: "Salary".into(), accrual_month: None, kind: Default::default() });
+        data.recurring_payments.push(RecurringPayment { id: "one".into(), title: "Rent".into(), amount: 30_000, start_date: "2026-01-05".into(), frequency: RecurringFrequency::Monthly });
+        let today = NaiveDate::from_ymd_opt(2026, 3, 5).unwrap();
+        let before = calculate_daily_budget(&data, today).unwrap();
+        assert_eq!(before.available, 70_000);
+        let mut paid = recurring_occurrences(&data, today, today).pop().unwrap();
+        paid.r#type = TxType::Expense; paid.was_planned = true;
+        data.transactions.push(paid);
+        let after = calculate_daily_budget(&data, today).unwrap();
+        assert_eq!(after.available, before.available);
+        assert_eq!(after.per_day, before.per_day);
+        assert!(recurring_occurrences(&data, today, today).is_empty());
+    }
+
+    #[test]
+    fn recurring_monthly_dates_clamp_without_drifting() {
+        let payment = RecurringPayment { id: "one".into(), title: "Bill".into(), amount: 100, start_date: "2024-01-31".into(), frequency: RecurringFrequency::Monthly };
+        let dates = recurring_dates(&payment, NaiveDate::from_ymd_opt(2024, 2, 1).unwrap(), NaiveDate::from_ymd_opt(2024, 3, 31).unwrap());
+        assert_eq!(dates, vec![NaiveDate::from_ymd_opt(2024, 2, 29).unwrap(), NaiveDate::from_ymd_opt(2024, 3, 31).unwrap()]);
     }
 
     fn debt_expense(amount: i64) -> Transaction {

@@ -1235,7 +1235,7 @@ select {
   }
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1600px) {
   .topbar-action-button {
     width: 40px;
     min-width: 40px;
@@ -1253,3 +1253,17 @@ select {
 .select-input-label { display: block; font-size: 12px; opacity: 0.8; margin-bottom: 4px; }
 .select-input-trigger { width: 100%; display: flex; align-items: center; justify-content: space-between; text-align: left; }
 .select-input .autocomplete-options > button[data-active="true"] { background: var(--bg-strong); color: var(--brand-2); }
+
+.recurring-backdrop { position: fixed; inset: 0; z-index: 5000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .35); }
+.recurring-modal { width: min(620px, 100%); max-height: 90vh; overflow-y: auto; box-sizing: border-box; padding: 18px; }
+.recurring-help, .recurring-section p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.recurring-section { margin: 18px 0; }
+.recurring-section h3 { font-size: 14px; margin: 0; }
+.recurring-list { list-style: none; padding: 0; display: grid; gap: 8px; }
+.recurring-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.recurring-row span { flex: 1 1 220px; }
+.recurring-form { display: grid; gap: 14px; margin-top: 18px; }
+.recurring-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.recurring-fields label { display: grid; gap: 5px; font-size: 12px; }
+.recurring-fields input, .recurring-fields select { width: 100%; box-sizing: border-box; }
+@media (max-width: 520px) { .recurring-fields { grid-template-columns: 1fr; } }

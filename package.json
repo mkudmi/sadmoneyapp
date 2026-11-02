@@ -4,7 +4,7 @@
   "version": "0.2.38",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/domain.test.mjs tests/monthlySummary.test.mjs",
+    "test": "node --test tests/domain.test.mjs tests/monthlySummary.test.mjs tests/recurringSuggestions.test.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

@@ -12,6 +12,10 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::get_data,
+            commands::get_recurring_occurrences,
+            commands::save_recurring_payment,
+            commands::delete_recurring_payment,
+            commands::pay_recurring_payment,
             commands::set_language,
             commands::set_date_format,
             commands::set_visible_balance_currencies,

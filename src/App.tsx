@@ -1,3 +1,4 @@
+import { RecurringPaymentsModal } from "./components/RecurringPaymentsModal";
 import { BalanceCurrencySettings } from "./components/BalanceCurrencySettings";
 import { VisibleCurrencyBalances } from "./components/VisibleCurrencyBalances";
 import { PurchaseCurrencyFields } from "./components/PurchaseCurrencyFields";
@@ -110,6 +111,9 @@ function createEmptySalaryConfigDraft(today: string): SalaryConfigDraft {
 export default function App() {
   const today = DEBUG_USE_CUSTOM_TODAY ? DEBUG_CUSTOM_TODAY : ymd(new Date());
   const [data, setData] = useState<AppData | null>(null);
+  const [recurringModalOpen, setRecurringModalOpen] = useState(false);
+  const [recurringOccurrences, setRecurringOccurrences] = useState<Transaction[]>([]);
+  const [recurringError, setRecurringError] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [budgetError, setBudgetError] = useState(false);
@@ -123,6 +127,15 @@ export default function App() {
   const monthKey = `${year}-${String(month0 + 1).padStart(2, "0")}`; // "YYYY-MM"
   const displayedMonthStart = `${monthKey}-01`;
   const displayedMonthEnd = `${monthKey}-${String(daysInMonth(year, month0)).padStart(2, "0")}`;
+  useEffect(() => {
+    let cancelled = false;
+    setRecurringOccurrences([]);
+    setRecurringError(false);
+    if (data) api.getRecurringOccurrences(displayedMonthStart, displayedMonthEnd)
+      .then(items => { if (!cancelled) setRecurringOccurrences(items); })
+      .catch(() => { if (!cancelled) setRecurringError(true); });
+    return () => { cancelled = true; };
+  }, [data, displayedMonthStart, displayedMonthEnd]);
   const salaryEventsRangeStart = useMemo(() => {
     const vacationWindowStart = new Date(parseYmdLocal(today).getFullYear(), parseYmdLocal(today).getMonth() - 12, 1);
     const yearStart = new Date(year, 0, 1);
@@ -405,7 +418,7 @@ export default function App() {
   const sumsByDate = useMemo(() => {
     const map = new Map<string, { inc: number; exp: number }>();
     if (!viewData) return map;
-    for (const t of viewData.transactions) {
+    for (const t of [...viewData.transactions, ...recurringOccurrences]) {
       const cur = map.get(t.date) ?? { inc: 0, exp: 0 };
       if (t.type === "income" && !t.currency) cur.inc += t.amount;
       if ((t.type === "expense" && !t.currency) || t.type === "planned_expense" || t.type === "currency_exchange") cur.exp += t.amount;
@@ -420,10 +433,10 @@ export default function App() {
     }
 
     return map;
-  }, [viewData]);
+  }, [viewData, recurringOccurrences]);
 
   const salaryEventsForSelectedDate = allSalaryEvents.filter((s) => s.date === selectedDate);
-  const transactionsForSelectedDate = (data?.transactions ?? []).filter((t) => t.date === selectedDate);
+  const transactionsForSelectedDate = [...(data?.transactions ?? []), ...recurringOccurrences].filter((t) => t.date === selectedDate);
   const offForSelectedDate = (data?.offDays ?? []).find(o => o.date === selectedDate) ?? null;
   const vacationForSelectedDate = (data?.vacations ?? []).find(v => v.start_date <= selectedDate && v.end_date >= selectedDate) ?? null;
   const plannedAfterExpensesForSelectedDate = useMemo(() => {
@@ -449,7 +462,7 @@ export default function App() {
 
     if (nextSalaryAmount <= 0) return null;
 
-    const plannedUntilSelected = (viewData.transactions ?? [])
+    const plannedUntilSelected = [...(viewData.transactions ?? []), ...recurringOccurrences]
       .filter(
         (t) =>
           t.type === "planned_expense" &&
@@ -459,7 +472,7 @@ export default function App() {
       .reduce((sum, t) => sum + t.amount, 0);
 
     return nextSalaryAmount - plannedUntilSelected;
-  }, [budget?.next_salary_date, selectedDate, viewData]);
+  }, [budget?.next_salary_date, selectedDate, viewData, recurringOccurrences]);
   const selectedDateWeekDay = parseYmdLocal(selectedDate).getDay(); // 0 = Sunday, 6 = Saturday
   const selectedDateIsWeekend = selectedDateWeekDay === 0 || selectedDateWeekDay === 6;
   const selectedDateDefaultWorking = workSchedule === "5/2"
@@ -1105,6 +1118,16 @@ export default function App() {
   }
 
   async function handleMarkPlannedTransactionPaid(tx: Transaction) {
+    if (recurringOccurrences.some(item => item.id === tx.id)) {
+      if (tx.date > today) { alert("You can confirm a payment on or after its due date."); return; }
+      const entered = window.prompt("Paid amount (RUB)", String(tx.amount / 100));
+      if (entered === null) return;
+      const amount = toKop(entered);
+      if (!Number.isSafeInteger(amount) || amount <= 0) { alert("Enter a positive amount."); return; }
+      try { setData(await api.payRecurringPayment(tx.id, tx.date, amount)); }
+      catch { alert("Could not confirm the payment. Please try again."); }
+      return;
+    }
     const updated = await api.updateTransaction({
       ...tx,
       type: "expense",
@@ -1848,6 +1871,7 @@ export default function App() {
               </span>
             </button>
 
+            <button onClick={() => setRecurringModalOpen(true)} className="topbar-action-button" aria-label="Recurring payments" title="Recurring payments"><AppIcon name="recurring" /><span className="topbar-action-copy"><span>Payments</span><span className="topbar-action-meta">Recurring bills</span></span></button>
             <button onClick={() => setVacationsPanelOpen(true)} className="topbar-action-button" aria-label="Vacations" title="Vacations">
               <AppIcon name="beach" />
               <span className="topbar-action-copy">
@@ -1965,12 +1989,14 @@ export default function App() {
         />}
         <VisibleCurrencyBalances transactions={data?.transactions ?? []} today={today} dateFormat={dateFormat}
           currencies={data?.settings.visibleBalanceCurrencies ?? defaultBalanceCurrencies(data?.transactions ?? [], today)} />
+        {recurringError && <p role="alert">Unable to load recurring payments. Try changing the month or reopening the app.</p>}
         <SelectedDateTransactionsList
           selectedDate={selectedDate}
           dateFormat={dateFormat}
           salaryEventsForSelectedDate={salaryEventsForSelectedDate}
           plannedAfterExpensesForSelectedDate={plannedAfterExpensesForSelectedDate}
           transactionsForSelectedDate={transactionsForSelectedDate}
+          recurringIds={new Set(recurringOccurrences.map(item => item.id))}
           onMarkPlannedAsPaid={(tx) => { void handleMarkPlannedTransactionPaid(tx); }}
           onEditTransaction={(tx) => { void handleEditTransaction(tx); }}
           onDeleteTransaction={(id) => { void handleDeleteTransaction(id); }}
@@ -2007,6 +2033,8 @@ export default function App() {
       />
       </div>
       </div>
+
+      {recurringModalOpen && <RecurringPaymentsModal payments={data?.recurringPayments ?? []} transactions={data?.transactions ?? []} today={today} dateFormat={dateFormat} onClose={() => setRecurringModalOpen(false)} onSave={async payment => { setData(await api.saveRecurringPayment(payment)); }} onDelete={async id => { setData(await api.deleteRecurringPayment(id)); }} />}
 
       {debtsPanelOpen ? (
         <div

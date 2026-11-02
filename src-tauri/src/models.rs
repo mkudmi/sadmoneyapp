@@ -18,7 +18,23 @@ pub struct AppData {
     #[serde(default)]
     pub debts: Vec<Debt>,
     pub transactions: Vec<Transaction>,
+    #[serde(rename = "recurringPayments", default)]
+    pub recurring_payments: Vec<RecurringPayment>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecurringPayment {
+    pub id: String,
+    pub title: String,
+    pub amount: i64,
+    pub start_date: String,
+    pub frequency: RecurringFrequency,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecurringFrequency { Weekly, Monthly, Yearly }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SavingsGoal {
@@ -287,6 +303,7 @@ impl Default for AppData {
             off_days: vec![],
             debts: vec![],
             transactions: vec![],
+            recurring_payments: vec![],
         }
     }
 }

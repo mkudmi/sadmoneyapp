@@ -13,6 +13,7 @@ import {
   IconMinus,
   IconPencil,
   IconPigMoney,
+  IconRepeat,
   IconPlus,
   IconSettings,
   IconSparkles,
@@ -37,6 +38,7 @@ export type AppIconName =
   | "edit"
   | "expand"
   | "piggyBank"
+  | "recurring"
   | "remove"
   | "settings"
   | "sparkles"
@@ -88,6 +90,8 @@ export function AppIcon({ name, size = 16, stroke = 1.8, style }: AppIconProps) 
       return <IconArrowsMaximize {...commonProps} />;
     case "piggyBank":
       return <IconPigMoney {...commonProps} />;
+    case "recurring":
+      return <IconRepeat {...commonProps} />;
     case "remove":
       return <IconMinus {...commonProps} />;
     case "settings":

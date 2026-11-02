@@ -11,6 +11,7 @@ type SelectedDateTransactionsListProps = {
   salaryEventsForSelectedDate: SalaryEvent[];
   plannedAfterExpensesForSelectedDate: number | null;
   transactionsForSelectedDate: Transaction[];
+  recurringIds: ReadonlySet<string>;
   onMarkPlannedAsPaid: (tx: Transaction) => void;
   onEditTransaction: (tx: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
@@ -23,6 +24,7 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
     salaryEventsForSelectedDate,
     plannedAfterExpensesForSelectedDate,
     transactionsForSelectedDate,
+    recurringIds,
     onMarkPlannedAsPaid,
     onEditTransaction,
     onDeleteTransaction,
@@ -120,7 +122,7 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
               ) : null}
               {t.type === "planned_expense" ? (
                 <div className="transaction-row-status">
-                  <span className="transaction-status-badge">Planned expense</span>
+                  <span className="transaction-status-badge">{recurringIds.has(t.id) ? "Recurring payment" : "Planned expense"}</span>
                 </div>
               ) : null}
               {t.exclude_from_statistics ? (
@@ -143,7 +145,7 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
                   <AppIcon name="check" />
                 </button>
               ) : null}
-              <button
+              {!recurringIds.has(t.id) && <button
                 className="edit-pencil-btn"
                 title={"Edit"}
                 aria-label={"Edit"}
@@ -151,9 +153,9 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
                 onClick={() => onEditTransaction(t)}
               >
                 <AppIcon name="edit" />
-              </button>
+              </button>}
 
-              <button
+              {!recurringIds.has(t.id) && <button
                 title={"Delete"}
                 aria-label={"Delete"}
                 className="icon-button"
@@ -161,7 +163,7 @@ export function SelectedDateTransactionsList(props: SelectedDateTransactionsList
                 onClick={() => onDeleteTransaction(t.id)}
               >
                 <AppIcon name="delete" />
-              </button>
+              </button>}
             </div>
           </div>
         ))}
