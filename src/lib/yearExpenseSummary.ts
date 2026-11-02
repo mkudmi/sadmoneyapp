@@ -58,7 +58,8 @@ export function buildYearExpenseSummary(
   let transactionCount = 0;
 
   for (const transaction of transactions) {
-    if (transaction.exclude_from_statistics || transaction.currency || transaction.type !== "expense" || transaction.amount <= 0) continue;
+    const isRubleExpense = transaction.type === "expense" && !transaction.currency;
+    if (transaction.exclude_from_statistics || (!isRubleExpense && transaction.type !== "currency_exchange") || transaction.amount <= 0) continue;
     const txYear = transactionYear(transaction.date);
     const category = normalizeCategoryInput(transaction.category) || "No category";
 

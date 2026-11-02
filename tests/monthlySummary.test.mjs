@@ -94,7 +94,7 @@ test("balance adjustments do not distort yearly or monthly expense statistics", 
 });
 
 
-test("foreign currency operations stay out of ruble reports and update their own balance", async () => {
+test("exchange purchases count in the annual report while foreign spending updates its balance", async () => {
   const { currencyBalances } = await loadAppModule("/src/lib/currencyBalance.ts");
   const entries = [
     { ...transaction("2026-08-01", 900000, "currency_exchange"), currency: "USD", foreign_amount: 10000 },
@@ -104,7 +104,7 @@ test("foreign currency operations stay out of ruble reports and update their own
   assert.deepEqual(currencyBalances(entries, "2026-08-31"), { USD: 7500 });
   assert.deepEqual(currencyBalances(entries, "2026-09-01"), { USD: 6500 });
   assert.deepEqual(buildMonthlyCategories(entries, [], "2026-08", "2026-08-31"), []);
-  assert.equal(buildYearExpenseSummary(entries, 2026, "en-US").total, 0);
+  assert.equal(buildYearExpenseSummary(entries, 2026, "en-US").total, 900000);
 });
 
 
@@ -163,4 +163,21 @@ test("default balance currencies include holdings and purchase estimates", async
   ];
   assert.deepEqual(defaultBalanceCurrencies(items, "2026-08-31"), ["ILS", "USD"]);
   assert.ok(balanceCurrencyOptions(items, "2026-08-31").includes("ILS"));
+});
+
+
+test("yearly expenses include rubles spent on exchanges, including previous year", () => {
+  const entries = [
+    transaction("2026-11-02", 860898),
+    { ...transaction("2026-11-02", 1200000, "currency_exchange", "Currency exchange"), currency: "USD", foreign_amount: 10000 },
+    { ...transaction("2026-11-03", 800), currency: "USD", purchase_currency: "ILS", purchase_amount: 2500 },
+    { ...transaction("2025-11-02", 500000, "currency_exchange", "Currency exchange"), currency: "EUR", foreign_amount: 5000 },
+    { ...transaction("2026-11-02", 300000, "currency_exchange", "Currency exchange"), currency: "USD", foreign_amount: 3000, exclude_from_statistics: true },
+  ];
+  const summary = buildYearExpenseSummary(entries, 2026, "en-US");
+  assert.equal(summary.total, 2060898);
+  assert.equal(summary.months[10].amount, 2060898);
+  assert.equal(summary.previousTotal, 500000);
+  assert.equal(summary.transactionCount, 2);
+  assert.equal(summary.categories.find((c) => c.category === "Currency exchange").amount, 1200000);
 });
