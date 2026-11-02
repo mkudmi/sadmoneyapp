@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { useDropdownPlacement } from "../hooks/useDropdownPlacement";
 import { useDismissible } from "../hooks/useDismissible";
 import { AppIcon } from "./AppIcon";
 
@@ -10,6 +11,7 @@ export function SelectInput({ label, value, options, onChange }: Props) {
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const { anchorRef, dropdownStyle } = useDropdownPlacement(open, options.length);
   useDismissible(open, () => setOpen(false), `[data-select-id="${id}"]`);
   useEffect(() => {
     if (open) listRef.current?.children[active]?.scrollIntoView({ block: "nearest" });
@@ -25,7 +27,7 @@ export function SelectInput({ label, value, options, onChange }: Props) {
     triggerRef.current?.focus();
   }
 
-  return <div data-select-id={id} className="select-input" onBlur={(event) => {
+  return <div ref={anchorRef} data-select-id={id} className="select-input" onBlur={(event) => {
     if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
   }}>
     <label id={`${id}-label`} htmlFor={`${id}-trigger`} className="select-input-label">{label}</label>
@@ -48,7 +50,7 @@ export function SelectInput({ label, value, options, onChange }: Props) {
       }}>
       <span>{value}</span><AppIcon name="chevronDown" />
     </button>
-    {open ? <div ref={listRef} id={`${id}-list`} role="listbox" aria-labelledby={`${id}-label`} className="menu-pop autocomplete-options"
+    {open ? <div ref={listRef} id={`${id}-list`} role="listbox" aria-labelledby={`${id}-label`} className="menu-pop autocomplete-options" style={dropdownStyle}
       onMouseDown={(event) => event.preventDefault()}>
       {options.map((option, index) => <button key={option} id={`${id}-option-${index}`} type="button" role="option"
         aria-selected={option === value} data-active={index === active} tabIndex={-1}

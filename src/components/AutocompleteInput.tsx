@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { useDropdownPlacement } from "../hooks/useDropdownPlacement";
 import { useDismissible } from "../hooks/useDismissible";
 import { AppIcon } from "./AppIcon";
 
@@ -23,6 +24,7 @@ export function AutocompleteInput({ id, label, value, options, placeholder, auto
   const listRef = useRef<HTMLDivElement>(null);
   const activeIndex = active === null ? -1 : options.indexOf(active);
   const expanded = open && options.length > 0;
+  const { anchorRef, dropdownStyle } = useDropdownPlacement(expanded, options.length);
   useDismissible(open, () => { setOpen(false); setActive(null); }, `[data-autocomplete="${uid}"]`);
   useEffect(() => {
     if (expanded && activeIndex >= 0) listRef.current?.children[activeIndex]?.scrollIntoView({ block: "nearest" });
@@ -36,7 +38,7 @@ export function AutocompleteInput({ id, label, value, options, placeholder, auto
   }
 
   return (
-    <div data-autocomplete={uid} style={{ position: "relative", minWidth: 0 }} onBlur={(event) => {
+    <div ref={anchorRef} data-autocomplete={uid} style={{ position: "relative", minWidth: 0 }} onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget)) { setOpen(false); setActive(null); }
     }} onKeyDown={(event) => {
       if (event.nativeEvent.isComposing) return;
@@ -74,7 +76,7 @@ export function AutocompleteInput({ id, label, value, options, placeholder, auto
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => { inputRef.current?.focus(); setOpen(!open); setActive(null); }}><AppIcon name="chevronDown" /></button>
       </div>
-      {expanded ? <div ref={listRef} id={listId} role="listbox" aria-label={label} className="menu-pop autocomplete-options" onMouseDown={(event) => event.preventDefault()}>
+      {expanded ? <div ref={listRef} id={listId} role="listbox" aria-label={label} className="menu-pop autocomplete-options" style={dropdownStyle} onMouseDown={(event) => event.preventDefault()}>
         {options.map((option, index) => <button key={option} id={`${uid}-option-${index}`} type="button" role="option" aria-selected={index === activeIndex} tabIndex={-1}
           onMouseEnter={() => setActive(option)} onClick={() => choose(option)}>{option}</button>)}
       </div> : null}
