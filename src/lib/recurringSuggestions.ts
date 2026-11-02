@@ -6,7 +6,7 @@ export type RecurringSuggestion = { title: string; amount: number; day: number; 
 export function suggestRecurringPayments(transactions: Transaction[], payments: RecurringPayment[], today: string): RecurringSuggestion[] {
   const groups = new Map<string, Transaction[]>();
   for (const tx of transactions) {
-    if (tx.type !== "expense" || tx.currency || tx.purchase_currency || tx.id.startsWith("recurring_") || tx.date > today || !isValidYmd(tx.date) || !tx.category.trim()) continue;
+    if (tx.type !== "expense" || tx.exclude_from_statistics || tx.currency || tx.purchase_currency || tx.id.startsWith("recurring_") || tx.date > today || !isValidYmd(tx.date) || !tx.category.trim()) continue;
     const key = tx.category.trim().toLocaleLowerCase();
     const group = groups.get(key) ?? [];
     group.push(tx); groups.set(key, group);

@@ -9,6 +9,12 @@ fn parse_date(s: &str) -> Result<NaiveDate> {
     Ok(NaiveDate::parse_from_str(s, "%Y-%m-%d")?)
 }
 
+fn normalize_date(value: &str) -> Result<String, String> {
+    parse_date(value.trim())
+        .map(|date| date.format("%Y-%m-%d").to_string())
+        .map_err(|_| "Date must be valid and use YYYY-MM-DD format".to_string())
+}
+
 fn normalize_category(s: &str) -> String {
     s.trim().to_string()
 }
@@ -54,8 +60,7 @@ fn shift_to_previous_workday(date: NaiveDate) -> NaiveDate {
 }
 
 fn normalize_salary_config(raw: SalaryConfig) -> Result<SalaryConfig, String> {
-    let effective_from = raw.effective_from.trim().to_string();
-    parse_date(&effective_from).map_err(|e| e.to_string())?;
+    let effective_from = normalize_date(&raw.effective_from)?;
 
     let advance_percent = raw.advance_percent.clamp(0, 100);
     let advance_day = raw.advance_day.clamp(1, 31);
@@ -515,6 +520,20 @@ fn validate_transaction_currency(tx: &mut Transaction) -> Result<(), String> {
     Ok(())
 }
 
+fn normalize_transaction(tx: &mut Transaction) -> Result<(), String> {
+    tx.date = normalize_date(&tx.date)?;
+
+    tx.amount = tx.amount.saturating_abs();
+    validate_transaction_currency(tx)?;
+    tx.category = normalize_category(&tx.category);
+    tx.debt_person = tx
+        .debt_person
+        .as_ref()
+        .map(|p| normalize_person(p))
+        .filter(|p| !p.is_empty());
+    Ok(())
+}
+
 #[tauri::command]
 pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, String> {
     let mut data = load(&app)?;
@@ -525,21 +544,8 @@ pub fn add_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData, S
     if data.transactions.iter().any(|existing| existing.id == tx.id) {
         return Err("transaction id already exists".to_string());
     }
-    tx.date = parse_date(tx.date.trim())
-        .map_err(|_| "transaction date must be a valid date".to_string())?
-        .format("%Y-%m-%d")
-        .to_string();
-
-    // простая нормализация: расход всегда положительный amount, тип решает знак
-    tx.amount = tx.amount.saturating_abs();
-    validate_transaction_currency(&mut tx)?;
-    tx.category = normalize_category(&tx.category);
+    normalize_transaction(&mut tx)?;
     remember_category(&mut data.settings, &tx.r#type, &tx.category);
-    tx.debt_person = tx
-        .debt_person
-        .as_ref()
-        .map(|p| normalize_person(p))
-        .filter(|p| !p.is_empty());
 
     apply_debt_payment(&mut data, &mut tx);
     data.transactions.push(tx);
@@ -564,19 +570,8 @@ pub fn update_transaction(app: AppHandle, mut tx: Transaction) -> Result<AppData
     tx.was_planned = matches!(tx.r#type, TxType::Expense)
         && (tx.was_planned || matches!(previous_tx.r#type, TxType::PlannedExpense));
 
-    tx.date = parse_date(tx.date.trim())
-        .map_err(|_| "transaction date must be a valid date".to_string())?
-        .format("%Y-%m-%d")
-        .to_string();
-    tx.amount = tx.amount.saturating_abs();
-    validate_transaction_currency(&mut tx)?;
-    tx.category = normalize_category(&tx.category);
+    normalize_transaction(&mut tx)?;
     remember_category(&mut data.settings, &tx.r#type, &tx.category);
-    tx.debt_person = tx
-        .debt_person
-        .as_ref()
-        .map(|p| normalize_person(p))
-        .filter(|p| !p.is_empty());
 
     update_debt_payment(&mut data, &previous_tx, &mut tx);
     data.transactions[i] = tx;
@@ -604,6 +599,7 @@ pub fn upsert_salary_event(app: AppHandle, mut ev: SalaryEvent) -> Result<AppDat
     if ev.id.trim().is_empty() {
         ev.id = format!("sal_{}", Uuid::new_v4());
     }
+    ev.date = normalize_date(&ev.date)?;
     ev.amount = ev.amount.saturating_abs();
     ev.accrual_month = match ev.accrual_month.as_deref() {
         Some(raw) if raw.trim().is_empty() => None,
@@ -885,10 +881,9 @@ pub fn upsert_vacation(app: AppHandle, mut ev: Vacation) -> Result<AppData, Stri
         ev.id = format!("vac_{}", Uuid::new_v4());
     }
 
-    // базовая валидация дат: start <= end
-    let start = parse_date(&ev.start_date).map_err(|e| e.to_string())?;
-    let end = parse_date(&ev.end_date).map_err(|e| e.to_string())?;
-    if end < start {
+    ev.start_date = normalize_date(&ev.start_date)?;
+    ev.end_date = normalize_date(&ev.end_date)?;
+    if ev.end_date < ev.start_date {
         return Err("end_date must be >= start_date".to_string());
     }
 
@@ -917,6 +912,8 @@ pub fn upsert_off_day(app: AppHandle, mut ev: OffDay) -> Result<AppData, String>
     if ev.id.trim().is_empty() {
         ev.id = format!("off_{}", Uuid::new_v4());
     }
+
+    ev.date = normalize_date(&ev.date)?;
 
     let idx = data.off_days.iter().position(|x| x.id == ev.id);
     match idx {
@@ -1224,6 +1221,14 @@ pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudge
     calculate_daily_budget(&data, from)
 }
 
+fn checked_budget_add(left: i64, right: i64) -> Result<i64, String> {
+    left.checked_add(right).ok_or_else(|| "Budget amounts exceed the supported range".to_string())
+}
+
+fn checked_budget_sub(left: i64, right: i64) -> Result<i64, String> {
+    left.checked_sub(right).ok_or_else(|| "Budget amounts exceed the supported range".to_string())
+}
+
 fn calculate_daily_budget(data: &AppData, from: NaiveDate) -> Result<DailyBudgetResult, String> {
     let generated_start = data
         .settings
@@ -1273,8 +1278,8 @@ fn calculate_daily_budget(data: &AppData, from: NaiveDate) -> Result<DailyBudget
     for s in &all_salary_events {
         if let Ok(d) = parse_date(&s.date) {
             if d <= from {
-                balance += s.amount;
-                balance_for_limit += s.amount;
+                balance = checked_budget_add(balance, s.amount)?;
+                balance_for_limit = checked_budget_add(balance_for_limit, s.amount)?;
             }
         }
     }
@@ -1284,16 +1289,19 @@ fn calculate_daily_budget(data: &AppData, from: NaiveDate) -> Result<DailyBudget
             if d <= from {
                 match t.r#type {
                     TxType::Income if t.currency.is_none() => {
-                        balance += t.amount;
-                        balance_for_limit += t.amount;
+                        balance = checked_budget_add(balance, t.amount)?;
+                        balance_for_limit = checked_budget_add(balance_for_limit, t.amount)?;
                     }
                     TxType::Expense if t.currency.is_none() => {
-                        balance -= t.amount;
+                        balance = checked_budget_sub(balance, t.amount)?;
                         if d < from || t.was_planned {
-                            balance_for_limit -= t.amount;
+                            balance_for_limit = checked_budget_sub(balance_for_limit, t.amount)?;
                         }
                     }
-                    TxType::CurrencyExchange => { balance -= t.amount; balance_for_limit -= t.amount; }
+                    TxType::CurrencyExchange => {
+                        balance = checked_budget_sub(balance, t.amount)?;
+                        balance_for_limit = checked_budget_sub(balance_for_limit, t.amount)?;
+                    }
                     TxType::Income | TxType::Expense | TxType::PlannedExpense => {}
                 }
             }
@@ -1306,23 +1314,28 @@ fn calculate_daily_budget(data: &AppData, from: NaiveDate) -> Result<DailyBudget
         if let Ok(d) = parse_date(&t.date) {
             if d >= start && d <= end {
                 if let TxType::PlannedExpense = t.r#type {
-                    planned_reserve += t.amount;
+                    planned_reserve = checked_budget_add(planned_reserve, t.amount)?;
                 }
             }
         }
     }
 
-    planned_reserve = planned_reserve.saturating_add(recurring_occurrences(data, start, end).iter().map(|tx| tx.amount).sum::<i64>());
+    for tx in recurring_occurrences(data, start, end) {
+        planned_reserve = checked_budget_add(planned_reserve, tx.amount)?;
+    }
 
     // Подушка и резерв по запланированным расходам.
-    let blocked_amount = data.settings.min_balance + data.piggy_bank_amount + planned_reserve;
+    let blocked_amount = checked_budget_add(
+        checked_budget_add(data.settings.min_balance, data.piggy_bank_amount)?,
+        planned_reserve,
+    )?;
 
-    let mut available = balance - blocked_amount;
+    let mut available = checked_budget_sub(balance, blocked_amount)?;
     if available < 0 {
         available = 0;
     }
 
-    let mut available_for_limit = balance_for_limit - blocked_amount;
+    let mut available_for_limit = checked_budget_sub(balance_for_limit, blocked_amount)?;
     if available_for_limit < 0 {
         available_for_limit = 0;
     }
@@ -1371,6 +1384,27 @@ mod tests {
         assert_eq!(data.debts[0].amount, 20_000);
         assert_eq!(data.debts[1].direction, DebtDirection::Payable);
         assert_eq!(data.debts[1].amount, 10_000);
+    }
+
+    #[test]
+    fn input_dates_are_validated_and_saved_in_backup_format() {
+        assert_eq!(normalize_date(" 2026-3-5 ").unwrap(), "2026-03-05");
+        assert!(normalize_date("2026-02-30").is_err());
+        assert!(normalize_date("not-a-date").is_err());
+    }
+
+    #[test]
+    fn budget_rejects_overflow_instead_of_wrapping() {
+        let mut data = AppData::default();
+        let mut income = debt_expense(i64::MAX);
+        income.date = "2026-03-01".into();
+        income.r#type = TxType::Income;
+        income.debt_person = None;
+        data.transactions.push(income.clone());
+        income.amount = 1;
+        data.transactions.push(income);
+        data.salary_events.push(SalaryEvent { id: "salary".into(), date: "2026-03-10".into(), amount: 0, title: "Salary".into(), accrual_month: None, kind: Default::default() });
+        assert!(calculate_daily_budget(&data, NaiveDate::from_ymd_opt(2026, 3, 1).unwrap()).is_err());
     }
 
     #[test]

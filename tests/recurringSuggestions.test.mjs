@@ -17,3 +17,8 @@ test("keeps the original day when the next month is shorter", () => {
   const history = ["2025-10-31", "2025-12-31", "2026-01-31"].map(date => tx(date));
   assert.equal(suggestRecurringPayments(history, [], "2026-02-01")[0].startDate, "2026-03-31");
 });
+
+test("does not suggest balance adjustments excluded from statistics", () => {
+  const history = dates.map(date => ({ ...tx(date), exclude_from_statistics: true }));
+  assert.deepEqual(suggestRecurringPayments(history, [], "2026-03-20"), []);
+});
