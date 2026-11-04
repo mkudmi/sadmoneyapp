@@ -2019,16 +2019,17 @@ export default function App() {
         </div>
         <div style={{ paddingRight: 38 }}>
         {forecastDate === selectedDate && selectedDate > today && (
-          <div aria-live="polite" style={{ marginTop: 8 }}>
+          <div aria-live="polite" style={{ margin: "8px 0 12px", padding: "10px 12px", border: "1px solid #c9daf1", borderRadius: 10, background: "#f1f6fd" }}>
             {forecastError ? <div role="alert">Unable to calculate the forecast. Try again.</div> : forecast?.date === selectedDate ? (
               forecast.result.next_salary_date ? <>
-                <b>Forecast for {formatDateForDisplay(selectedDate, dateFormat)}</b>
+                <div style={{ marginBottom: 6 }}><b>Forecast for {formatDateForDisplay(selectedDate, dateFormat)}</b></div>
                 <SelectedDateBudgetSummary budget={forecast.result} availableForSpending={forecast.result.available} dailySpendLimit={forecast.result.per_day - (data?.transactions ?? []).filter((tx) => tx.date === selectedDate && tx.type === "expense" && !tx.currency && !tx.was_planned).reduce((sum, tx) => sum + tx.amount, 0)} today={selectedDate} />
-                <div style={{ fontSize: 12, opacity: 0.75 }}>Includes scheduled income and expenses; assumes no other future spending.</div>
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>Includes scheduled income and expenses; assumes no other future spending.</div>
               </> : <div>No future salary is scheduled, so the daily limit cannot be calculated.</div>
             ) : <div>Calculating forecast…</div>}
           </div>
         )}
+        {forecastDate === selectedDate && selectedDate > today && <div style={{ marginBottom: 4, fontSize: 12, opacity: 0.75 }}>As of today</div>}
         {budgetError ? (
           <div role="alert" style={{ marginTop: 12 }}>
             <p>Unable to calculate the daily budget.</p>
