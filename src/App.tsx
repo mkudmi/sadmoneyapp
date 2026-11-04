@@ -121,6 +121,10 @@ export default function App() {
   const [year, setYear] = useState(() => parseYmdLocal(today).getFullYear());
   const [month0, setMonth0] = useState(() => parseYmdLocal(today).getMonth()); // 0..11
   const [selectedDate, setSelectedDate] = useState(today);
+  const [forecastDate, setForecastDate] = useState<string | null>(null);
+  const [forecastAttempt, setForecastAttempt] = useState(0);
+  const [forecast, setForecast] = useState<{ date: string; result: Awaited<ReturnType<typeof api.forecastDailyBudget>> } | null>(null);
+  const [forecastError, setForecastError] = useState(false);
   const locale = "en-US";
   const [budget, setBudget] = useState<{ per_day: number; days: number; next_salary_date: string | null; available: number } | null>(null);
   const piggyBankAmount = Math.max(0, data?.piggyBankAmount ?? 0);
@@ -357,6 +361,17 @@ export default function App() {
   const dailySpendLimitFromAvailable = budget
     ? budget.per_day - spentToday
     : 0;
+
+  useEffect(() => {
+    if (!forecastDate || forecastDate !== selectedDate || selectedDate <= today || !data) return;
+    let cancelled = false;
+    setForecast(null);
+    setForecastError(false);
+    api.forecastDailyBudget(today, selectedDate)
+      .then((result) => { if (!cancelled) setForecast({ date: selectedDate, result }); })
+      .catch(() => { if (!cancelled) setForecastError(true); });
+    return () => { cancelled = true; };
+  }, [forecastDate, forecastAttempt, selectedDate, today, data]);
 
 
   const monthDays = useMemo(() => {
@@ -1977,6 +1992,24 @@ export default function App() {
             {selectedDateStatus.label}
           </div>
         </div>
+        {selectedDate > today && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+            <button type="button" onClick={() => { setForecast(null); setForecastError(false); setForecastDate(selectedDate); setForecastAttempt((attempt) => attempt + 1); }}>
+              Look into future
+            </button>
+          </div>
+        )}
+        {forecastDate === selectedDate && selectedDate > today && (
+          <div aria-live="polite" style={{ marginTop: 8 }}>
+            {forecastError ? <div role="alert">Unable to calculate the forecast. Try again.</div> : forecast?.date === selectedDate ? (
+              forecast.result.next_salary_date ? <>
+                <b>Forecast for {formatDateForDisplay(selectedDate, dateFormat)}</b>
+                <SelectedDateBudgetSummary budget={forecast.result} availableForSpending={forecast.result.available} dailySpendLimit={forecast.result.per_day - (data?.transactions ?? []).filter((tx) => tx.date === selectedDate && tx.type === "expense" && !tx.currency && !tx.was_planned).reduce((sum, tx) => sum + tx.amount, 0)} today={selectedDate} />
+                <div style={{ fontSize: 12, opacity: 0.75 }}>Includes scheduled income and expenses; assumes no other future spending.</div>
+              </> : <div>No future salary is scheduled, so the daily limit cannot be calculated.</div>
+            ) : <div>Calculating forecast…</div>}
+          </div>
+        )}
         {budgetError ? (
           <div role="alert" style={{ marginTop: 12 }}>
             <p>Unable to calculate the daily budget.</p>

@@ -1221,6 +1221,31 @@ pub fn calc_daily_budget(app: AppHandle, from_date: String) -> Result<DailyBudge
     calculate_daily_budget(&data, from)
 }
 
+#[tauri::command]
+pub fn forecast_daily_budget(app: AppHandle, as_of_date: String, target_date: String) -> Result<DailyBudgetResult, String> {
+    let as_of = parse_date(&as_of_date).map_err(|_| "Invalid date")?;
+    let target = parse_date(&target_date).map_err(|_| "Invalid date")?;
+    if target <= as_of || (target - as_of).num_days() > 3650 {
+        return Err("Invalid forecast date".into());
+    }
+    forecast_budget(&load(&app)?, as_of, target)
+}
+
+fn forecast_budget(data: &AppData, as_of: NaiveDate, target: NaiveDate) -> Result<DailyBudgetResult, String> {
+    let mut projected = data.clone();
+    let recurring = recurring_occurrences(data, as_of, target.pred_opt().unwrap_or(target));
+    projected.transactions.extend(recurring);
+    for tx in &mut projected.transactions {
+        if matches!(tx.r#type, TxType::PlannedExpense)
+            && parse_date(&tx.date).is_ok_and(|date| date >= as_of && date < target)
+        {
+            tx.r#type = TxType::Expense;
+            tx.was_planned = true;
+        }
+    }
+    calculate_daily_budget(&projected, target)
+}
+
 fn checked_budget_add(left: i64, right: i64) -> Result<i64, String> {
     left.checked_add(right).ok_or_else(|| "Budget amounts exceed the supported range".to_string())
 }
@@ -1424,6 +1449,25 @@ mod tests {
         assert_eq!(after.available, before.available);
         assert_eq!(after.per_day, before.per_day);
         assert!(recurring_occurrences(&data, today, today).is_empty());
+    }
+
+    #[test]
+    fn forecast_accounts_for_prior_and_future_planned_payments() {
+        let mut data = AppData::default();
+        data.settings.min_balance = 0;
+        let mut income = debt_expense(100_000);
+        income.date = "2026-03-01".into();
+        income.r#type = TxType::Income;
+        data.transactions.push(income);
+        let mut planned = debt_expense(10_000);
+        planned.date = "2026-03-06".into();
+        planned.r#type = TxType::PlannedExpense;
+        data.transactions.push(planned);
+        data.recurring_payments.push(RecurringPayment { id: "rent".into(), title: "Rent".into(), amount: 20_000, start_date: "2026-03-07".into(), frequency: RecurringFrequency::Monthly });
+        data.salary_events.push(SalaryEvent { id: "salary".into(), date: "2026-03-15".into(), amount: 100_000, title: "Salary".into(), accrual_month: None, kind: Default::default() });
+        let result = forecast_budget(&data, NaiveDate::from_ymd_opt(2026, 3, 5).unwrap(), NaiveDate::from_ymd_opt(2026, 3, 8).unwrap()).unwrap();
+        assert_eq!(result.available, 70_000);
+        assert_eq!(result.per_day, 70_000 / 7);
     }
 
     #[test]

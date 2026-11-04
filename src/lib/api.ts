@@ -161,6 +161,7 @@ export const api = {
   applyDailyLimitCarryover: (amount: number, processedDate: string) =>
     invoke<AppData>("apply_daily_limit_carryover", { amount, processedDate }),
   calcDailyBudget: (fromDate: string) => invoke<DailyBudgetResult>("calc_daily_budget", { fromDate }),
+  forecastDailyBudget: (asOfDate: string, targetDate: string) => invoke<DailyBudgetResult>("forecast_daily_budget", { asOfDate, targetDate }),
   loadConsultantProductionCalendar: (year: number) =>
     invoke<RussianProductionCalendarYear>("load_consultant_production_calendar", { year }),
 };

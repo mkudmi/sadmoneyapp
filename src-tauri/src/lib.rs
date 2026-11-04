@@ -34,6 +34,7 @@ pub fn run() {
             commands::import_backup,
             commands::import_backup_from_path,
             commands::calc_daily_budget,
+            commands::forecast_daily_budget,
             commands::delete_salary_event,
             commands::set_piggy_bank_amount,
             commands::set_savings_goal,
