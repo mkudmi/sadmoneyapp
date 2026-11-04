@@ -1975,6 +1975,25 @@ export default function App() {
           onClick={() => setBalanceSettingsOpen(true)} style={{ position: "absolute", right: 12, top: 12, width: 32, height: 32, minHeight: 32, padding: 0 }}>
           <AppIcon name="settings" />
         </button>
+        {selectedDate > today && (
+          <button type="button" className="icon-button"
+            aria-label={forecastDate === selectedDate ? "Hide forecast" : "Look into future"}
+            title={forecastDate === selectedDate ? "Hide forecast" : "Look into future"}
+            aria-pressed={forecastDate === selectedDate}
+            onClick={() => {
+              if (forecastDate === selectedDate) {
+                setForecastDate(null);
+              } else {
+                setForecast(null);
+                setForecastError(false);
+                setForecastDate(selectedDate);
+                setForecastAttempt((attempt) => attempt + 1);
+              }
+            }}
+            style={{ position: "absolute", right: 12, top: 50, width: 32, height: 32, minHeight: 32, padding: 0 }}>
+            <AppIcon name="sparkles" />
+          </button>
+        )}
         <div className="selected-date-heading" style={{ paddingRight: 38 }}>
           <div><b>{"Selected date:"}</b> <span style={{ whiteSpace: "nowrap" }}>{formatDateForDisplay(selectedDate, dateFormat)}</span></div>
           <div
@@ -1992,13 +2011,7 @@ export default function App() {
             {selectedDateStatus.label}
           </div>
         </div>
-        {selectedDate > today && (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-            <button type="button" onClick={() => { setForecast(null); setForecastError(false); setForecastDate(selectedDate); setForecastAttempt((attempt) => attempt + 1); }}>
-              Look into future
-            </button>
-          </div>
-        )}
+        <div style={{ paddingRight: selectedDate > today ? 38 : 0 }}>
         {forecastDate === selectedDate && selectedDate > today && (
           <div aria-live="polite" style={{ marginTop: 8 }}>
             {forecastError ? <div role="alert">Unable to calculate the forecast. Try again.</div> : forecast?.date === selectedDate ? (
@@ -2021,6 +2034,7 @@ export default function App() {
           dailySpendLimit={dailySpendLimitFromAvailable}
           today={today}
         />}
+        </div>
         <VisibleCurrencyBalances transactions={data?.transactions ?? []} today={today} dateFormat={dateFormat}
           currencies={data?.settings.visibleBalanceCurrencies ?? defaultBalanceCurrencies(data?.transactions ?? [], today)} />
         {recurringError && <p role="alert">Unable to load recurring payments. Try changing the month or reopening the app.</p>}
