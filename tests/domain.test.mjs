@@ -7,6 +7,20 @@ const money = await loadAppModule("/src/lib/money.ts");
 const plannedExpenseEstimate = await loadAppModule("/src/lib/plannedExpenseEstimate.ts");
 const salary = await loadAppModule("/src/lib/salary.ts");
 const savingsPlan = await loadAppModule("/src/lib/savingsPlan.ts");
+const currencyBalance = await loadAppModule("/src/lib/currencyBalance.ts");
+
+test("currency budget rates use recorded exchanges and connected purchase rates", () => {
+  const transactions = [
+    { type: "currency_exchange", date: "2026-01-01", currency: "USD", amount: 10000, foreign_amount: 100 },
+    { type: "expense", date: "2026-01-02", currency: "USD", amount: 100, purchase_currency: "ILS", purchase_amount: 300 },
+    { type: "currency_exchange", date: "2026-01-04", currency: "EUR", amount: 10000, foreign_amount: 100 },
+  ];
+  const rates = currencyBalance.rubCurrencyRates(transactions, "2026-01-03");
+  assert.deepEqual(rates.map(({ target }) => target), ["ILS", "USD"]);
+  assert.equal(rates.find(({ target }) => target === "USD").rate, 0.01);
+  assert.equal(rates.find(({ target }) => target === "ILS").rate, 0.03);
+  assert.equal(rates.find(({ target }) => target === "ILS").date, "2026-01-01");
+});
 
 test("savings card limit follows income and stays between 1,000 and 5,000 rubles", () => {
   const base = {

@@ -1,5 +1,6 @@
 import { RecurringPaymentsModal } from "./components/RecurringPaymentsModal";
 import { BalanceCurrencySettings } from "./components/BalanceCurrencySettings";
+import { CurrencyBudgetModal } from "./components/CurrencyBudgetModal";
 import { VisibleCurrencyBalances } from "./components/VisibleCurrencyBalances";
 import { PurchaseCurrencyFields } from "./components/PurchaseCurrencyFields";
 import { SelectInput } from "./components/SelectInput";
@@ -544,6 +545,7 @@ export default function App() {
   const [trendsModalOpen, setTrendsModalOpen] = useState(false);
   const [currencyHistoryOpen, setCurrencyHistoryOpen] = useState(false);
   const [balanceSettingsOpen, setBalanceSettingsOpen] = useState(false);
+  const [currencyBudgetOpen, setCurrencyBudgetOpen] = useState(false);
   const [yearSummaryModalOpen, setYearSummaryModalOpen] = useState(false);
   const [trendsCategoryQuery, setTrendsCategoryQuery] = useState("");
   const [trendsIncomeCategoryQuery, setTrendsIncomeCategoryQuery] = useState("");
@@ -1994,6 +1996,10 @@ export default function App() {
             <AppIcon name="sparkles" />
           </button>
         )}
+        <button type="button" className="icon-button" aria-label="Budget in currencies" title="Budget in currencies"
+          onClick={() => setCurrencyBudgetOpen(true)} style={{ position: "absolute", right: 12, top: selectedDate > today ? 88 : 50, width: 32, height: 32, minHeight: 32, padding: 0 }}>
+          <AppIcon name="dollar" />
+        </button>
         <div className="selected-date-heading" style={{ paddingRight: 38 }}>
           <div><b>{"Selected date:"}</b> <span style={{ whiteSpace: "nowrap" }}>{formatDateForDisplay(selectedDate, dateFormat)}</span></div>
           <div
@@ -2011,7 +2017,7 @@ export default function App() {
             {selectedDateStatus.label}
           </div>
         </div>
-        <div style={{ paddingRight: selectedDate > today ? 38 : 0 }}>
+        <div style={{ paddingRight: 38 }}>
         {forecastDate === selectedDate && selectedDate > today && (
           <div aria-live="polite" style={{ marginTop: 8 }}>
             {forecastError ? <div role="alert">Unable to calculate the forecast. Try again.</div> : forecast?.date === selectedDate ? (
@@ -2034,9 +2040,9 @@ export default function App() {
           dailySpendLimit={dailySpendLimitFromAvailable}
           today={today}
         />}
-        </div>
         <VisibleCurrencyBalances transactions={data?.transactions ?? []} today={today} dateFormat={dateFormat}
           currencies={data?.settings.visibleBalanceCurrencies ?? defaultBalanceCurrencies(data?.transactions ?? [], today)} />
+        </div>
         {recurringError && <p role="alert">Unable to load recurring payments. Try changing the month or reopening the app.</p>}
         <SelectedDateTransactionsList
           selectedDate={selectedDate}
@@ -2652,6 +2658,12 @@ export default function App() {
         onClose={() => setBalanceSettingsOpen(false)}
         onSave={async (currencies) => { setData(await api.setVisibleBalanceCurrencies(currencies)); }} /> : null}
       <CurrencyHistoryModal open={currencyHistoryOpen} transactions={data?.transactions ?? []} today={today} dateFormat={dateFormat} onClose={() => setCurrencyHistoryOpen(false)} />
+      {currencyBudgetOpen && <CurrencyBudgetModal
+        transactions={data?.transactions ?? []} today={today} dateFormat={dateFormat}
+        budgetDate={forecastDate === selectedDate && forecast?.date === selectedDate ? selectedDate : today}
+        available={forecastDate === selectedDate && forecast?.date === selectedDate ? (forecast.result.next_salary_date ? forecast.result.available : null) : (budget?.next_salary_date ? availableForSpending : null)}
+        dailyLimit={forecastDate === selectedDate && forecast?.date === selectedDate ? (forecast.result.next_salary_date ? forecast.result.per_day - (data?.transactions ?? []).filter((tx) => tx.date === selectedDate && tx.type === "expense" && !tx.currency && !tx.was_planned).reduce((sum, tx) => sum + tx.amount, 0) : null) : (budget?.next_salary_date ? dailySpendLimitFromAvailable : null)}
+        onClose={() => setCurrencyBudgetOpen(false)} />}
 
       {txModalOpen ? (
         <div

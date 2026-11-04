@@ -49,6 +49,29 @@ export function recentCrossRates(transactions: Transaction[], throughDate: strin
   return [...latest.values()].sort((a, b) => a.source.localeCompare(b.source) || a.target.localeCompare(b.target));
 }
 
+/** Most recent recorded rates reachable from RUB, with direct conversions preferred. */
+export function rubCurrencyRates(transactions: Transaction[], throughDate: string): CrossRate[] {
+  const exchanges = Object.entries(recentCurrencyExchanges(transactions, throughDate)).flatMap(([currency, items]) => {
+    const tx = items[0];
+    return tx.amount > 0 && tx.foreign_amount ? [{ source: "RUB", target: currency, rate: tx.foreign_amount / tx.amount, date: tx.date }] : [];
+  });
+  const edges = [...exchanges, ...recentCrossRates(transactions, throughDate)]
+    .flatMap((rate) => [rate, { source: rate.target, target: rate.source, rate: 1 / rate.rate, date: rate.date }])
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const found = new Map<string, CrossRate>([["RUB", { source: "RUB", target: "RUB", rate: 1, date: throughDate }]]);
+  const queue = ["RUB"];
+  for (let index = 0; index < queue.length; index++) {
+    const source = queue[index];
+    const base = found.get(source)!;
+    for (const edge of edges) {
+      if (edge.source !== source || found.has(edge.target)) continue;
+      found.set(edge.target, { source: "RUB", target: edge.target, rate: base.rate * edge.rate, date: base.date < edge.date ? base.date : edge.date });
+      queue.push(edge.target);
+    }
+  }
+  return [...found.values()].filter((rate) => rate.target !== "RUB").sort((a, b) => a.target.localeCompare(b.target));
+}
+
 export function balanceCurrencyOptions(transactions: Transaction[], throughDate: string): string[] {
   const observed = transactions.filter((tx) => tx.date <= throughDate).flatMap((tx) => [tx.currency, tx.purchase_currency].filter((value): value is string => Boolean(value) && value !== "RUB"));
   return [...new Set([...POPULAR_CURRENCIES, ...observed])].sort();
