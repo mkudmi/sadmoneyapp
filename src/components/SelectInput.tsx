@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useDropdownPlacement } from "../hooks/useDropdownPlacement";
 import { useDismissible } from "../hooks/useDismissible";
 import { AppIcon } from "./AppIcon";
@@ -11,10 +12,15 @@ export function SelectInput({ label, value, options, onChange }: Props) {
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const { anchorRef, dropdownStyle } = useDropdownPlacement(open, options.length);
+  const { anchorRef, dropdownStyle } = useDropdownPlacement(open, options.length, true);
   useDismissible(open, () => setOpen(false), `[data-select-id="${id}"]`);
   useEffect(() => {
-    if (open) listRef.current?.children[active]?.scrollIntoView({ block: "nearest" });
+    const list = listRef.current;
+    const option = list?.children[active] as HTMLElement | undefined;
+    if (open && list && option) {
+      if (option.offsetTop < list.scrollTop) list.scrollTop = option.offsetTop;
+      else if (option.offsetTop + option.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = option.offsetTop + option.offsetHeight - list.clientHeight;
+    }
   }, [active, open]);
 
   function show() {
@@ -50,11 +56,11 @@ export function SelectInput({ label, value, options, onChange }: Props) {
       }}>
       <span>{value}</span><AppIcon name="chevronDown" />
     </button>
-    {open ? <div ref={listRef} id={`${id}-list`} role="listbox" aria-labelledby={`${id}-label`} className="menu-pop autocomplete-options" style={dropdownStyle}
+    {open ? createPortal(<div ref={listRef} data-select-id={id} id={`${id}-list`} role="listbox" aria-labelledby={`${id}-label`} className="menu-pop autocomplete-options" style={dropdownStyle}
       onMouseDown={(event) => event.preventDefault()}>
       {options.map((option, index) => <button key={option} id={`${id}-option-${index}`} type="button" role="option"
         aria-selected={option === value} data-active={index === active} tabIndex={-1}
         onMouseEnter={() => setActive(index)} onClick={() => choose(option)}>{option}</button>)}
-    </div> : null}
+    </div>, document.body) : null}
   </div>;
 }

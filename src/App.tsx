@@ -956,13 +956,14 @@ export default function App() {
         purchase_amount: txModalType === "expense" && purchaseCurrency ? toKop(purchaseAmount) : null,
       };
 
-      const canMergeByCategory = !tx.currency && !tx.purchase_currency && (tx.type === "income" || tx.type === "expense");
+      const canMergeByCategory = !tx.purchase_currency && (tx.type === "income" || tx.type === "expense");
       const categoryKey = normalizeCategoryInput(tx.category).toLowerCase();
       const debtPersonKey = normalizeCategoryInput(tx.debt_person ?? "").toLowerCase();
 
       const existingTx = canMergeByCategory
         ? (data?.transactions ?? []).find((existing) => {
-            if (existing.exclude_from_statistics || existing.was_planned || existing.currency || existing.purchase_currency) return false;
+            if (existing.exclude_from_statistics || existing.was_planned || existing.purchase_currency) return false;
+            if ((existing.currency?.trim().toUpperCase() || "RUB") !== (tx.currency || "RUB")) return false;
             if (existing.date !== tx.date || existing.type !== tx.type) return false;
             if (normalizeCategoryInput(existing.category).toLowerCase() !== categoryKey) return false;
             if (shouldUseDebtPerson) {
