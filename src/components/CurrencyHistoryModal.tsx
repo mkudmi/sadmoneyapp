@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 import type { Transaction } from "../lib/api";
 import type { DateFormat } from "../lib/date";
 import { formatDateForDisplay } from "../lib/date";
@@ -7,10 +7,12 @@ import { rub } from "../lib/money";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import { AppIcon } from "./AppIcon";
 import { CurrencyRateChart } from "./CurrencyRateChart";
+import { CurrencyCalculatorModal } from "./CurrencyCalculatorModal";
 
 type Props = { open: boolean; transactions: Transaction[]; today: string; dateFormat: DateFormat; onClose: () => void };
 
 export function CurrencyHistoryModal({ open, transactions, today, dateFormat, onClose }: Props) {
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
   const dialogRef = useDialogFocus(open);
   const titleId = useId();
   if (!open) return null;
@@ -18,7 +20,7 @@ export function CurrencyHistoryModal({ open, transactions, today, dateFormat, on
   const currencies = Object.keys(groups).sort();
   const crossRates = recentCrossRates(transactions, today);
   const balances = currencyBalances(transactions, today);
-  return <div className="modal-backdrop"
+  return <><div className="modal-backdrop"
     style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 5000,
       display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
     onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -27,7 +29,7 @@ export function CurrencyHistoryModal({ open, transactions, today, dateFormat, on
       onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <b id={titleId}>Currency</b>
-        <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><AppIcon name="close" /></button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}><button type="button" onClick={() => setCalculatorOpen(true)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}><AppIcon name="calculator" /> Calculator</button><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><AppIcon name="close" /></button></div>
       </div>
       <CurrencyRateChart transactions={transactions} today={today} dateFormat={dateFormat} />
       {crossRates.length > 0 ? <section style={{ marginTop: 16 }}>
@@ -54,5 +56,5 @@ export function CurrencyHistoryModal({ open, transactions, today, dateFormat, on
         </div>
       </section>)}
     </div>
-  </div>;
+  </div>{calculatorOpen && <CurrencyCalculatorModal transactions={transactions} today={today} dateFormat={dateFormat} onClose={() => setCalculatorOpen(false)} />}</>;
 }

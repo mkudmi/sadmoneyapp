@@ -250,3 +250,22 @@ test("implied ruble rate follows recorded exchange and cross-rate changes withou
   assert.equal(impliedRubRateHistory(entries, "2026-08-01")["ILS:USD"], undefined);
   assert.equal(impliedRubRateHistory(entries, "2026-08-04")["ILS:USD"][2].rate, 30);
 });
+
+
+test("currency calculator finds direct, inverse and intermediate recorded rates", async () => {
+  const { currencyConversionRate } = await loadAppModule("/src/lib/currencyBalance.ts");
+  const entries = [
+    { ...transaction("2026-08-01", 9000, "currency_exchange"), currency: "USD", foreign_amount: 100 },
+    { ...transaction("2026-08-02", 100), currency: "USD", purchase_currency: "ILS", purchase_amount: 300 },
+    { ...transaction("2026-08-03", 100), currency: "USD", purchase_currency: "EUR", purchase_amount: 90 },
+    { ...transaction("2026-08-05", 100), currency: "USD", purchase_currency: "ILS", purchase_amount: 400 },
+  ];
+  const rate = (from, to) => currencyConversionRate(entries, "2026-08-03", from, to);
+  assert.equal(rate("USD", "ILS").rate, 3);
+  assert.equal(rate("ILS", "USD").rate, 1 / 3);
+  assert.equal(rate("ILS", "RUB").rate, 30);
+  assert.equal(rate("ILS", "EUR").rate, 0.3);
+  assert.equal(rate("ILS", "RUB").date, "2026-08-01");
+  assert.equal(rate("USD", "USD").rate, 1);
+  assert.equal(rate("EUR", "JPY"), null);
+});

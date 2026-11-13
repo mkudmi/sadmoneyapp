@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 /** Keep a dropdown inside the visible viewport and any scrolling ancestor. */
 export function useDropdownPlacement(open: boolean, optionCount: number, portal = false) {
   const anchorRef = useRef<HTMLDivElement>(null);
-  const [placement, setPlacement] = useState({ above: false, maxHeight: 180, top: 0, left: 0, width: 0 });
+  const [placement, setPlacement] = useState({ above: false, maxHeight: 180, top: 0, left: 0, width: 0, zIndex: 5001 });
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -23,13 +23,20 @@ export function useDropdownPlacement(open: boolean, optionCount: number, portal 
           bottom = Math.min(bottom, bounds.top + parent.clientTop + parent.clientHeight);
         }
       }
+      let zIndex = 5001;
+      if (portal) {
+        for (let parent = anchor!.parentElement; parent; parent = parent.parentElement) {
+          const ancestorZIndex = Number.parseInt(window.getComputedStyle(parent).zIndex, 10);
+          if (Number.isFinite(ancestorZIndex)) zIndex = Math.max(zIndex, ancestorZIndex + 1);
+        }
+      }
       const gap = 4;
       const below = Math.max(0, bottom - rect.bottom - gap);
       const above = Math.max(0, rect.top - top - gap);
       const desired = Math.min(180, optionCount * 34 + 8);
       const openAbove = below < desired && above > below;
       const maxHeight = Math.max(0, Math.min(180, openAbove ? above : below));
-      const next = { above: openAbove, maxHeight, top: openAbove ? rect.top - gap - maxHeight : rect.bottom + gap, left: rect.left, width: rect.width };
+      const next = { above: openAbove, maxHeight, top: openAbove ? rect.top - gap - maxHeight : rect.bottom + gap, left: rect.left, width: rect.width, zIndex };
       setPlacement((current) => Object.keys(next).every((key) => current[key as keyof typeof next] === next[key as keyof typeof next]) ? current : next);
     }
 
@@ -40,7 +47,7 @@ export function useDropdownPlacement(open: boolean, optionCount: number, portal 
   }, [open, optionCount, portal]);
 
   const dropdownStyle: CSSProperties = portal
-    ? { position: "fixed", top: placement.top, left: placement.left, right: "auto", width: placement.width, maxHeight: placement.maxHeight, zIndex: 5001 }
+    ? { position: "fixed", top: placement.top, left: placement.left, right: "auto", width: placement.width, maxHeight: placement.maxHeight, zIndex: placement.zIndex }
     : placement.above
     ? { top: "auto", bottom: "calc(100% + 4px)", maxHeight: placement.maxHeight }
     : { maxHeight: placement.maxHeight };

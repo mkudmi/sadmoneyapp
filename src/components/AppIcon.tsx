@@ -5,6 +5,7 @@ import {
   IconChartDots,
   IconCurrencyDollar,
   IconCalendarStats,
+  IconCalculator,
   IconArrowsExchange,
   IconChevronLeft,
   IconChevronRight,
@@ -27,6 +28,7 @@ export type AppIconName =
   | "add"
   | "beach"
   | "chart"
+  | "calculator"
   | "currency"
   | "dollar"
   | "yearSummary"
@@ -66,6 +68,8 @@ export function AppIcon({ name, size = 16, stroke = 1.8, style }: AppIconProps) 
       return <IconPlus {...commonProps} />;
     case "beach":
       return <IconBeach {...commonProps} />;
+    case "calculator":
+      return <IconCalculator {...commonProps} />;
     case "chart":
       return <IconChartDots {...commonProps} />;
     case "currency":

@@ -129,6 +129,31 @@ export function rubCurrencyRates(transactions: Transaction[], throughDate: strin
   return [...found.values()].filter((rate) => rate.target !== "RUB").sort((a, b) => a.target.localeCompare(b.target));
 }
 
+/** Find a recorded conversion path, preferring the fewest currency pairs. */
+export function currencyConversionRate(transactions: Transaction[], throughDate: string, source: string, target: string): CrossRate | null {
+  if (source === target) return { source, target, rate: 1, date: throughDate };
+  const exchanges = Object.entries(recentCurrencyExchanges(transactions, throughDate)).flatMap(([currency, items]) => {
+    const tx = items[0];
+    return currency !== "RUB" && tx.amount > 0 && tx.foreign_amount ? [{ source: "RUB", target: currency, rate: tx.foreign_amount / tx.amount, date: tx.date }] : [];
+  });
+  const edges = [...exchanges, ...recentCrossRates(transactions, throughDate)]
+    .flatMap((item) => [item, { source: item.target, target: item.source, rate: 1 / item.rate, date: item.date }])
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const queue: CrossRate[] = [{ source, target: source, rate: 1, date: throughDate }];
+  const visited = new Set([source]);
+  for (let index = 0; index < queue.length; index++) {
+    const current = queue[index];
+    for (const edge of edges) {
+      if (edge.source !== current.target || visited.has(edge.target)) continue;
+      const next = { source, target: edge.target, rate: current.rate * edge.rate, date: current.date < edge.date ? current.date : edge.date };
+      if (edge.target === target) return next;
+      visited.add(edge.target);
+      queue.push(next);
+    }
+  }
+  return null;
+}
+
 export function balanceCurrencyOptions(transactions: Transaction[], throughDate: string): string[] {
   const observed = transactions.filter((tx) => tx.date <= throughDate).flatMap((tx) => [tx.currency, tx.purchase_currency].filter((value): value is string => Boolean(value) && value !== "RUB"));
   return [...new Set([...POPULAR_CURRENCIES, ...observed])].sort();
