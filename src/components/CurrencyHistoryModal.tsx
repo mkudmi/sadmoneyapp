@@ -6,6 +6,7 @@ import { currencyBalances, exchangeRate, recentCrossRates, recentCurrencyExchang
 import { rub } from "../lib/money";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import { AppIcon } from "./AppIcon";
+import { CurrencyRateChart } from "./CurrencyRateChart";
 
 type Props = { open: boolean; transactions: Transaction[]; today: string; dateFormat: DateFormat; onClose: () => void };
 
@@ -28,6 +29,7 @@ export function CurrencyHistoryModal({ open, transactions, today, dateFormat, on
         <b id={titleId}>Currency</b>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><AppIcon name="close" /></button>
       </div>
+      <CurrencyRateChart transactions={transactions} today={today} dateFormat={dateFormat} />
       {crossRates.length > 0 ? <section style={{ marginTop: 16 }}>
         <b>Cross rates from purchases</b>
         <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>Estimated from your most recent purchase for each currency pair.</div>

@@ -1,15 +1,23 @@
 import { useMemo, useState } from "react";
-import { rub } from "../lib/money";
+import { formatForeignAmount, rub } from "../lib/money";
+import type { MonthlyCategory } from "../lib/monthlySummary";
 import { AppIcon } from "./AppIcon";
 
-export type TopCategoryItem = {
-  category: string;
-  amount: number;
-  type: "income" | "expense";
-};
+function CategoryAmounts({ item }: { item: MonthlyCategory }) {
+  const sign = item.type === "income" ? "+" : "-";
+  const foreignAmounts = Object.entries(item.foreignAmounts ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  return (
+    <div style={{ textAlign: "right", overflowWrap: "anywhere" }}>
+      {(item.amount !== 0 || foreignAmounts.length === 0) && <div><b>{sign} {rub(item.amount)}</b></div>}
+      {foreignAmounts.map(([currency, amount]) => (
+        <div key={currency}><b>{sign} {formatForeignAmount(amount, currency)}</b></div>
+      ))}
+    </div>
+  );
+}
 
 type TopCategoriesPanelProps = {
-  categories: TopCategoryItem[];
+  categories: MonthlyCategory[];
 };
 
 export function TopCategoriesPanel({ categories }: TopCategoriesPanelProps) {
@@ -63,8 +71,8 @@ export function TopCategoriesPanel({ categories }: TopCategoriesPanelProps) {
                 <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   <b>{idx + 1}.</b> {item.category}
                 </div>
-                <div style={{ flexShrink: 0, color: item.type === "income" ? "#138a36" : "var(--danger)" }}>
-                  <b>{item.type === "income" ? "+" : "-"} {rub(item.amount)}</b>
+                <div style={{ minWidth: 0, color: item.type === "income" ? "#138a36" : "var(--danger)" }}>
+                  <CategoryAmounts item={item} />
                 </div>
               </div>
             ))}
@@ -144,8 +152,8 @@ export function TopCategoriesPanel({ categories }: TopCategoriesPanelProps) {
                         <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           <b>{idx + 1}.</b> {item.category}
                         </div>
-                        <div style={{ flexShrink: 0, color: "#138a36" }}>
-                          <b>{"+ "} {rub(item.amount)}</b>
+                        <div style={{ minWidth: 0, color: "#138a36" }}>
+                          <CategoryAmounts item={item} />
                         </div>
                       </div>
                     )) : (
@@ -177,8 +185,8 @@ export function TopCategoriesPanel({ categories }: TopCategoriesPanelProps) {
                         <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           <b>{idx + 1}.</b> {item.category}
                         </div>
-                        <div style={{ flexShrink: 0, color: "var(--danger)" }}>
-                          <b>{"- "} {rub(item.amount)}</b>
+                        <div style={{ minWidth: 0, color: "var(--danger)" }}>
+                          <CategoryAmounts item={item} />
                         </div>
                       </div>
                     )) : (

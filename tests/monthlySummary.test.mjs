@@ -103,7 +103,9 @@ test("exchange purchases count in the annual report while foreign spending updat
   ];
   assert.deepEqual(currencyBalances(entries, "2026-08-31"), { USD: 7500 });
   assert.deepEqual(currencyBalances(entries, "2026-09-01"), { USD: 6500 });
-  assert.deepEqual(buildMonthlyCategories(entries, [], "2026-08", "2026-08-31"), []);
+  assert.deepEqual(buildMonthlyCategories(entries, [], "2026-08", "2026-08-31"), [
+    { type: "expense", category: "Food", amount: 900000, foreignAmounts: { USD: 2500 } },
+  ]);
   assert.equal(buildYearExpenseSummary(entries, 2026, "en-US").total, 900000);
 });
 
@@ -132,7 +134,9 @@ test("foreign income changes its currency balance without affecting ruble report
   assert.deepEqual(currencyBalances([income, expense], "2026-08-02"), { EUR: 7500 });
   assert.deepEqual(currencyBalances([{ ...income, amount: 20000 }, expense], "2026-08-02"), { EUR: 17500 });
   assert.deepEqual(currencyBalances([expense], "2026-08-02"), { EUR: -2500 });
-  assert.deepEqual(buildMonthlyCategories([income, expense], [], "2026-08", "2026-08-02"), []);
+  assert.deepEqual(buildMonthlyCategories([income, expense], [], "2026-08", "2026-08-02"), [
+    { type: "expense", category: "Food", amount: 0, foreignAmounts: { EUR: 2500 } },
+  ]);
 });
 
 
@@ -180,4 +184,69 @@ test("yearly expenses include rubles spent on exchanges, including previous year
   assert.equal(summary.previousTotal, 500000);
   assert.equal(summary.transactionCount, 2);
   assert.equal(summary.categories.find((c) => c.category === "Currency exchange").amount, 1200000);
+});
+
+
+test("monthly categories group expenses by currency and include rubles spent on exchanges", () => {
+  const entries = [
+    transaction("2026-08-01", 10000),
+    { ...transaction("2026-08-02", 2500), currency: "USD" },
+    { ...transaction("2026-08-03", 500), currency: "USD" },
+    { ...transaction("2026-08-04", 1200), currency: "EUR" },
+    { ...transaction("2026-08-05", 900000, "currency_exchange", "Currency exchange"), currency: "USD", foreign_amount: 10000 },
+    { ...transaction("2026-08-06", 1000), currency: "EUR", exclude_from_statistics: true },
+    { ...transaction("2026-08-07", 1000), currency: "EUR" },
+  ];
+  assert.deepEqual(buildMonthlyCategories(entries, [], "2026-08", "2026-08-06"), [
+    { type: "expense", category: "Currency exchange", amount: 900000 },
+    { type: "expense", category: "Food", amount: 10000, foreignAmounts: { USD: 3000, EUR: 1200 } },
+  ]);
+});
+
+
+test("exchange rate history includes every valid exchange in chronological saved order", async () => {
+  const { exchangeRateHistory } = await loadAppModule("/src/lib/currencyBalance.ts");
+  const entries = Array.from({ length: 7 }, (_, i) => ({
+    ...transaction(`2026-08-0${i + 1}`, 9000 + i * 100, "currency_exchange"),
+    id: `exchange-${i}`, currency: "USD", foreign_amount: 100,
+  })).reverse();
+  entries.push({ ...transaction("2026-08-02", 10000, "currency_exchange"), id: "same-day", currency: "USD", foreign_amount: 100 });
+  entries.push({ ...transaction("2026-08-03", 10000, "currency_exchange"), id: "invalid", currency: "EUR", foreign_amount: 0 });
+  const history = exchangeRateHistory(entries, "2026-08-06");
+  assert.deepEqual(Object.keys(history), ["USD"]);
+  assert.equal(history.USD.length, 7);
+  assert.deepEqual(history.USD.slice(1, 3).map((point) => point.id), ["exchange-1", "same-day"]);
+  assert.equal(history.USD[0].rate, 90);
+});
+
+
+test("cross rate history groups purchase pairs in chronological order and excludes invalid and future purchases", async () => {
+  const { crossRateHistory } = await loadAppModule("/src/lib/currencyBalance.ts");
+  const entries = [
+    { ...transaction("2026-08-03", 400), id: "later", currency: "USD", purchase_currency: "ILS", purchase_amount: 1400 },
+    { ...transaction("2026-08-01", 800), id: "first", currency: "USD", purchase_currency: "ILS", purchase_amount: 2400 },
+    { ...transaction("2026-08-02", 100), id: "eur", currency: "USD", purchase_currency: "EUR", purchase_amount: 90 },
+    { ...transaction("2026-08-04", 100), id: "future", currency: "USD", purchase_currency: "ILS", purchase_amount: 300 },
+    { ...transaction("2026-08-02", 100), id: "same", currency: "USD", purchase_currency: "USD", purchase_amount: 100 },
+    { ...transaction("2026-08-02", 100), id: "invalid", currency: "USD", purchase_currency: "ILS", purchase_amount: 0 },
+  ];
+  const history = crossRateHistory(entries, "2026-08-03");
+  assert.deepEqual(history["USD:ILS"].map(({ id, rate }) => [id, rate]), [["first", 3], ["later", 3.5]]);
+  assert.equal(history["USD:EUR"][0].rate, 0.9);
+  assert.equal(Object.keys(history).length, 2);
+});
+
+
+test("implied ruble rate follows recorded exchange and cross-rate changes without using future data", async () => {
+  const { impliedRubRateHistory } = await loadAppModule("/src/lib/currencyBalance.ts");
+  const entries = [
+    { ...transaction("2026-08-01", 100), id: "purchase", currency: "USD", purchase_currency: "ILS", purchase_amount: 300 },
+    { ...transaction("2026-08-02", 9000, "currency_exchange"), id: "exchange", currency: "USD", foreign_amount: 100 },
+    { ...transaction("2026-08-03", 100), id: "purchase2", currency: "USD", purchase_currency: "ILS", purchase_amount: 360 },
+    { ...transaction("2026-08-04", 10800, "currency_exchange"), id: "exchange2", currency: "USD", foreign_amount: 100 },
+  ];
+  const history = impliedRubRateHistory(entries, "2026-08-03");
+  assert.deepEqual(history["ILS:USD"].map(({ date, rate }) => [date, rate]), [["2026-08-02", 30], ["2026-08-03", 25]]);
+  assert.equal(impliedRubRateHistory(entries, "2026-08-01")["ILS:USD"], undefined);
+  assert.equal(impliedRubRateHistory(entries, "2026-08-04")["ILS:USD"][2].rate, 30);
 });

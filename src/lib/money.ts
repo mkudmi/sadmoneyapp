@@ -24,3 +24,14 @@ export function toKop(rubles: string) {
   const result = Number(negative ? -kopecks : kopecks);
   return Number.isSafeInteger(result) ? result : 0;
 }
+
+export function formatForeignAmount(amount: number, currency: string) {
+  try {
+    return (amount / 100).toLocaleString("ru-RU", {
+      style: "currency", currency, currencyDisplay: "narrowSymbol",
+      minimumFractionDigits: 2, maximumFractionDigits: 2,
+    });
+  } catch {
+    return `${(amount / 100).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+  }
+}

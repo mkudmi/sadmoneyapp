@@ -26,6 +26,63 @@ export function recentCurrencyExchanges(transactions: Transaction[], throughDate
   return groups;
 }
 
+export type ExchangeRatePoint = { id: string; date: string; rate: number };
+
+/** Actual RUB exchange rates in saved chronological order. */
+export function exchangeRateHistory(transactions: Transaction[], throughDate: string): Record<string, ExchangeRatePoint[]> {
+  const groups: Record<string, ExchangeRatePoint[]> = {};
+  transactions.map((tx, index) => ({ tx, index }))
+    .filter(({ tx }) => tx.type === "currency_exchange" && tx.currency && tx.currency !== "RUB" && tx.date <= throughDate && tx.amount > 0 && (tx.foreign_amount ?? 0) > 0)
+    .sort((a, b) => a.tx.date.localeCompare(b.tx.date) || a.index - b.index)
+    .forEach(({ tx }) => {
+      (groups[tx.currency!] ??= []).push({ id: tx.id, date: tx.date, rate: tx.amount / tx.foreign_amount! });
+    });
+  return groups;
+}
+
+/** Rates observed in purchases, in the direction paid currency → purchase currency. */
+export function crossRateHistory(transactions: Transaction[], throughDate: string): Record<string, ExchangeRatePoint[]> {
+  const groups: Record<string, ExchangeRatePoint[]> = {};
+  transactions.map((tx, index) => ({ tx, index }))
+    .filter(({ tx }) => tx.type === "expense" && tx.date <= throughDate && tx.amount > 0 && tx.purchase_currency && (tx.purchase_amount ?? 0) > 0 && tx.purchase_currency !== (tx.currency ?? "RUB"))
+    .sort((a, b) => a.tx.date.localeCompare(b.tx.date) || a.index - b.index)
+    .forEach(({ tx }) => {
+      const key = `${tx.currency ?? "RUB"}:${tx.purchase_currency}`;
+      (groups[key] ??= []).push({ id: tx.id, date: tx.date, rate: tx.purchase_amount! / tx.amount });
+    });
+  return groups;
+}
+
+/** Implied RUB rates using the latest recorded direct exchange and purchase for each pair. */
+export function impliedRubRateHistory(transactions: Transaction[], throughDate: string): Record<string, ExchangeRatePoint[]> {
+  const history: Record<string, ExchangeRatePoint[]> = {};
+  const direct = new Map<string, number>();
+  const pairs = new Map<string, { source: string; target: string; rate: number }>();
+  const events = transactions.map((tx, index) => ({ tx, index }))
+    .filter(({ tx }) => tx.date <= throughDate)
+    .sort((a, b) => a.tx.date.localeCompare(b.tx.date) || a.index - b.index);
+  for (const { tx } of events) {
+    let changedSource: string;
+    let changedTarget: string | undefined;
+    if (tx.type === "currency_exchange" && tx.currency && tx.currency !== "RUB" && tx.amount > 0 && (tx.foreign_amount ?? 0) > 0) {
+      changedSource = tx.currency;
+      direct.set(changedSource, tx.amount / tx.foreign_amount!);
+    } else if (tx.type === "expense" && tx.currency && tx.currency !== "RUB" && tx.purchase_currency && tx.purchase_currency !== "RUB" && tx.purchase_currency !== tx.currency && tx.amount > 0 && (tx.purchase_amount ?? 0) > 0) {
+      changedSource = tx.currency;
+      changedTarget = tx.purchase_currency;
+      pairs.set(`${changedSource}:${changedTarget}`, { source: changedSource, target: changedTarget, rate: tx.purchase_amount! / tx.amount });
+    } else continue;
+    for (const pair of pairs.values()) {
+      if (pair.source !== changedSource || (changedTarget && pair.target !== changedTarget)) continue;
+      const rubRate = direct.get(pair.source);
+      if (rubRate === undefined) continue;
+      const key = `${pair.target}:${pair.source}`;
+      (history[key] ??= []).push({ id: `${tx.id}:${key}`, date: tx.date, rate: rubRate / pair.rate });
+    }
+  }
+  return history;
+}
+
 export function exchangeRate(tx: Transaction): string {
   if (!tx.currency || !tx.foreign_amount || tx.foreign_amount <= 0) return "";
   const rate = (tx.amount / tx.foreign_amount).toLocaleString("en-US", { maximumFractionDigits: 6 });
