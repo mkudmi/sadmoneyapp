@@ -6,11 +6,17 @@ import { AppIcon } from "./AppIcon";
 function CategoryAmounts({ item }: { item: MonthlyCategory }) {
   const sign = item.type === "income" ? "+" : "-";
   const foreignAmounts = Object.entries(item.foreignAmounts ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  const amounts = [
+    ...((item.amount !== 0 || foreignAmounts.length === 0) ? [rub(item.amount)] : []),
+    ...foreignAmounts.map(([currency, amount]) => formatForeignAmount(amount, currency)),
+  ];
+  if (amounts.length === 1) return <b>{sign} {amounts[0]}</b>;
   return (
-    <div style={{ textAlign: "right", overflowWrap: "anywhere" }}>
-      {(item.amount !== 0 || foreignAmounts.length === 0) && <div><b>{sign} {rub(item.amount)}</b></div>}
-      {foreignAmounts.map(([currency, amount]) => (
-        <div key={currency}><b>{sign} {formatForeignAmount(amount, currency)}</b></div>
+    <div className="category-amounts" aria-label={amounts.map((amount) => `${sign} ${amount}`).join(", ")}>
+      {amounts.map((amount, index) => (
+        <span key={index} className={item.amount !== 0 && index === 0 ? "category-amount-primary" : "category-amount-secondary"}>
+          <span className="category-amount-sign" aria-hidden="true">{sign}</span> {amount}
+        </span>
       ))}
     </div>
   );
@@ -71,7 +77,7 @@ export function TopCategoriesPanel({ categories }: TopCategoriesPanelProps) {
                 <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   <b>{idx + 1}.</b> {item.category}
                 </div>
-                <div style={{ minWidth: 0, color: item.type === "income" ? "#138a36" : "var(--danger)" }}>
+                <div style={{ minWidth: 0, maxWidth: "60%", color: item.type === "income" ? "#138a36" : "var(--danger)" }}>
                   <CategoryAmounts item={item} />
                 </div>
               </div>
@@ -152,7 +158,7 @@ export function TopCategoriesPanel({ categories }: TopCategoriesPanelProps) {
                         <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           <b>{idx + 1}.</b> {item.category}
                         </div>
-                        <div style={{ minWidth: 0, color: "#138a36" }}>
+                        <div style={{ minWidth: 0, maxWidth: "60%", color: "#138a36" }}>
                           <CategoryAmounts item={item} />
                         </div>
                       </div>
@@ -185,7 +191,7 @@ export function TopCategoriesPanel({ categories }: TopCategoriesPanelProps) {
                         <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           <b>{idx + 1}.</b> {item.category}
                         </div>
-                        <div style={{ minWidth: 0, color: "var(--danger)" }}>
+                        <div style={{ minWidth: 0, maxWidth: "60%", color: "var(--danger)" }}>
                           <CategoryAmounts item={item} />
                         </div>
                       </div>

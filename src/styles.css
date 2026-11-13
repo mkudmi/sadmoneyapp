@@ -1249,6 +1249,27 @@ select {
   }
 }
 
+.category-amounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.category-amount-primary { color: var(--danger); }
+.category-amount-primary, .category-amount-secondary {
+  white-space: nowrap;
+  font-weight: 700;
+}
+.category-amount-secondary {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--bg-strong);
+  font-weight: 600;
+}
+.category-amount-sign { opacity: 0.55; }
+
 .select-input { position: relative; min-width: 0; }
 .select-input-label { display: block; font-size: 12px; opacity: 0.8; margin-bottom: 4px; }
 .select-input-trigger { width: 100%; display: flex; align-items: center; justify-content: space-between; text-align: left; }
