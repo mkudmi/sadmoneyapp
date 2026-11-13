@@ -6,12 +6,13 @@ import { currencyBalances, exchangeRate, recentCrossRates, recentCurrencyExchang
 import { rub } from "../lib/money";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import { AppIcon } from "./AppIcon";
+import type { MarketSnapshot } from "../lib/marketRates";
 import { CurrencyRateChart } from "./CurrencyRateChart";
 import { CurrencyCalculatorModal } from "./CurrencyCalculatorModal";
 
-type Props = { open: boolean; transactions: Transaction[]; today: string; dateFormat: DateFormat; onClose: () => void };
+type Props = { marketRates: { snapshots: MarketSnapshot[]; error: string }; open: boolean; transactions: Transaction[]; today: string; dateFormat: DateFormat; onClose: () => void };
 
-export function CurrencyHistoryModal({ open, transactions, today, dateFormat, onClose }: Props) {
+export function CurrencyHistoryModal({ marketRates, open, transactions, today, dateFormat, onClose }: Props) {
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const dialogRef = useDialogFocus(open);
   const titleId = useId();
@@ -31,7 +32,7 @@ export function CurrencyHistoryModal({ open, transactions, today, dateFormat, on
         <b id={titleId}>Currency</b>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}><button type="button" onClick={() => setCalculatorOpen(true)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}><AppIcon name="calculator" /> Calculator</button><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><AppIcon name="close" /></button></div>
       </div>
-      <CurrencyRateChart transactions={transactions} today={today} dateFormat={dateFormat} />
+      <CurrencyRateChart marketRates={marketRates} transactions={transactions} today={today} dateFormat={dateFormat} />
       {crossRates.length > 0 ? <section style={{ marginTop: 16 }}>
         <b>Cross rates from purchases</b>
         <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>Estimated from your most recent purchase for each currency pair.</div>

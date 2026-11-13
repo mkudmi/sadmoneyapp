@@ -28,6 +28,16 @@ export function recentCurrencyExchanges(transactions: Transaction[], throughDate
 
 export type ExchangeRatePoint = { id: string; date: string; rate: number };
 
+/** Keep the least favorable rate for each date, in chronological order. */
+export function worstDailyRates(points: ExchangeRatePoint[], higherIsBetter: boolean): ExchangeRatePoint[] {
+  const daily = new Map<string, ExchangeRatePoint>();
+  for (const point of points) {
+    const previous = daily.get(point.date);
+    if (!previous || (higherIsBetter ? point.rate < previous.rate : point.rate > previous.rate)) daily.set(point.date, point);
+  }
+  return [...daily.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
 /** Actual RUB exchange rates in saved chronological order. */
 export function exchangeRateHistory(transactions: Transaction[], throughDate: string): Record<string, ExchangeRatePoint[]> {
   const groups: Record<string, ExchangeRatePoint[]> = {};

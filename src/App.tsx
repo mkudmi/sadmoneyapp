@@ -38,6 +38,7 @@ import { averageExpenseAmount } from "./lib/plannedExpenseEstimate";
 import { normalizeVacationType, VacationType } from "./lib/vacation";
 import { useDismissible } from "./hooks/useDismissible";
 import { useRussianProductionCalendar } from "./hooks/useRussianProductionCalendar";
+import { useMarketRates } from "./hooks/useMarketRates";
 import { useVacationDaysCount } from "./hooks/useVacationDaysCount";
 import { VacationsPanel } from "./components/VacationsPanel";
 import { SalariesPanel } from "./components/SalariesPanel";
@@ -112,6 +113,7 @@ function createEmptySalaryConfigDraft(today: string): SalaryConfigDraft {
 export default function App() {
   const today = DEBUG_USE_CUSTOM_TODAY ? DEBUG_CUSTOM_TODAY : ymd(new Date());
   const [data, setData] = useState<AppData | null>(null);
+  const marketRates = useMarketRates(data?.transactions, today);
   const [recurringModalOpen, setRecurringModalOpen] = useState(false);
   const [recurringOccurrences, setRecurringOccurrences] = useState<Transaction[]>([]);
   const [recurringError, setRecurringError] = useState(false);
@@ -2658,7 +2660,7 @@ export default function App() {
         selected={data?.settings.visibleBalanceCurrencies ?? defaultBalanceCurrencies(data?.transactions ?? [], today)}
         onClose={() => setBalanceSettingsOpen(false)}
         onSave={async (currencies) => { setData(await api.setVisibleBalanceCurrencies(currencies)); }} /> : null}
-      <CurrencyHistoryModal open={currencyHistoryOpen} transactions={data?.transactions ?? []} today={today} dateFormat={dateFormat} onClose={() => setCurrencyHistoryOpen(false)} />
+      <CurrencyHistoryModal marketRates={marketRates} open={currencyHistoryOpen} transactions={data?.transactions ?? []} today={today} dateFormat={dateFormat} onClose={() => setCurrencyHistoryOpen(false)} />
       {currencyBudgetOpen && <CurrencyBudgetModal
         transactions={data?.transactions ?? []} today={today} dateFormat={dateFormat}
         budgetDate={forecastDate === selectedDate && forecast?.date === selectedDate ? selectedDate : today}

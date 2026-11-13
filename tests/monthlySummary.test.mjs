@@ -269,3 +269,54 @@ test("currency calculator finds direct, inverse and intermediate recorded rates"
   assert.equal(rate("USD", "USD").rate, 1);
   assert.equal(rate("EUR", "JPY"), null);
 });
+
+
+test("market quotes validate data and calculate direct, inverse and cross rates", async () => {
+  const { parseMarketQuotes, marketRateForPair } = await loadAppModule("/src/lib/marketRates.ts");
+  const time = Date.now() - 10000;
+  const quotes = parseMarketQuotes([
+    { currency: "USD/RUB", bid: "89", ask: "91", timestamp: String(time) },
+    { currency: "USD/ILS", bid: "2.9", ask: "3.1", timestamp: String(time - 1000) },
+    { currency: "USD/EUR", bid: "-1", ask: "2", timestamp: String(time) },
+    { currency: "INVALID", bid: "1", ask: "2", timestamp: String(time) },
+  ]);
+  assert.equal(quotes.length, 2);
+  const snapshot = { fetchedAt: time + 2000, quotes, pair: "USD:RUB" };
+  assert.equal(marketRateForPair(snapshot, "USD", "RUB").rate, 90);
+  assert.equal(marketRateForPair(snapshot, "ILS", "RUB").rate, 30);
+  assert.equal(marketRateForPair(snapshot, "ILS", "RUB").timestamp, time - 1000);
+  assert.equal(marketRateForPair(snapshot, "EUR", "RUB"), null);
+});
+
+
+test("chart uses the least favorable recorded rate per day for each direction", async () => {
+  const { worstDailyRates } = await loadAppModule("/src/lib/currencyBalance.ts");
+  const points = [
+    { id: "a", date: "2026-08-02", rate: 90 },
+    { id: "b", date: "2026-08-02", rate: 95 },
+    { id: "c", date: "2026-08-01", rate: 92 },
+  ];
+  assert.deepEqual(worstDailyRates(points, false).map((point) => point.id), ["c", "b"]);
+  assert.deepEqual(worstDailyRates(points, true).map((point) => point.id), ["c", "a"]);
+});
+
+
+test("market rates are fetched once per day and reused only for requested graphs", async () => {
+  const { fetchMarketSnapshots } = await loadAppModule("/src/lib/marketRates.ts");
+  const values = new Map();
+  const originalStorage = globalThis.localStorage;
+  const originalFetch = globalThis.fetch;
+  let requests = 0;
+  globalThis.localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  globalThis.fetch = async () => { requests++; return { ok: true, json: async () => [
+    { currency: "USD/RUB", bid: "89", ask: "91", timestamp: String(Date.now() - 1000) },
+    { currency: "USD/ILS", bid: "2.9", ask: "3.1", timestamp: String(Date.now() - 1000) },
+  ] }; };
+  try {
+    const first = await fetchMarketSnapshots([{ key: "exchange:USD", source: "USD", target: "RUB" }]);
+    assert.deepEqual(first.map((item) => item.pair), ["exchange:USD"]);
+    const second = await fetchMarketSnapshots([{ key: "purchase:USD:ILS", source: "USD", target: "ILS" }]);
+    assert.equal(requests, 1);
+    assert.deepEqual(second.map((item) => item.pair), ["exchange:USD", "purchase:USD:ILS"]);
+  } finally { globalThis.localStorage = originalStorage; globalThis.fetch = originalFetch; }
+});

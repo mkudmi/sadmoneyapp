@@ -1,14 +1,17 @@
 import { useId, useState } from "react";
 import type { Transaction } from "../lib/api";
 import type { DateFormat } from "../lib/date";
-import { formatDateForDisplay } from "../lib/date";
-import { crossRateHistory, exchangeRateHistory, impliedRubRateHistory } from "../lib/currencyBalance";
+import { formatDateForDisplay, ymd } from "../lib/date";
+import { crossRateHistory, exchangeRateHistory, impliedRubRateHistory, worstDailyRates } from "../lib/currencyBalance";
 import { SelectInput } from "./SelectInput";
+import { marketRateForPair } from "../lib/marketRates";
+import type { MarketSnapshot } from "../lib/marketRates";
 
-type Props = { transactions: Transaction[]; today: string; dateFormat: DateFormat };
+type Props = { marketRates: { snapshots: MarketSnapshot[]; error: string }; transactions: Transaction[]; today: string; dateFormat: DateFormat };
 
-export function CurrencyRateChart({ transactions, today, dateFormat }: Props) {
+export function CurrencyRateChart({ marketRates, transactions, today, dateFormat }: Props) {
   const [selected, setSelected] = useState("");
+  const { snapshots, error } = marketRates;
   const gradientId = useId();
   const exchanges = exchangeRateHistory(transactions, today);
   const crossRates = crossRateHistory(transactions, today);
@@ -27,17 +30,29 @@ export function CurrencyRateChart({ transactions, today, dateFormat }: Props) {
   const labelForSeries = (item: typeof series[number]) => `${item.source} / ${item.target} (${item.kind === "purchase" ? "purchases" : item.kind === "exchange" ? "exchanges" : item.kind})`;
   const current = series.find((item) => item.key === selected) ?? series[0];
   const points = current?.points ?? [];
-  const rates = points.map((point) => point.rate);
+  const dailyPoints = worstDailyRates(points, current?.kind === "purchase");
+  const marketPoints = current ? snapshots.filter((snapshot) => snapshot.pair === current.key).map((snapshot) => marketRateForPair(snapshot, current.source, current.target)).filter((point) => point !== null).sort((a, b) => a.date.localeCompare(b.date) || a.timestamp - b.timestamp) : [];
+  const rates = [...dailyPoints, ...marketPoints].map((point) => point.rate);
   const min = Math.min(...rates);
   const max = Math.max(...rates);
   const padding = Math.max((max - min) * 0.18, max * 0.01, 0.01);
   const bottom = min - padding;
   const top = max + padding;
-  const coordinates = points.map((point, index) => ({
+  const pointTime = (point: { date: string; timestamp?: number }) => point.timestamp ?? Date.parse(`${point.date}T12:00:00`);
+  const dates = [...dailyPoints, ...marketPoints].map(pointTime);
+  const firstDate = Math.min(...dates), lastDate = Math.max(...dates);
+  const project = <T extends { date: string; rate: number; timestamp?: number }>(point: T) => ({
     ...point,
-    x: points.length === 1 ? 200 : 12 + index / (points.length - 1) * 376,
+    x: firstDate === lastDate ? 200 : 12 + (pointTime(point) - firstDate) / (lastDate - firstDate) * 376,
     y: 112 - (point.rate - bottom) / (top - bottom) * 100,
-  }));
+  });
+  const coordinates = dailyPoints.map(project);
+  const marketCoordinates = marketPoints.map((point) => {
+    const projected = project(point);
+    const sameDay = coordinates.filter((item) => item.date === point.date);
+    return sameDay.length ? { ...projected, x: sameDay[sameDay.length - 1].x } : projected;
+  });
+  const marketPath = marketCoordinates.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
   const path = coordinates.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
   const formatRate = (rate: number) => rate.toLocaleString("ru-RU", { maximumFractionDigits: 4 });
   const latest = points[points.length - 1]?.rate;
@@ -48,6 +63,8 @@ export function CurrencyRateChart({ transactions, today, dateFormat }: Props) {
   return <section style={{ marginTop: 20 }} aria-labelledby="currency-rate-chart-title">
     <div style={{ display: "grid", gap: 12 }}>
       <div><b id="currency-rate-chart-title">Exchange rate history</b><div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>Based on your exchanges and purchases</div></div>
+      {error && <div role="alert" style={{ fontSize: 12, color: "var(--danger)" }}>{error}</div>}
+      <div style={{ fontSize: 11, opacity: 0.7 }}>Market rates are fetched for the first new operation of the day and reused for other pairs. Source: <a href="https://www.live-rates.com/" target="_blank" rel="noreferrer">Live-Rates</a> · up to 3 requests per hour.</div>
       {current && <div style={{ width: "min(100%, 300px)", minWidth: 0 }}><SelectInput label="Pair" value={labelForSeries(current)} options={series.map(labelForSeries)} onChange={(label) => {
         const choice = series.find((item) => labelForSeries(item) === label);
         if (choice) setSelected(choice.key);
@@ -62,13 +79,20 @@ export function CurrencyRateChart({ transactions, today, dateFormat }: Props) {
         {change === null ? "Add another operation to compare rates." : change === 0 ? "Unchanged from previous operation" : <><b>{change > 0 ? "↑" : "↓"} {Math.abs(change).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}% · {beneficial ? "More favorable" : "Less favorable"}</b><span style={{ color: "var(--text-muted, inherit)", opacity: 0.75 }}> vs previous operation</span></>}
       </div>
       <div style={{ fontSize: 11, opacity: 0.65, marginTop: 3 }}>{current.kind === "purchase" ? `More ${current.target} per ${current.source} is favorable` : `Fewer RUB per ${current.source} is favorable`}</div>
+      {marketPoints.length > 0 && <div style={{ fontSize: 12, marginTop: 6 }}>Market: <b>{formatRate(marketPoints[marketPoints.length - 1].rate)} {current.target}</b> / {current.source} · {formatDateForDisplay(marketPoints[marketPoints.length - 1].date, dateFormat)}</div>}
+      {marketPoints.length > 0 && <div style={{ fontSize: 11, marginTop: 3, opacity: 0.75 }}>Your latest rate ({formatDateForDisplay(points[points.length - 1].date, dateFormat)}) is {((points[points.length - 1].rate / marketPoints[marketPoints.length - 1].rate - 1) * 100).toLocaleString("ru-RU", { maximumFractionDigits: 2, signDisplay: "always" })}% vs latest market rate. Different dates may reflect market movement.</div>}
+      {snapshots.length > 0 && marketPoints.length === 0 && <div style={{ fontSize: 12, marginTop: 6, opacity: 0.7 }}>No market rate is available for this pair.</div>}
+      <div style={{ fontSize: 11, marginTop: 8 }}><span style={{ color: "#5b78ed" }}>●</span> Your rate　<span style={{ color: "#d37a16" }}>●</span> Market rate</div>
       <svg viewBox="0 0 400 124" role="img" aria-label={`${current.source} to ${current.target} exchange rates from ${formatDateForDisplay(points[0].date, dateFormat)} to ${formatDateForDisplay(points[points.length - 1].date, dateFormat)}`} style={{ display: "block", width: "100%", height: 140, marginTop: 8, overflow: "visible" }}>
         <defs><linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#5b78ed" stopOpacity="0.25" /><stop offset="100%" stopColor="#5b78ed" stopOpacity="0.01" /></linearGradient></defs>
         {[12, 62, 112].map((y) => <line key={y} x1="12" x2="388" y1={y} y2={y} stroke="currentColor" opacity="0.09" />)}
-        {coordinates.length > 1 && <><path d={`${path} L 388 112 L 12 112 Z`} fill={`url(#${gradientId})`} /><path d={path} fill="none" stroke="#5b78ed" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></>}
+        {coordinates.length > 1 && <><path d={`${path} L ${coordinates[coordinates.length - 1].x} 112 L ${coordinates[0].x} 112 Z`} fill={`url(#${gradientId})`} /><path d={path} fill="none" stroke="#5b78ed" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></>}
+        {marketCoordinates.length > 1 && <path d={marketPath} fill="none" stroke="#d37a16" strokeWidth="2.5" strokeDasharray="5 3" strokeLinecap="round" strokeLinejoin="round" />}
+        {marketCoordinates.map((point, index) => <circle key={`${point.timestamp}:${index}`} cx={point.x} cy={point.y} r="3.5" fill="#d37a16" stroke="white" strokeWidth="1.5"><title>Market · {formatDateForDisplay(point.date, dateFormat)}: 1 {current.source} = {formatRate(point.rate)} {current.target}</title></circle>)}
         {coordinates.map((point) => <circle key={point.id} cx={point.x} cy={point.y} r="3.5" fill="#5b78ed" stroke="white" strokeWidth="1.5"><title>{formatDateForDisplay(point.date, dateFormat)}: 1 {current.source} = {formatRate(point.rate)} {current.target}</title></circle>)}
       </svg>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11, opacity: 0.7 }}><span>{formatDateForDisplay(points[0].date, dateFormat)}</span><span>{formatDateForDisplay(points[points.length - 1].date, dateFormat)}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11, opacity: 0.7 }}><span>{formatDateForDisplay(ymd(new Date(firstDate)), dateFormat)}</span><span>{formatDateForDisplay(ymd(new Date(lastDate)), dateFormat)}</span></div>
     </div>}
   </section>;
 }
+
