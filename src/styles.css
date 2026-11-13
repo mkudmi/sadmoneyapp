@@ -450,6 +450,30 @@ select {
   letter-spacing: -0.03em;
 }
 
+.general-stats-expense-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.foreign-expenses-anchor { position: relative; flex: none; }
+.foreign-expenses-trigger {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+}
+.foreign-expenses-popover { padding: 10px; overflow-y: auto; font-size: 12px; line-height: 1.4; }
+.foreign-expenses-popover b { font-size: inherit; }
+.foreign-expenses-title { color: var(--muted); font-weight: 600; margin-bottom: 8px; }
+.foreign-expenses-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.foreign-expenses-list li { display: flex; justify-content: space-between; gap: 10px; font-variant-numeric: tabular-nums; }
+.foreign-expenses-list li span { color: var(--muted); }
+.foreign-expenses-empty { color: var(--muted); }
+
 .general-stats-secondary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

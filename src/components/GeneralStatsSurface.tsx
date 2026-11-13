@@ -3,11 +3,15 @@ import { AppData } from "../lib/api";
 import { formatDateForDisplay, parseYmdLocal, ymFromYmd } from "../lib/date";
 import type { DateFormat } from "../lib/date";
 import { rub } from "../lib/money";
+import { monthlyForeignExpenseTotals, monthlyForeignIncomeTotals } from "../lib/monthlySummary";
+import type { MonthlyCategory } from "../lib/monthlySummary";
 import { getLatestPaidVacationAverageReference } from "../lib/russianVacation";
+import { ForeignCurrencyPopover } from "./ForeignCurrencyPopover";
 import type { RussianProductionCalendarDay } from "../lib/russianProductionCalendar";
 
 type GeneralStatsSurfaceProps = {
   data: AppData | null;
+  categories: MonthlyCategory[];
   monthKey: string;
   year: number;
   today: string;
@@ -17,7 +21,9 @@ type GeneralStatsSurfaceProps = {
 };
 
 export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
-  const { data, monthKey, year, today, vacationAverageDailyPay, dateFormat, productionCalendarDays } = props;
+  const { data, categories, monthKey, year, today, vacationAverageDailyPay, dateFormat, productionCalendarDays } = props;
+  const foreignIncome = useMemo(() => monthlyForeignIncomeTotals(data?.transactions ?? [], monthKey, today), [data?.transactions, monthKey, today]);
+  const foreignExpenses = useMemo(() => monthlyForeignExpenseTotals(categories), [categories]);
   const monthLabel = useMemo(
     () =>
       capitalizeMonth(
@@ -104,12 +110,22 @@ export function GeneralStatsSurface(props: GeneralStatsSurfaceProps) {
 
       <div className="general-stats-highlight-grid">
         <div className="general-stats-highlight-card general-stats-highlight-card-income">
-          <div className="general-stats-metric-label">{"Received this month"}</div>
-          <div className="general-stats-metric-value">{rub(monthTotals.inc)}</div>
+          <div className="general-stats-expense-content">
+            <div>
+              <div className="general-stats-metric-label">{"Received this month"}</div>
+              <div className="general-stats-metric-value">{rub(monthTotals.inc)}</div>
+            </div>
+            <ForeignCurrencyPopover amounts={foreignIncome} type="income" />
+          </div>
         </div>
         <div className="general-stats-highlight-card general-stats-highlight-card-expense">
-          <div className="general-stats-metric-label">{"Spent this month"}</div>
-          <div className="general-stats-metric-value">{rub(monthTotals.exp)}</div>
+          <div className="general-stats-expense-content">
+            <div>
+              <div className="general-stats-metric-label">{"Spent this month"}</div>
+              <div className="general-stats-metric-value">{rub(monthTotals.exp)}</div>
+            </div>
+            <ForeignCurrencyPopover amounts={foreignExpenses} type="expense" />
+          </div>
         </div>
       </div>
 

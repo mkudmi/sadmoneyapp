@@ -320,3 +320,33 @@ test("market rates are fetched once per day and reused only for requested graphs
     assert.deepEqual(second.map((item) => item.pair), ["exchange:USD", "purchase:USD:ILS"]);
   } finally { globalThis.localStorage = originalStorage; globalThis.fetch = originalFetch; }
 });
+
+
+test("monthly foreign expense totals combine categories and respect statistics filters", async () => {
+  const { monthlyForeignExpenseTotals } = await loadAppModule("/src/lib/monthlySummary.ts");
+  const entries = [
+    { ...transaction("2026-08-01", 2000, "expense", "Food"), currency: "USD" },
+    { ...transaction("2026-08-02", 3000, "expense", "Travel"), currency: "USD" },
+    { ...transaction("2026-08-03", 500, "expense", "Food"), currency: "ILS" },
+    { ...transaction("2026-08-04", 900, "expense", "Food"), currency: "ILS", exclude_from_statistics: true },
+    { ...transaction("2026-08-05", 100, "expense", "Food"), currency: "ILS" },
+    { ...transaction("2026-08-02", 10000, "currency_exchange", "Exchange"), currency: "USD", foreign_amount: 100 },
+  ];
+  const categories = buildMonthlyCategories(entries, [], "2026-08", "2026-08-04");
+  assert.deepEqual(monthlyForeignExpenseTotals(categories), [["ILS", 500], ["USD", 5000]]);
+});
+
+
+test("monthly foreign income excludes exchanges, other months, future and excluded operations", async () => {
+  const { monthlyForeignIncomeTotals } = await loadAppModule("/src/lib/monthlySummary.ts");
+  const entries = [
+    { ...transaction("2026-08-01", 2000, "income"), currency: "USD" },
+    { ...transaction("2026-08-02", 1000, "income"), currency: "USD" },
+    { ...transaction("2026-08-03", 500, "income"), currency: "ILS" },
+    { ...transaction("2026-08-04", 900, "income"), currency: "ILS", exclude_from_statistics: true },
+    { ...transaction("2026-08-05", 100, "income"), currency: "ILS" },
+    { ...transaction("2026-07-02", 400, "income"), currency: "ILS" },
+    { ...transaction("2026-08-02", 10000, "currency_exchange"), currency: "USD", foreign_amount: 100 },
+  ];
+  assert.deepEqual(monthlyForeignIncomeTotals(entries, "2026-08", "2026-08-04"), [["ILS", 500], ["USD", 3000]]);
+});

@@ -1939,6 +1939,7 @@ export default function App() {
       <div className="budget-overview">
         <GeneralStatsSurface
           data={viewData}
+          categories={topCategoriesThisMonth}
           monthKey={monthKey}
           year={year}
           today={today}
