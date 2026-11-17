@@ -38,6 +38,16 @@ export function worstDailyRates(points: ExchangeRatePoint[], higherIsBetter: boo
   return [...daily.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/** Most recent observation from a day before the latest observation. */
+export function previousDayRate(points: ExchangeRatePoint[]): ExchangeRatePoint | undefined {
+  const latest = points[points.length - 1];
+  if (!latest) return undefined;
+  for (let index = points.length - 2; index >= 0; index--) {
+    if (points[index].date < latest.date) return points[index];
+  }
+  return undefined;
+}
+
 /** Actual RUB exchange rates in saved chronological order. */
 export function exchangeRateHistory(transactions: Transaction[], throughDate: string): Record<string, ExchangeRatePoint[]> {
   const groups: Record<string, ExchangeRatePoint[]> = {};

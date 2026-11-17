@@ -1,4 +1,5 @@
 import { ymd } from "./date";
+import { impliedRubRateHistory } from "./currencyBalance";
 import type { Transaction } from "./api";
 
 const STORAGE_KEY = "sadmoneyapp.market-rates.v2";
@@ -51,14 +52,36 @@ export function transactionMarketPair(tx: Transaction): string | null {
   return null;
 }
 
-export async function fetchMarketSnapshots(pairs: { key: string; source: string; target: string }[]): Promise<MarketSnapshot[]> {
+export type MarketPairRequest = { key: string; source: string; target: string };
+
+/** Today's chart points that do not yet have a market snapshot requested today. */
+export function pendingMarketPairs(transactions: Transaction[], today: string, snapshots: MarketSnapshot[]): MarketPairRequest[] {
+  const saved = new Set(snapshots.filter((item) => ymd(new Date(item.fetchedAt)) === today).map((item) => item.pair));
+  const pending = new Map<string, MarketPairRequest>();
+  for (const item of transactions) {
+    const pair = transactionMarketPair(item);
+    if (!pair || item.date !== today) continue;
+    const [source, target] = pair.split(":");
+    const key = item.type === "currency_exchange" ? `exchange:${source}` : `purchase:${pair}`;
+    if (!saved.has(key)) pending.set(key, { key, source, target });
+  }
+  for (const [pair, points] of Object.entries(impliedRubRateHistory(transactions, today))) {
+    if (!points.some((point) => point.date === today)) continue;
+    const [source] = pair.split(":");
+    const key = `implied:${pair}`;
+    if (!saved.has(key)) pending.set(key, { key, source, target: "RUB" });
+  }
+  return [...pending.values()];
+}
+
+export async function fetchMarketSnapshots(pairs: MarketPairRequest[], forceRefresh = false): Promise<MarketSnapshot[]> {
   const now = Date.now();
   let cached: { fetchedAt: number; quotes: MarketQuote[] } | null = null;
   try {
     const value = JSON.parse(localStorage.getItem(CACHE_KEY) ?? "null");
     if (value && typeof value.fetchedAt === "number" && Number.isFinite(value.fetchedAt) && value.fetchedAt <= now && ymd(new Date(value.fetchedAt)) === ymd(new Date(now)) && Array.isArray(value.quotes) && value.quotes.length > 0 && value.quotes.every((quote: MarketQuote) => quote && /^[A-Z]{3}$/.test(quote.source) && /^[A-Z]{3}$/.test(quote.target) && Number.isFinite(quote.rate) && quote.rate > 0 && Number.isFinite(quote.timestamp))) cached = value;
   } catch { /* Ignore an invalid cache and request fresh data. */ }
-  if (!cached) {
+  if (!cached || forceRefresh) {
     const response = await fetch(API_URL, { signal: AbortSignal.timeout(15000) });
     if (!response.ok) throw new Error(response.status === 503 || response.status === 429 ? "Market rate limit reached; the next new operation may retry." : "Could not load market rates.");
     const payload: unknown = await response.json();
@@ -76,7 +99,7 @@ export async function fetchMarketSnapshots(pairs: { key: string; source: string;
     return point ? [{ fetchedAt, pair: key, quotes: [{ source, target, rate: point.rate, timestamp: point.timestamp }] }] : [];
   });
   if (!snapshots.length) throw new Error("No market rates available for these currencies.");
-  const updated = [...readMarketSnapshots(), ...snapshots].slice(-1000);
+  const updated = [...readMarketSnapshots().filter((item) => !snapshots.some((snapshot) => snapshot.pair === item.pair && ymd(new Date(snapshot.fetchedAt)) === ymd(new Date(item.fetchedAt)))), ...snapshots].slice(-1000);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   return updated;
 }

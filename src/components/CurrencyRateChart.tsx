@@ -2,12 +2,13 @@ import { useId, useState } from "react";
 import type { Transaction } from "../lib/api";
 import type { DateFormat } from "../lib/date";
 import { formatDateForDisplay, ymd } from "../lib/date";
-import { crossRateHistory, exchangeRateHistory, impliedRubRateHistory, worstDailyRates } from "../lib/currencyBalance";
+import { crossRateHistory, exchangeRateHistory, impliedRubRateHistory, previousDayRate, worstDailyRates } from "../lib/currencyBalance";
 import { SelectInput } from "./SelectInput";
 import { marketRateForPair } from "../lib/marketRates";
-import type { MarketSnapshot } from "../lib/marketRates";
+import { AppIcon } from "./AppIcon";
+import type { MarketPairRequest, MarketSnapshot } from "../lib/marketRates";
 
-type Props = { marketRates: { snapshots: MarketSnapshot[]; error: string }; transactions: Transaction[]; today: string; dateFormat: DateFormat };
+type Props = { marketRates: { snapshots: MarketSnapshot[]; error: string; refreshing: boolean; refresh: (pair: MarketPairRequest) => void }; transactions: Transaction[]; today: string; dateFormat: DateFormat };
 
 export function CurrencyRateChart({ marketRates, transactions, today, dateFormat }: Props) {
   const [selected, setSelected] = useState("");
@@ -56,13 +57,14 @@ export function CurrencyRateChart({ marketRates, transactions, today, dateFormat
   const path = coordinates.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
   const formatRate = (rate: number) => rate.toLocaleString("ru-RU", { maximumFractionDigits: 4 });
   const latest = points[points.length - 1]?.rate;
-  const previous = points[points.length - 2]?.rate;
+  const previous = previousDayRate(points)?.rate;
   const change = previous && latest !== undefined ? (latest - previous) / previous * 100 : null;
   const beneficial = change !== null && (current?.kind === "purchase" ? change > 0 : change < 0);
 
   return <section style={{ marginTop: 20 }} aria-labelledby="currency-rate-chart-title">
     <div style={{ display: "grid", gap: 12 }}>
       <div><b id="currency-rate-chart-title">Exchange rate history</b><div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>Based on your exchanges and purchases</div></div>
+      {current && <button type="button" className="icon-button" aria-label="Refresh market rate" title="Refresh market rate" disabled={marketRates.refreshing} onClick={() => marketRates.refresh({ key: current.key, source: current.source, target: current.target })} style={{ width: 28, minWidth: 28, minHeight: 28, padding: 0 }}><AppIcon name="recurring" size={15} /></button>}
       {error && <div role="alert" style={{ fontSize: 12, color: "var(--danger)" }}>{error}</div>}
       <div style={{ fontSize: 11, opacity: 0.7 }}>Market rates are fetched for the first new operation of the day and reused for other pairs. Source: <a href="https://www.live-rates.com/" target="_blank" rel="noreferrer">Live-Rates</a> · up to 3 requests per hour.</div>
       {current && <div style={{ width: "min(100%, 300px)", minWidth: 0 }}><SelectInput label="Pair" value={labelForSeries(current)} options={series.map(labelForSeries)} onChange={(label) => {
@@ -76,7 +78,7 @@ export function CurrencyRateChart({ marketRates, transactions, today, dateFormat
         <span style={{ fontSize: 12, opacity: 0.7 }}>{points.length} {points.length === 1 ? "operation" : "operations"}</span>
       </div>
       <div style={{ marginTop: 8, fontSize: 12, color: change === null || change === 0 ? "inherit" : beneficial ? "#138a36" : "var(--danger)" }}>
-        {change === null ? "Add another operation to compare rates." : change === 0 ? "Unchanged from previous operation" : <><b>{change > 0 ? "↑" : "↓"} {Math.abs(change).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}% · {beneficial ? "More favorable" : "Less favorable"}</b><span style={{ color: "var(--text-muted, inherit)", opacity: 0.75 }}> vs previous operation</span></>}
+        {change === null ? "Add an operation on another day to compare rates." : change === 0 ? "Unchanged from previous day" : <><b>{change > 0 ? "↑" : "↓"} {Math.abs(change).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}% · {beneficial ? "More favorable" : "Less favorable"}</b><span style={{ color: "var(--text-muted, inherit)", opacity: 0.75 }}> vs previous day</span></>}
       </div>
       <div style={{ fontSize: 11, opacity: 0.65, marginTop: 3 }}>{current.kind === "purchase" ? `More ${current.target} per ${current.source} is favorable` : `Fewer RUB per ${current.source} is favorable`}</div>
       {marketPoints.length > 0 && <div style={{ fontSize: 12, marginTop: 6 }}>Market: <b>{formatRate(marketPoints[marketPoints.length - 1].rate)} {current.target}</b> / {current.source} · {formatDateForDisplay(marketPoints[marketPoints.length - 1].date, dateFormat)}</div>}

@@ -6,11 +6,11 @@ import { currencyBalances, exchangeRate, recentCrossRates, recentCurrencyExchang
 import { rub } from "../lib/money";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import { AppIcon } from "./AppIcon";
-import type { MarketSnapshot } from "../lib/marketRates";
+import type { MarketPairRequest, MarketSnapshot } from "../lib/marketRates";
 import { CurrencyRateChart } from "./CurrencyRateChart";
 import { CurrencyCalculatorModal } from "./CurrencyCalculatorModal";
 
-type Props = { marketRates: { snapshots: MarketSnapshot[]; error: string }; open: boolean; transactions: Transaction[]; today: string; dateFormat: DateFormat; onClose: () => void };
+type Props = { marketRates: { snapshots: MarketSnapshot[]; error: string; refreshing: boolean; refresh: (pair: MarketPairRequest) => void }; open: boolean; transactions: Transaction[]; today: string; dateFormat: DateFormat; onClose: () => void };
 
 export function CurrencyHistoryModal({ marketRates, open, transactions, today, dateFormat, onClose }: Props) {
   const [calculatorOpen, setCalculatorOpen] = useState(false);

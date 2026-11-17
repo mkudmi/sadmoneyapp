@@ -350,3 +350,52 @@ test("monthly foreign income excludes exchanges, other months, future and exclud
   ];
   assert.deepEqual(monthlyForeignIncomeTotals(entries, "2026-08", "2026-08-04"), [["ILS", 500], ["USD", 3000]]);
 });
+
+
+test("missing market snapshots remain eligible for automatic retry without inventing historical quotes", async () => {
+  const { pendingMarketPairs } = await loadAppModule("/src/lib/marketRates.ts");
+  const today = "2026-11-17";
+  const exchange = { ...transaction(today, 900000, "currency_exchange"), id: "exchange", currency: "USD", foreign_amount: 10000 };
+  const purchase = { ...transaction(today, 1000), id: "purchase", currency: "USD", purchase_currency: "ILS", purchase_amount: 3200 };
+  const old = { ...transaction("2026-11-16", 1000), currency: "USD", purchase_currency: "EUR", purchase_amount: 900 };
+  const entries = [exchange, purchase, old];
+  const pending = pendingMarketPairs(entries, today, []);
+  assert.deepEqual(pending.map((item) => item.key), ["exchange:USD", "purchase:USD:ILS", "implied:EUR:USD", "implied:ILS:USD"]);
+  assert.deepEqual(pendingMarketPairs(entries, today, []), pending);
+  const saved = [{ pair: "exchange:USD", fetchedAt: new Date(2026, 10, 17, 12).getTime(), quotes: [] }];
+  assert.deepEqual(pendingMarketPairs(entries, today, saved).map((item) => item.key), ["purchase:USD:ILS", "implied:EUR:USD", "implied:ILS:USD"]);
+  assert.deepEqual(pendingMarketPairs([old], today, []), []);
+});
+
+
+test("manual market refresh requests a fresh quote and replaces the same day's point", async () => {
+  const { fetchMarketSnapshots } = await loadAppModule("/src/lib/marketRates.ts");
+  const values = new Map();
+  const originalStorage = globalThis.localStorage, originalFetch = globalThis.fetch;
+  let requests = 0;
+  globalThis.localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  globalThis.fetch = async () => { requests++; return { ok: true, json: async () => [{ currency: "USD/RUB", bid: String(89 + requests), ask: String(91 + requests), timestamp: String(Date.now() - 1000) }] }; };
+  try {
+    const pair = [{ key: "exchange:USD", source: "USD", target: "RUB" }];
+    await fetchMarketSnapshots(pair);
+    const updated = await fetchMarketSnapshots(pair, true);
+    assert.equal(requests, 2);
+    assert.equal(updated.length, 1);
+    assert.equal(updated[0].quotes[0].rate, 92);
+  } finally { globalThis.localStorage = originalStorage; globalThis.fetch = originalFetch; }
+});
+
+
+test("rate comparison uses the last operation from a previous day", async () => {
+  const { previousDayRate } = await loadAppModule("/src/lib/currencyBalance.ts");
+  const points = [
+    { id: "a", date: "2026-11-10", rate: 80 },
+    { id: "b", date: "2026-11-12", rate: 85 },
+    { id: "c", date: "2026-11-12", rate: 86 },
+    { id: "d", date: "2026-11-17", rate: 90 },
+    { id: "e", date: "2026-11-17", rate: 90 },
+  ];
+  assert.equal(previousDayRate(points)?.id, "c");
+  assert.equal(previousDayRate(points.slice(-2)), undefined);
+  assert.equal(previousDayRate([]), undefined);
+});
